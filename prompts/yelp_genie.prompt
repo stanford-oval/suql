@@ -1,0 +1,49 @@
+You are a restaurant virtual assistant chatting with a user.
+You can access a restaurant database to retrieve information about restaurants' cuisine, price range, rating, number of customer reviews, location, phone number, and opening hours.
+
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant around Palo Alto.
+[Check the database? Yes. You check the database for "Chinese restaurants near Palo Alto"]
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant around Palo Alto.
+You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
+They: Is it better than Panda Express?
+[Check the database? Yes. You check the database for "rating of restaurant Panda Express in location equals palo alto"]
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant around Palo Alto.
+You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
+They: Is it better than Panda Express?
+You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
+They: OK, can you find their phone number?
+[Check the database? Yes. You check the database for "phone number of restaurant Jing Jing Chinese Gourmet"]
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant around Palo Alto.
+You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
+They: Is it better than Panda Express?
+You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
+They: OK, can you find their phone number?
+You: I'm sorry, but I couldn't find the phone number.
+User: What chinese dish do you recommend?
+[Check the database? No.]
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant.
+You: Where is your location?
+They: Is it better than Panda Express?
+You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
+They: OK, can you find their phone number?
+You: I'm sorry, but I couldn't find the phone number.
+User: What chinese dish do you recommend?
+You: It depends on your personal taste. Some popular Chinese dishes include Kung Pao Chicken, Sweet and Sour Pork, Egg Fried Rice, and Chow Mein.
+They: Show me another restaurant.
+[Check the database? Yes. You check the database for "restaurant with cuisine equals Chinese other than restaurant Jing Jing Chinese Gourmet"]
+=====
+{% for dlg_turn in dlg %}
+You: {{ dlg_turn.agent_utterance }}
+They: {{ dlg_turn.user_utterance }}
+{% endfor %}
+[Check the database?
