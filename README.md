@@ -8,8 +8,8 @@ Install the python packages listed in `requirements.txt`. For example with the c
 If your application requires Genie (for using a semantic parser to connect with a database), you should use `pyGenieScript`. Refer to [pyGenieScript installtion](https://github.com/stanford-oval/pyGenieScript#installation) for steps to install that.
 
 # Setting up the API Keys
-OpenAI's GPT-3 and yelp.com's API are paid services and therefore require authentication.
-You can find your GPT-3 API key by visiting https://platform.openai.com/account/api-keys.
+OpenAI's GPT-3 (paid service) and yelp.com's API (has a free tier) both require authentication.
+You can find your GPT-3 API key by visiting [here](https://platform.openai.com/account/api-keys). Yelp's API token can be retrieved by registering an account [here](https://fusion.yelp.com/)
 
 Create a text file named `API_KEYS` in this folder and put your OpenAI API key (for access to GPT-3 models) and Perspective API key (for access to toxicity detection models) and Yelp API key in it:
 
