@@ -148,7 +148,7 @@ if __name__ == '__main__':
                         help='Where to read the partial conversations from.')
     parser.add_argument('--output_file', type=str, required=True,
                         help='Where to write the outputs.')
-    parser.add_argument('--engine', type=str, default='text-curie-001',
+    parser.add_argument('--engine', type=str, default='text-davinci-003',
                         choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-35-turbo'],
                         help='The GPT-3 engine to use. (default: text-curie-001)')  # choices are from the smallest to the largest model
     parser.add_argument('--quit_commands', type=str, default=['quit', 'q'],
