@@ -78,7 +78,8 @@ def summarize_reviews(reviews: str) -> str:
                            stop_tokens=None,
                            max_tokens=100,
                            temperature=0.7,
-                           prompt_parameter_values=[{'review': r} for r in reviews])
+                           prompt_parameter_values=[{'review': r} for r in reviews],
+                           postprocess=False)
     return summaries
 
 
@@ -141,7 +142,8 @@ if __name__ == '__main__':
                         help='Where to read the partial conversations from.')
     parser.add_argument('--output_file', type=str, required=True,
                         help='Where to write the outputs.')
-    parser.add_argument('--engine', type=str, default='text-curie-001', choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003'],
+    parser.add_argument('--engine', type=str, default='text-curie-001',
+                        choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-35-turbo'],
                         help='The GPT-3 engine to use. (default: text-curie-001)')  # choices are from the smallest to the largest model
     parser.add_argument('--quit_commands', type=str, default=['quit', 'q'],
                         help='The conversation will continue until this string is typed in.')
@@ -173,7 +175,7 @@ if __name__ == '__main__':
             new_dlg[-1].user_utterance = user_utterance
 
             continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': new_dlg}, engine=args.engine,
-                                        max_tokens=50, temperature=0.0, stop_tokens=['\n'])
+                                        max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
             if continuation.startswith("Yes"):
                 try:
@@ -186,12 +188,12 @@ if __name__ == '__main__':
                     if len(genie_reviews) > 0:
                         new_dlg[-1].genie_reviews_summary = summarize_reviews(genie_reviews)
                 except ValueError as e:
-                    logger.ERROR('%s', str(e))
+                    logger.error('%s', str(e))
             else:
                 logging.info('Nothing to send to Genie')
 
             response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': new_dlg}, engine=args.engine,
-                                    max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5)
+                                    max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
 
             new_dlg.append(DialogueTurn(agent_utterance=response))
             print_chatbot('Chatbot: ' + response)
