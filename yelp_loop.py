@@ -101,6 +101,12 @@ def extract_quotation(s: str) -> str:
     start = s.find('"')
     end = s.find('"', start+1)
     if start < 0 or end <= start:
+        # try some heuristics for the case where LLM doesn't generate the quotation marks
+        # TODO add more heuristics if needed
+        if s.startswith('Yes. You check the database for '):
+            return s[len('Yes. You check the database for '): ]
+
+        # if everything fails, raise an error
         raise ValueError('Quotation error while parsing string %s' % s)
     return s[start+1: end]
 
