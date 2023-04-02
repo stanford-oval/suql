@@ -60,7 +60,7 @@ req_parser.add_argument("winner_system", type=str, location='json',
 req_parser.add_argument("loser_system", type=str, location='json',
                         help='The system that was not preferred by the user in the current dialog turn')
 
-first = True
+connection = BackendConnection()
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -68,46 +68,17 @@ def chat():
     Inputs: (experiment_id, new_user_utterance, dialog_id, turn_id, system_name)
     Outputs: (agent_utterance, log_object)
     """
-    global first
-    if first:
-        turn_log = {"first_turn": first}
-        first = False
-        return {'agent_utterance': "", 'log_object': turn_log}
-
     logger.info('Entered /chat')
     request_args = req_parser.parse_args()
     logger.info('Input arguments received: %s', str(request_args))
 
-    experiment_id = request_args['experiment_id']
     user_utterance = request_args['new_user_utterance']
     dialog_id = request_args['dialog_id']
-    turn_id = request_args['turn_id']
-    system_name = request_args['system_name']
+    # experiment_id = request_args['experiment_id']
+    # turn_id = request_args['turn_id']
+    # system_name = request_args['system_name']
     
-    new_dlg[-1].user_utterance = user_utterance
-
-    continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': new_dlg}, engine=args.engine,
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'])
-
-    if continuation.startswith("Yes"):
-        try:
-            genie_query = extract_quotation(continuation)
-            genie_utterance, genie_reviews = call_genie(genie, genie_query)
-            logger.info('genie_utterance = %s, genie_reviews = %s', genie_utterance, str(genie_reviews))
-            new_dlg[-1].genie_query = genie_query
-            new_dlg[-1].genie_utterance = genie_utterance
-            new_dlg[-1].genie_reviews = genie_reviews
-            if len(genie_reviews) > 0:
-                new_dlg[-1].genie_reviews_summary = summarize_reviews(genie_reviews)
-        except ValueError as e:
-            logger.ERROR('%s', str(e))
-    else:
-        logging.info('Nothing to send to Genie')
-
-    response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': new_dlg}, engine=args.engine,
-                            max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5)
-
-    new_dlg.append(DialogueTurn(agent_utterance=response))
+    response = connection.compute_next(dialog_id, user_utterance)
 
     return {'agent_utterance': response, 'log_object': {}}
 
@@ -143,14 +114,5 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.CRITICAL, format=' %(name)s : %(levelname)-8s : %(message)s')
     else:
         logging.basicConfig(level=logging.INFO, format=' %(name)s : %(levelname)-8s : %(message)s')
-
-    # The dialogue loop
-    # the agent starts the dialogue
-    new_dlg = [DialogueTurn(agent_utterance=args.greeting)]
-    print_chatbot(dialogue_history_to_text(
-        new_dlg, they='User', you='Chatbot'))
-
-    genie = gs.Genie()
-    genie.initialize("localhost", "yelp")
 
     app.run(host="0.0.0.0", port=5001, use_reloader=False)
