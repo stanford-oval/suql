@@ -13,6 +13,11 @@ import html
 from utils import print_chatbot, input_user
 import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
+from pymongo import MongoClient
+import json
+
+# set up the MongoDB connection
+CONNECTION_STRING = os.environ.get("COSMOS_CONNECTION_STRING")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from prompt_continuation import llm_generate, batch_llm_generate
@@ -21,13 +26,22 @@ logger = logging.getLogger(__name__)
 
 
 class DialogueTurn:
-    def __init__(self, agent_utterance: str = None, user_utterance: str = None):
+    def __init__(
+        self,
+        agent_utterance: str = None,
+        user_utterance: str = None,
+        genie_query: str = None,
+        genie_utterance: str = None,
+        genie_reviews : List[str] = [],
+        genie_reviews_summary : List[str] = []
+        ):
+        
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
-        self.genie_query = None
-        self.genie_utterance = None
-        self.genie_reviews = []
-        self.genie_reviews_summary = []
+        self.genie_query = genie_query
+        self.genie_utterance = genie_utterance
+        self.genie_reviews = genie_reviews
+        self.genie_reviews_summary = genie_reviews_summary
 
     agent_utterance: str
     user_utterance: str
@@ -121,11 +135,14 @@ def get_yelp_reviews(restaurant_id: str) -> List[str]:
         reviews.append(html.unescape(' '.join(r['text'].split()))) # clean up the review text
     return reviews
 
-def call_genie(genie, query: str):
+def call_genie(genie, query: str, dialog_state = None):
     """
     Calls GenieScript, and fetches Yelp reviews if needed
     """
-    genie_output = genie.query(query)
+    if dialog_state:
+        genie_output = genie.query(query, dialog_state = dialog_state)
+    else:
+        genie_output = genie.query(query)
     logger.info('genie_output[response] = %s', genie_output['response'])
 
     if len(genie_output['response']) > 0:
@@ -139,18 +156,99 @@ def call_genie(genie, query: str):
         reviews = get_yelp_reviews(restaurant_id=genie_output['results'][0]['id']['value'])
 
     reviews = reviews[:3] # at most 3 reviews
-    return genie_utterance, reviews
+    return genie_utterance, reviews, genie_output["ds"]
 
+def deserialize_dlgHistory(serialized):
+    res = json.loads(serialized)
+    return list(map(lambda x: DialogueTurn(**x), res))
+    
+def serialize_dlgHistory(serialized):
+    res = list(map(lambda x: x.__dict__, serialized))
+    return json.dumps(res)
+
+def compute_next_turn(
+    dlgHistory : List[DialogueTurn],
+    user_utterance: str,
+    genie : gs,
+    genieDS : str = None,
+    engine = "text-davinci-003"):
+    genie_new_ds = genieDS # in case the try-except loop below fails
+    
+    dlgHistory[-1].user_utterance = user_utterance
+    continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+
+    # determine whether to send to Genie      
+    if continuation.startswith("Yes"):
+        try:
+            genie_query = extract_quotation(continuation)
+            genie_utterance, genie_reviews, genie_new_ds = call_genie(genie, genie_query, genieDS)
+            logger.info('genie_utterance = %s, genie_reviews = %s', genie_utterance, str(genie_reviews))
+            dlgHistory[-1].genie_query = genie_query
+            dlgHistory[-1].genie_utterance = genie_utterance
+            dlgHistory[-1].genie_reviews = genie_reviews
+            if len(genie_reviews) > 0:
+                dlgHistory[-1].genie_reviews_summary = summarize_reviews(genie_reviews)
+        except ValueError as e:
+            logger.error('%s', str(e))
+    else:
+        logging.info('Nothing to send to Genie')
+        
+    response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+                                max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
+    dlgHistory.append(DialogueTurn(agent_utterance=response))
+    
+    return dlgHistory, response, genie_new_ds
+
+class BackendConnection:
+    def __init__(
+        self,
+        greeting = "Hi! How can I help you?",
+        engine = "text-davinci-003") -> None:
+        
+        self.genie = gs.Genie()
+        self.genie.initialize('localhost', 'yelp')
+        
+        client = MongoClient(CONNECTION_STRING)
+        self.db = client['yelpbot']  # the database name is yelpbot
+        self.table = self.db['dialog_turns'] # the collection that stores dialog turns and their user ratings
+        self.table.create_index("$**") # necessary to build an index before we can call sort()
+
+        self.greeting = greeting
+        self.engine = engine
+        
+    def compute_next(self, dialog_id, user_utterance):
+        tuple = list(self.table.find( { "dialogID": dialog_id } ))
+        
+        if (not tuple):
+            dlgHistory = [DialogueTurn(agent_utterance=self.greeting)]
+            genieDS = "null"
+        else:
+            tuple = tuple[0]
+            dlgHistory = deserialize_dlgHistory(tuple["dialogueHistory"])
+            genieDS = tuple["genieDS"]
+
+        dlgHistory, response, genieDS = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, engine=self.engine)
+        
+        new_tuple = {"dialogueHistory" : serialize_dlgHistory(dlgHistory), "genieDS" : genieDS}
+        
+        if (not tuple):
+            new_tuple["dialogID"] = dialog_id
+            self.table.insert_one(new_tuple)
+        else:
+            self.table.update_one( {"dialogID": dialog_id}, {"$set": new_tuple} )
+        
+        return response
+        
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--greeting', type=str, default="Hi! How can I help you?",
-                        help='Where to read the partial conversations from.')
+    parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
     parser.add_argument('--output_file', type=str, required=True,
                         help='Where to write the outputs.')
     parser.add_argument('--engine', type=str, default='text-davinci-003',
                         choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-35-turbo'],
-                        help='The GPT-3 engine to use. (default: text-curie-001)')  # choices are from the smallest to the largest model
+                        help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
     parser.add_argument('--quit_commands', type=str, default=['quit', 'q'],
                         help='The conversation will continue until this string is typed in.')
     parser.add_argument('--no_logging', action='store_true',
@@ -178,30 +276,8 @@ if __name__ == '__main__':
             user_utterance = input_user()
             if user_utterance in args.quit_commands:
                 break
-            new_dlg[-1].user_utterance = user_utterance
-
-            continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': new_dlg}, engine=args.engine,
-                                        max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-
-            if continuation.startswith("Yes"):
-                try:
-                    genie_query = extract_quotation(continuation)
-                    genie_utterance, genie_reviews = call_genie(genie, genie_query)
-                    logger.info('genie_utterance = %s, genie_reviews = %s', genie_utterance, str(genie_reviews))
-                    new_dlg[-1].genie_query = genie_query
-                    new_dlg[-1].genie_utterance = genie_utterance
-                    new_dlg[-1].genie_reviews = genie_reviews
-                    if len(genie_reviews) > 0:
-                        new_dlg[-1].genie_reviews_summary = summarize_reviews(genie_reviews)
-                except ValueError as e:
-                    logger.error('%s', str(e))
-            else:
-                logging.info('Nothing to send to Genie')
-
-            response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': new_dlg}, engine=args.engine,
-                                    max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
-
-            new_dlg.append(DialogueTurn(agent_utterance=response))
+            
+            new_dlg, response, _ = compute_next_turn(new_dlg, user_utterance, genie, engine=args.engine)
             print_chatbot('Chatbot: ' + response)
 
     finally:

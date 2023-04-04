@@ -40,7 +40,7 @@ You: I'm sorry, but I couldn't find the phone number.
 User: What chinese dish do you recommend?
 You: It depends on your personal taste. Some popular Chinese dishes include Kung Pao Chicken, Sweet and Sour Pork, Egg Fried Rice, and Chow Mein.
 They: Show me another restaurant.
-[Check the database? Yes. You check the database for "restaurant with cuisine equals Chinese other than restaurant Jing Jing Chinese Gourmet"]
+[Check the database? Yes. You check the database for "show another restaurant"]
 =====
 {% for dlg_turn in dlg %}
 You: {{ dlg_turn.agent_utterance }}
