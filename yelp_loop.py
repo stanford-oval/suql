@@ -16,6 +16,9 @@ from pyGenieScript import geniescript as gs
 from pymongo import MongoClient
 import json
 
+# set up the MongoDB connection
+CONNECTION_STRING = os.environ.get("COSMOS_CONNECTION_STRING")
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from prompt_continuation import llm_generate, batch_llm_generate
 
@@ -200,17 +203,17 @@ def compute_next_turn(
 class BackendConnection:
     def __init__(
         self,
-        mongo_port = 27017,
         greeting = "Hi! How can I help you?",
         engine = "text-davinci-003") -> None:
         
         self.genie = gs.Genie()
         self.genie.initialize('localhost', 'yelp')
         
-        client = MongoClient('localhost', mongo_port)
-        self.db = client['restaurant-genie']
-        self.table = self.db['data']
-        
+        client = MongoClient(CONNECTION_STRING)
+        self.db = client['yelpbot']  # the database name is yelpbot
+        self.table = self.db['dialog_turns'] # the collection that stores dialog turns and their user ratings
+        self.table.create_index("$**") # necessary to build an index before we can call sort()
+
         self.greeting = greeting
         self.engine = engine
         
@@ -240,13 +243,12 @@ class BackendConnection:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--greeting', type=str, default="Hi! How can I help you?",
-                        help='Where to read the partial conversations from.')
+    parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
     parser.add_argument('--output_file', type=str, required=True,
                         help='Where to write the outputs.')
     parser.add_argument('--engine', type=str, default='text-davinci-003',
                         choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-35-turbo'],
-                        help='The GPT-3 engine to use. (default: text-curie-001)')  # choices are from the smallest to the largest model
+                        help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
     parser.add_argument('--quit_commands', type=str, default=['quit', 'q'],
                         help='The conversation will continue until this string is typed in.')
     parser.add_argument('--no_logging', action='store_true',

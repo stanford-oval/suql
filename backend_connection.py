@@ -57,8 +57,8 @@ req_parser.add_argument("system_name", type=str, location='json',
 # arguments for when a user makes a head-to-head comparison
 req_parser.add_argument("winner_system", type=str, location='json',
                         help='The system that was preferred by the user in the current dialog turn')
-req_parser.add_argument("loser_system", type=str, location='json',
-                        help='The system that was not preferred by the user in the current dialog turn')
+req_parser.add_argument("loser_systems", type=list, location='json',
+                        help='The system(s) that was not preferred by the user in the current dialog turn')
 
 connection = BackendConnection()
 
@@ -97,14 +97,9 @@ def user_preference():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--greeting', type=str, default="Hi! How can I help you?",
-                        help='Where to read the partial conversations from.')
-    parser.add_argument('--output_file', type=str, required=True,
-                        help='Where to write the outputs.')
-    parser.add_argument('--engine', type=str, default='text-davinci-003', choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003'],
-                        help='The GPT-3 engine to use. (default: text-curie-001)')  # choices are from the smallest to the largest model
-    parser.add_argument('--quit_commands', type=str, default=['quit', 'q'],
-                        help='The conversation will continue until this string is typed in.')
+    # parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
+    parser.add_argument('--engine', type=str, default='text-davinci-003', choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-35-turbo'],
+                        help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')
 
