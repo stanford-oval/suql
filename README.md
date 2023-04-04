@@ -29,4 +29,7 @@ This command will take some time to finish the first time you run it. It will do
 <br>Tip: If you see Prediction worker had an error: spawn genienlp ENOENT, this means genienlp is not installed correctly.
 If successful, the final message you see should be similar to this:
 [I 230211 02:15:11 util:299] TransformerSeq2Seq has 139,420,416 parameters
-1. Keep the other command running, and in a new terminal Run `make yelpbot`.
+Keep this command running.
+
+1. If you want to run the agent locally, in a new terminal Run `make yelpbot`.
+1. If you want to run the backend server, so that multiple users can send requests through a front-end, run `make start-backend`.
