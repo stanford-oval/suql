@@ -1,3 +1,6 @@
 openai
 Jinja2
 tenacity
+Flask
+flask_restful
+flask-cors

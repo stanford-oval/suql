@@ -10,12 +10,15 @@ If your application requires Genie (for using a semantic parser to connect with 
 # Setting up the API Keys
 OpenAI's GPT-3 (paid service) and yelp.com's API (has a free tier) both require authentication.
 You can find your GPT-3 API key by visiting [here](https://platform.openai.com/account/api-keys). Yelp's API token can be retrieved by registering an account [here](https://fusion.yelp.com/).
+We also use MongoDB via Microsoft Azure to store dialog data. You can set up an instance at https://azure.microsoft.com/en-us/products/cosmos-db and obtain a "conncetion string" used to authenticate access to this database. You can easily use another MongoDB deployment for this as well, for example the free "shared" tier at https://www.mongodb.com/pricing.
 
-Create a text file named `API_KEYS` in this folder and put your OpenAI API key (for access to GPT-3 models) and Perspective API key (for access to toxicity detection models) and Yelp API key in it:
+Create a text file named `API_KEYS` in this folder and put your OpenAI API key (for access to GPT-3 models), Yelp API key and Cosmos connection string in it:
 
 `export OPENAI_API_KEY=<your OpenAI API key>`
 
 `export YELP_API_KEY=<your yelp.com API key>`
+
+`export COSMOS_CONNECTION_STRING=<your Cosmos connection string>`
 
 **Note that this file is in `.gitignore`. It is important that you never push your API keys to git.**
 
