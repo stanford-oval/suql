@@ -132,14 +132,14 @@ def get_yelp_reviews(restaurant_id: str) -> List[str]:
         reviews.append(html.unescape(' '.join(r['text'].split()))) # clean up the review text
     return reviews
 
-def call_genie(genie, query: str, dialog_state = None):
+def call_genie(genie, query: str, dialog_state = None, aux = []):
     """
     Calls GenieScript, and fetches Yelp reviews if needed
     """
     if dialog_state:
-        genie_output = genie.query(query, dialog_state = dialog_state)
+        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux)
     else:
-        genie_output = genie.query(query)
+        genie_output = genie.query(query, aux=aux)
     logger.info('genie_output[response] = %s', genie_output['response'])
 
     if len(genie_output['response']) > 0:
@@ -153,7 +153,7 @@ def call_genie(genie, query: str, dialog_state = None):
         reviews = get_yelp_reviews(restaurant_id=genie_output['results'][0]['id']['value'])
 
     reviews = reviews[:3] # at most 3 reviews
-    return genie_utterance, reviews, genie_output["ds"]
+    return genie_utterance, reviews, genie_output["ds"], genie_output["aux"]
 
 def deserialize_dlgHistory(serialized):
     res = json.loads(serialized)
@@ -168,8 +168,10 @@ def compute_next_turn(
     user_utterance: str,
     genie : gs,
     genieDS : str = None,
+    genie_aux = [],
     engine = "text-davinci-003"):
     genie_new_ds = genieDS # in case the try-except loop below fails
+    genie_new_aux = genie_aux  # in case the try-except loop below fails
     
     dlgHistory[-1].user_utterance = user_utterance
     continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
@@ -179,7 +181,7 @@ def compute_next_turn(
     if continuation.startswith("Yes"):
         try:
             genie_query = extract_quotation(continuation)
-            genie_utterance, genie_reviews, genie_new_ds = call_genie(genie, genie_query, genieDS)
+            genie_utterance, genie_reviews, genie_new_ds, genie_new_aux = call_genie(genie, genie_query, genieDS, aux=genie_aux)
             logger.info('genie_utterance = %s, genie_reviews = %s', genie_utterance, str(genie_reviews))
             dlgHistory[-1].genie_query = genie_query
             dlgHistory[-1].genie_utterance = genie_utterance
@@ -195,7 +197,7 @@ def compute_next_turn(
                                 max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
     dlgHistory.append(DialogueTurn(agent_utterance=response))
     
-    return dlgHistory, response, genie_new_ds
+    return dlgHistory, response, genie_new_ds, genie_new_aux
 
 class BackendConnection:
     def __init__(
@@ -220,14 +222,16 @@ class BackendConnection:
         if (not tuple):
             dlgHistory = [DialogueTurn(agent_utterance=self.greeting)]
             genieDS = "null"
+            genie_aux = []
         else:
             tuple = tuple[0]
             dlgHistory = deserialize_dlgHistory(tuple["dialogueHistory"])
             genieDS = tuple["genieDS"]
+            genie_aux = tuple["genieAux"]
 
-        dlgHistory, response, genieDS = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, engine=self.engine)
+        dlgHistory, response, genieDS, genie_aux = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, genie_aux=genie_aux, engine=self.engine)
         
-        new_tuple = {"dialogueHistory" : serialize_dlgHistory(dlgHistory), "genieDS" : genieDS}
+        new_tuple = {"dialogueHistory" : serialize_dlgHistory(dlgHistory), "genieDS" : genieDS, "genieAux": genie_aux}
         
         if (not tuple):
             new_tuple["dialogID"] = dialog_id
@@ -275,7 +279,7 @@ if __name__ == '__main__':
             if user_utterance in args.quit_commands:
                 break
             
-            new_dlg, response, _ = compute_next_turn(new_dlg, user_utterance, genie, engine=args.engine)
+            new_dlg, response, _, _ = compute_next_turn(new_dlg, user_utterance, genie, engine=args.engine)
             print_chatbot('Chatbot: ' + response)
 
     finally:
