@@ -74,11 +74,11 @@ def chat():
 
     user_utterance = request_args['new_user_utterance']
     dialog_id = request_args['dialog_id']
+    turn_id = request_args['turn_id']
     # experiment_id = request_args['experiment_id']
-    # turn_id = request_args['turn_id']
     # system_name = request_args['system_name']
     
-    response, dlgItem = connection.compute_next(dialog_id, user_utterance)
+    response, dlgItem = connection.compute_next(dialog_id, user_utterance, turn_id)
 
     log = {}
     if (dlgItem.genie_query):
