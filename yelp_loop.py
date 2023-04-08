@@ -222,10 +222,13 @@ class BackendConnection:
     def compute_next(self, dialog_id, user_utterance):
         tuple = list(self.table.find( { "dialogID": dialog_id } ))
         
+        # for first turn we initiate dlgHistory as greeting
+        # this self.greeting msg is matched in the front end manually for now
         if (not tuple):
             dlgHistory = [DialogueTurn(agent_utterance=self.greeting)]
             genieDS = "null"
             genie_aux = []
+        # otherwise we retrieve the dialog history
         else:
             tuple = tuple[0]
             dlgHistory = deserialize_dlgHistory(tuple["dialogueHistory"])
@@ -242,7 +245,7 @@ class BackendConnection:
         else:
             self.table.update_one( {"dialogID": dialog_id}, {"$set": new_tuple} )
         
-        return response
+        return response, dlgHistory[-2]
         
 
 if __name__ == '__main__':
