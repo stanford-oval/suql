@@ -13,7 +13,7 @@ import html
 from utils import print_chatbot, input_user
 import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING
 import json
 
 # set up the MongoDB connection
@@ -156,15 +156,26 @@ def call_genie(genie, query: str, dialog_state = None, aux = []):
         reviews = get_yelp_reviews(restaurant_id=genie_output['results'][0]['id']['value'])
 
     reviews = reviews[:3] # at most 3 reviews
-    return genie_utterance, reviews, genie_output["ds"], genie_output["aux"]
+    return genie_utterance, reviews, genie_output["ds"], genie_output["aux"], genie_output["user_target"]
 
-def deserialize_dlgHistory(serialized):
-    res = json.loads(serialized)
-    return list(map(lambda x: DialogueTurn(**x), res))
-    
-def serialize_dlgHistory(serialized):
-    res = list(map(lambda x: x.__dict__, serialized))
-    return json.dumps(res)
+def reconstruct_dlgHistory(tuples):
+    """Given a list of *sorted* mongodb dialog tuples, reconstruct a list of DialogTurns
+
+    Args:
+        tuples : a list of mongodb tuples, sorted in the order of first turn to last turn
+    """
+    return list(map(lambda x: DialogueTurn(**x["dlg_turn"]), tuples))
+
+def reconstruct_genieinfo(tuples):
+    """Given a list of *sorted* mongodb dialog tuples, find the latest Genie information
+
+    Args:
+        tuples :a list of mongodb tuples, sorted in the order of first turn to last turn
+    """
+    for i in reversed(tuples):
+        if "genieDS" in i:
+            return i["genieDS"], i["genieAux"]
+    return "null", []
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
@@ -173,8 +184,11 @@ def compute_next_turn(
     genieDS : str = None,
     genie_aux = [],
     engine = "text-davinci-003"):
-    genie_new_ds = genieDS # in case the try-except loop below fails
-    genie_new_aux = genie_aux  # in case the try-except loop below fails
+    
+    # assign default values
+    genie_new_ds = "null"
+    genie_new_aux = []
+    genie_user_target = ""
     
     dlgHistory[-1].user_utterance = user_utterance
     continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
@@ -184,7 +198,7 @@ def compute_next_turn(
     if continuation.startswith("Yes"):
         try:
             genie_query = extract_quotation(continuation)
-            genie_utterance, genie_reviews, genie_new_ds, genie_new_aux = call_genie(genie, genie_query, genieDS, aux=genie_aux)
+            genie_utterance, genie_reviews, genie_new_ds, genie_new_aux, genie_user_target = call_genie(genie, genie_query, genieDS, aux=genie_aux)
             logger.info('genie_utterance = %s, genie_reviews = %s', genie_utterance, str(genie_reviews))
             dlgHistory[-1].genie_query = genie_query
             dlgHistory[-1].genie_utterance = genie_utterance
@@ -200,7 +214,7 @@ def compute_next_turn(
                                 max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
     dlgHistory.append(DialogueTurn(agent_utterance=response))
     
-    return dlgHistory, response, genie_new_ds, genie_new_aux
+    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
 
 class BackendConnection:
     def __init__(
@@ -213,37 +227,40 @@ class BackendConnection:
         
         client = MongoClient(CONNECTION_STRING)
         self.db = client['yelpbot']  # the database name is yelpbot
-        self.table = self.db['dialog_turns'] # the collection that stores dialog turns and their user ratings
+        self.table = self.db['dialog_turns'] # the collection that stores dialog turns
         self.table.create_index("$**") # necessary to build an index before we can call sort()
 
         self.greeting = greeting
         self.engine = engine
         
-    def compute_next(self, dialog_id, user_utterance):
-        tuple = list(self.table.find( { "dialogID": dialog_id } ))
+    def compute_next(self, dialog_id, user_utterance, turn_id):
+        tuples = list(self.table.find( { "dialogID": dialog_id } ).sort('turn_id', ASCENDING))
         
         # for first turn we initiate dlgHistory as greeting
         # this self.greeting msg is matched in the front end manually for now
-        if (not tuple):
+        if (not tuples):
             dlgHistory = [DialogueTurn(agent_utterance=self.greeting)]
-            genieDS = "null"
-            genie_aux = []
+            genieDS, genie_aux = "null", []
         # otherwise we retrieve the dialog history
         else:
-            tuple = tuple[0]
-            dlgHistory = deserialize_dlgHistory(tuple["dialogueHistory"])
-            genieDS = tuple["genieDS"]
-            genie_aux = tuple["genieAux"]
+            dlgHistory = reconstruct_dlgHistory(tuples)
+            genieDS, genie_aux = reconstruct_genieinfo(tuples)
 
-        dlgHistory, response, genieDS, genie_aux = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, genie_aux=genie_aux, engine=self.engine)
+        dlgHistory, response, genieDS, genie_aux, genie_user_target = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, genie_aux=genie_aux, engine=self.engine)
         
-        new_tuple = {"dialogueHistory" : serialize_dlgHistory(dlgHistory), "genieDS" : genieDS, "genieAux": genie_aux}
-        
-        if (not tuple):
-            new_tuple["dialogID"] = dialog_id
-            self.table.insert_one(new_tuple)
+        # update the current tuple with new DialogTurn
+        update_tuple = {"dialogID": dialog_id, "turn_id": turn_id - 1, "dlg_turn" : dlgHistory[-2].__dict__}
+        # if current tuple has genie information, updates it as well
+        if genieDS != 'null':
+            update_tuple.update({"genieDS" : genieDS, "genieAux": genie_aux, "genie_user_target": genie_user_target})
+        if (not tuples):
+            self.table.insert_one(update_tuple)
         else:
-            self.table.update_one( {"dialogID": dialog_id}, {"$set": new_tuple} )
+            self.table.update_one( {"dialogID": dialog_id, "turn_id": turn_id - 1}, {"$set": update_tuple} )
+        
+        # insert a new tuple for next turn usage
+        new_tuple = {"dialogID": dialog_id, "dlg_turn" : dlgHistory[-1].__dict__ , "turn_id": turn_id }
+        self.table.insert_one(new_tuple)
         
         return response, dlgHistory[-2]
         
@@ -284,7 +301,7 @@ if __name__ == '__main__':
             if user_utterance in args.quit_commands:
                 break
             
-            new_dlg, response, _, _ = compute_next_turn(new_dlg, user_utterance, genie, engine=args.engine)
+            new_dlg, response, _, _, _ = compute_next_turn(new_dlg, user_utterance, genie, engine=args.engine)
             print_chatbot('Chatbot: ' + response)
 
     finally:
