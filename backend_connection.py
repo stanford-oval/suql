@@ -78,9 +78,17 @@ def chat():
     # turn_id = request_args['turn_id']
     # system_name = request_args['system_name']
     
-    response = connection.compute_next(dialog_id, user_utterance)
+    response, dlgItem = connection.compute_next(dialog_id, user_utterance)
 
-    return {'agent_utterance': response, 'log_object': {}}
+    log = {}
+    if (dlgItem.genie_query):
+        log["genie_query"] = dlgItem.genie_query
+        log["genie_utterance"] = dlgItem.genie_utterance
+        log["genie_reviews_summary"] = dlgItem.genie_reviews_summary
+    else:
+        log["sent_genie"] = False
+
+    return {'agent_utterance': response, 'log_object': log}
 
 @app.route("/user_rating", methods=["POST"])
 def user_rating():
