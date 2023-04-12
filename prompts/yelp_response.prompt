@@ -42,7 +42,7 @@ They: Is it better than Panda Express?
 You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
 They: OK, can you find their phone number?
 You: I'm sorry, but I couldn't find the phone number.
-User: What chinese dish do you recommend?
+They: What chinese dish do you recommend?
 [You check the database for "best chinese dish"]
 [Database returns "The top rated restaurant is 168 Chinese Township. It is a Chinese restaurant rated 5 stars."]
 Restaurant reviews: [
