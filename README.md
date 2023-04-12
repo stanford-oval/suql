@@ -33,3 +33,13 @@ Keep this command running.
 
 1. If you want to run the agent locally, in a new terminal Run `make yelpbot`.
 1. If you want to run the backend server, so that multiple users can send requests through a front-end, run `make start-backend`.
+
+# Install front-end
+
+Front-end website [here](https://github.com/stanford-oval/wikichat) (ovalchat , use branch `wip/restaurant-genie` for restaurant look). Follow instructions there to install it. To connect yelp-bot to this front-end, do:
+
+1. do `make genie-server` in `genie-llm` .This brings up the Genie semantic parser. Keep this running, and;
+
+2. run `make start-backendin` in `genie-llm` . This will bring up a connection for front-end to query at localhost:5001.
+
+3. run `export NEXT_PUBLIC_CHAT_BACKEND=http://127.0.0.1:5001` followed by `yarn run dev` in ovalchat to bring up the front-end and test at localhost:3000
