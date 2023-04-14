@@ -1,0 +1,20 @@
+Determine if a query can be answered by information from a restaurant database. The restaurant database contains information about restaurants' cuisine, price range, rating, number of customer reviews, location, phone number, and opening hours.
+
+=====
+Query: Chinese restaurants near Palo Alto
+[Does the database contain this information? Yes]
+=====
+Query: rating of restaurant Panda Express in location equals Chicago
+[Does the database contain this information? Yes]
+=====
+Query: menu of popular dishes in Bytes Cafe
+[Does the database contain this information? No]
+=====
+Query: show another restaurant in Seattle
+[Does the database contain this information? Yes]
+=====
+Query: reservation information of the best-rated restaurant in Atlanta
+[Does the database contain this information? No]
+=====
+Query: {{ query }}
+[Does the database contain this information?

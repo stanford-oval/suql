@@ -131,3 +131,6 @@ dmypy.json
 # custom
 API_KEYS
 *.log
+.vscode/*
+
+foo/*
