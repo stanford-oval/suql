@@ -249,30 +249,32 @@ def compute_next_turn(
 
         except ValueError as e:
             logger.error('%s', str(e))
-    else:
-        logging.info('Nothing to send to Genie')
         
-    # determine whether to query reviews
-    if len(genie_results) > 0:
-        continuation = llm_generate(template_file='prompts/yelp_review.prompt', prompt_parameter_values={'dlg': dlgHistory, "dlg_turn": dlgHistory[-1]}, engine=engine,
-                                    max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-        if continuation.startswith("Yes"):
-            try:
-                review_query = extract_quotation(continuation)
-                dlgHistory[-1].reviews_query = review_query
+        # determine whether to query reviews
+        if len(genie_results) > 0:
+            continuation = llm_generate(template_file='prompts/yelp_review.prompt', prompt_parameter_values={'dlg': dlgHistory, "dlg_turn": dlgHistory[-1]}, engine=engine,
+                                        max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+            if continuation.startswith("Yes"):
+                try:
+                    review_query = extract_quotation(continuation)
+                    dlgHistory[-1].reviews_query = review_query
 
-                reviews = get_yelp_reviews(genie_results[0]['id']['value'])
-                reviews = reviews[:3] # at most 3 reviews
-                dlgHistory[-1].genie_reviews = reviews
-                dlgHistory[-1].genie_reviews_summary = summarize_reviews(reviews)
-                
-            except ValueError as e:
-                logger.error('%s', str(e))
-        response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
-                            max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
+                    reviews = get_yelp_reviews(genie_results[0]['id']['value'])
+                    reviews = reviews[:3] # at most 3 reviews
+                    dlgHistory[-1].genie_reviews = reviews
+                    dlgHistory[-1].genie_reviews_summary = summarize_reviews(reviews)
+                    
+                except ValueError as e:
+                    logger.error('%s', str(e))
+            response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+                                max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
+        else:
+            # for now, just directly bypass retrieving from reviews
+            response = "Sorry, I don't have that information."
     else:
-        # for now, just directly bypass retrieving from reviews
-        response = "Sorry, I don't have that information."
+        response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+                                max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
+        logging.info('Nothing to send to Genie')
     
         
     dlgHistory.append(DialogueTurn(agent_utterance=response))
