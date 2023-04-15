@@ -290,7 +290,7 @@ class BackendConnection:
         
         client = MongoClient(CONNECTION_STRING)
         self.db = client['yelpbot']  # the database name is yelpbot
-        self.table = self.db['dialog_turns'] # the collection that stores dialog turns
+        self.table = self.db['dialog_turns_dev'] # the collection that stores dialog turns
         self.table.create_index("$**") # necessary to build an index before we can call sort()
 
         self.greeting = greeting
