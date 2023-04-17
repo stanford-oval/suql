@@ -4,6 +4,9 @@ Determine if a query can be answered by information from a restaurant database. 
 Query: Chinese restaurants near Palo Alto
 [Does the database contain this information? Yes]
 =====
+Query: restaurants near user's location
+[Does the database contain this information? Yes]
+=====
 Query: rating of restaurant Panda Express in location equals Chicago
 [Does the database contain this information? Yes]
 =====
@@ -15,6 +18,9 @@ Query: show another restaurant in Seattle
 =====
 Query: reservation information of the best-rated restaurant in Atlanta
 [Does the database contain this information? No]
+=====
+Query: show another restaurant
+[Does the database contain this information? Yes]
 =====
 Query: {{ query }}
 [Does the database contain this information?
