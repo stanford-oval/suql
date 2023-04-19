@@ -27,7 +27,7 @@ They: Is it better than Panda Express?
 You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
 They: OK, can you find their phone number?
 You: I'm sorry, but I couldn't find the phone number.
-They: What chinese dish do you recommend?
+User: What chinese dish do you recommend?
 [Check the database? No.]
 =====
 You: Hi! How can I help you?
@@ -37,7 +37,7 @@ They: Is it better than Panda Express?
 You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
 They: OK, can you find their phone number?
 You: I'm sorry, but I couldn't find the phone number.
-They: What chinese dish do you recommend?
+User: What chinese dish do you recommend?
 You: It depends on your personal taste. Some popular Chinese dishes include Kung Pao Chicken, Sweet and Sour Pork, Egg Fried Rice, and Chow Mein.
 They: Show me another restaurant.
 [Check the database? Yes. You check the database for "show another restaurant"]
