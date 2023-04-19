@@ -78,15 +78,25 @@ def chat():
     # experiment_id = request_args['experiment_id']
     # system_name = request_args['system_name']
     
-    response, dlgItem = connection.compute_next(dialog_id, user_utterance, turn_id)
+    response, dlgItem, genie_user_target = connection.compute_next(dialog_id, user_utterance, turn_id)
 
     log = {}
     if (dlgItem.genie_query):
         log["genie_query"] = dlgItem.genie_query
         log["genie_utterance"] = dlgItem.genie_utterance
-        log["genie_reviews_summary"] = dlgItem.genie_reviews_summary
-    else:
-        log["sent_genie"] = False
+        
+        # do some processing on genie_user_target to only preserve the sentence state representation
+        try:
+            genie_user_target = "$continue" + genie_user_target.split("$continue")[1]
+        except ValueError as e:
+            print(e)
+            
+        log["genie_user_target"] = genie_user_target
+    
+    if (dlgItem.reviews_query):
+        log["reviews"] = dlgItem.genie_reviews
+        log["reviews - Q"] = dlgItem.reviews_query
+        log["reviews - A"] = dlgItem.genie_reviews_answer
 
     return {'agent_utterance': response, 'log_object': log}
 
