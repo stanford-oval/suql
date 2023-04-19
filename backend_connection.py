@@ -110,6 +110,10 @@ if __name__ == '__main__':
                         help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')
+    parser.add_argument('--ssl_certificate_file', type=str, default='/etc/letsencrypt/live/backend.yelpbot.genie.stanford.edu/fullchain.pem',
+                        help='Where to read the SSL certificate for HTTPS')
+    parser.add_argument('--ssl_key_file', type=str, default='/etc/letsencrypt/live/backend.yelpbot.genie.stanford.edu/privkey.pem',
+                        help='Where to read the SSL certificate for HTTPS')
 
     args = parser.parse_args()
 
@@ -118,4 +122,5 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.INFO, format=' %(name)s : %(levelname)-8s : %(message)s')
 
-    app.run(host="0.0.0.0", port=5001, use_reloader=False)
+    context = (args.ssl_certificate_file, args.ssl_key_file)
+    app.run(host="0.0.0.0", port=5001, use_reloader=False, ssl_context=context)
