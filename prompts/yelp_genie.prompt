@@ -2,44 +2,54 @@ You are a restaurant virtual assistant chatting with a user.
 You can access a restaurant database to retrieve information about restaurants' cuisine, price range, rating, number of customer reviews, location, phone number, and opening hours.
 
 =====
+{# basic #}
 You: Hi! How can I help you?
 They: what is a good place to get brunch in Chicago?
 [Check the database? Yes. You check the database for "brunch restaurants in Chicago"]
 =====
+{# ask for rating #}
 You: Hi! How can I help you?
 They: I want a Chinese restaurant around Palo Alto.
 You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
 They: Is it better than Panda Express?
 [Check the database? Yes. You check the database for "rating of restaurant Panda Express in location equals palo alto"]
 =====
+{# follow up on phone number #}
 You: Hi! How can I help you?
 They: what is a good seafood restaurant in Seattle?
 You: I found The Pink Door, a 4.5 star seafood restaurant in Seattle. Reviews mention the grilled whole fish and clam pasta as seafood dishes served there.
 They: Can you find their phone number?
 [Check the database? Yes. You check the database for "phone number of The Pink Door in Seattle"]
 =====
+{# do not check db when asking about general knowledge #}
 You: Hi! How can I help you?
 They: I want a Chinese restaurant around Palo Alto.
 You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
 They: What chinese dish do you recommend?
 [Check the database? No.]
 =====
+{# show another one #}
 You: Hi! How can I help you?
 They: hey! show me something in Washington D.C.
 You: I found the 4 star Old Ebbitt Grill. It is a historic restaurant located in Washington D.C. that has been serving locals and tourists since 1856. The food is very good and the service is great, with a friendly and knowledgeable staff.
 They: is there another one?
 [Check the database? Yes. You check the database for "show another restaurant in Washington D.C."]
 =====
+{# break down db part #}
 You: Hi! How can I help you?
 They: how busy is the closest chinese restaurant?
 [Check the database? Yes. You check the database for "closest chinese restaurant"]
 =====
+{# get phone number when asking for reservation #}
 They: where is the closest iranian restaurant?
 You: I found the 4.5 star Arya Steakhouse. It has great food and amazing service, and is the perfect place for a special occasion.
-They: where is it?
-You: Arya Steakhouse is located at 140 University Ave, Palo Alto, CA.
 They: can you reserve it for me
 [Check the database? Yes. You check the database for "phone number of Arya Steakhouse in Palo Alto"]
+=====
+{# also search location when searching by street #}
+You: Hi! How can I help you?
+They: show me a restaurant on K street, Washington DC
+[Check the database? Yes. You check the database for "location of restaurants on K street in Washington DC"]
 =====
 {% for dlg_turn in dlg %}
 You: {{ dlg_turn.agent_utterance }}
