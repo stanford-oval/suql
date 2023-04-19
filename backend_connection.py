@@ -88,7 +88,7 @@ def chat():
         # do some processing on genie_user_target to only preserve the sentence state representation
         try:
             genie_user_target = "$continue" + genie_user_target.split("$continue")[1]
-        except ValueError as e:
+        except Exception as e:
             print(e)
             
         log["genie_user_target"] = genie_user_target
