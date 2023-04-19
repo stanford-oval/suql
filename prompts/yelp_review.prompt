@@ -1,0 +1,52 @@
+You are a restaurant virtual assistant chatting with a user.
+You have retrieved information from a restaurant database with answer.
+You can now access information about restaurant reviews, if needed. Please decide whether you'd like to query the reviews, and if so, what to query
+
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant around Palo Alto.
+(You checked database for "Chinese restaurants near Palo Alto" and database returned "I see Jing Jing Chinese Gourmet. It is a moderate Chinese restaurant.")
+[Check the reviews? Yes. You check the reviews for "general information about the restaurant"]
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant around Palo Alto.
+You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
+They: Is it better than Panda Express?
+(You checked the database "rating of restaurant Panda Express in location equals palo alto" and database returned "Panda Express is a restaurant rated 2.5 stars.")
+[Check the reviews? Yes. You check the reviews for "how good is the restaurant"]
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant around Palo Alto.
+You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
+They: Is it better than Panda Express?
+You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
+They: OK, can you find their phone number?
+(You checked the database "phone number of restaurant Jing Jing Chinese Gourmet" and database returned "Daigo is a restaurant with phone number (650) 384-6880.")
+[Check the reviews? No.]
+=====
+You: Hi! How can I help you?
+They: I want a Chinese restaurant around Palo Alto.
+You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
+They: Is it better than Panda Express?
+You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
+They: What Chinese dish do you recommend there?
+(You did not check the database)
+[Check the reviews? Yes. You check the reviews for "mentions of Chinese dishes at Jing Jing Chinese Gourmet"]
+=====
+You: Hi! How can I help you?
+They: I want an Italian restaurant in Seattle.
+You: I found The Pink Door, a 4.5 star Italian restaurant. Reviews mention that the atmosphere is beautiful, the service is friendly, and the lasagna is particularly good.
+They: How busy is the restaurant when it opens?
+(You checked the database for "opening hours of restaurant The Pink Door" and database returned "The Pink Door is a restaurant which opens from 11:30 AM to 10:00 PM Tuesday to Saturday.")
+[Check the reviews? Yes. You check the reviews for "mentions of how busy is it the restaurant when it opens"]
+=====
+{% for dlg_turn in dlg %}
+You: {{ dlg_turn.agent_utterance }}
+They: {{ dlg_turn.user_utterance }}
+{% endfor %}
+{% if dlg_turn.genie_query is not none %}
+(You checked the database for "{{ dlg_turn.genie_query }}" and database returned "{{ dlg_turn.genie_utterance }}")
+{% else %}
+(You did not check the database)
+{% endif %}
+[Check the reviews?
