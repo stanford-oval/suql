@@ -1,0 +1,30 @@
+Summarize relevant parts of the reviews regarding the question.
+
+=====
+Review 1: Good food, fast service and plenty of parking even when they're busy! Very clean too!
+Review 2: I've always had a soft spot for Panda Express but this location always leaves half the takeout containers empty especially if you order online. It's...
+Review 3: Disappointing portions. I won't be coming back. Hardly any noodles, a few pieces of orange chicken. The server acts like it's coming out of his paycheck.
+
+Question: How good is this restaurant?
+Your summary of relevant information: TThis restaurant has good food, fast service, and plenty of parking. However, takeout containers are often left half empty, and portions can be disappointing. The server may not be very friendly.
+=====
+Review 1: Amazing food, service, and experience. If you're looking for a quality and moderately priced "high end" omakase experience then this is the spot. (I call...
+Review 2: ~$400 was the total for 2 people + supplements + wine + tip. This was my first omakase experience. The food was amazing. Most of the fish were buttery,...
+Review 3: This was my first omakase experience and had a wonderful time! We made a reservation a few months in advance for a party of 2. Parking is extremely limited...
+
+Question: What dishes are served in this restaurant's omakase?
+Your summary of relevant information: According to reviews, food was amazing but no specific dishes were mentioned.
+=====
+Review 1: we ordered pickup here on a tuesday night, getting one of their popular 1/2 and 1/2 thin crust pizzas with palak paneer and butter chicken. both flavors...
+Review 2: I always get takeout here for lunch and it's definitely a satisfying meal each time. I would say the slight Indian twist makes the pizza here more unique...
+Review 3: I love trying new, unique restaurants. So when I saw curry pizza, I thought HECK YEAH. Well, my friend and I ordered a Chicken Tikka Masala pizza. Pizza...
+
+Question: What pizza is served at this restaurant?
+Your summary of relevant information from reviews: As suggested in reviews, this restaurant serves 1/2 and 1/2 thin crust pizzas with Indian flavors such as Palak Paneer and Butter Chicken, as well as Chicken Tikka Masala pizza.
+=====
+Review 1: {{ review[0] }}
+Review 2: {{ review[1] }}
+Review 3: {{ review[2] }}
+
+Question; {{ question }}
+Your summary of relevant information from reviews:

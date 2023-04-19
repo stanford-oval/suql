@@ -53,10 +53,7 @@ They: {{ dlg_turn.user_utterance }}
         (You did not check the database.)
         {% endif %}
         {% if dlg_turn.reviews_query is not none %}
-        (You checked reviews for "{{ dlg_turn.reviews_query }}" and you got the answer "
-            {% for review in dlg_turn.genie_reviews_summary %}
-                Review {{ loop.index }}: {{ review }}
-            {% endfor%}")
+        (You checked reviews for "{{ dlg_turn.reviews_query }}" and you got the answer "{{ dlg_turn.genie_reviews_answer }}"
         {% else %}
         (You did not check reviews.)
         {% endif %}

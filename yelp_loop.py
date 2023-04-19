@@ -34,16 +34,16 @@ class DialogueTurn:
         genie_utterance: str = None,
         reviews_query: str = None,
         genie_reviews : List[str] = [],
-        genie_reviews_summary : List[str] = []
+        genie_reviews_answer : str = None
         ):
         
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
         self.genie_query = genie_query
         self.genie_utterance = genie_utterance
-        self.reviews_query = reviews_query,
+        self.reviews_query = reviews_query
         self.genie_reviews = genie_reviews
-        self.genie_reviews_summary = genie_reviews_summary
+        self.genie_reviews_answer = genie_reviews_answer
 
     agent_utterance: str
     user_utterance: str
@@ -51,7 +51,7 @@ class DialogueTurn:
     genie_utterance: str
     reviews_query: str
     genie_reviews: List[str]
-    genie_reviews_summary: List[str]
+    genie_reviews_answer: str
 
     def to_text(self, they='They', you='You'):
         """
@@ -83,8 +83,10 @@ class DialogueTurn:
             ret += '\nRestaurant reviews: ['
             for i, review in enumerate(self.genie_reviews):
                 ret += '\nReview ' + str(i+1) + ': "' + review + '"'
-                if len(self.genie_reviews_summary) > 0:
-                    ret += '\nSummary: "' + self.genie_reviews_summary[i] + '"'
+            if self.reviews_query is not None:
+                ret += '\nQuestion: "' + self.reviews_query + '"'
+            if self.genie_reviews_answer is not None:
+                ret += '\nAnswer: "' + self.genie_reviews_answer + '"'
             ret += '\n]'
         return ret
 
@@ -218,8 +220,8 @@ def reconstruct_genieinfo(tuples):
 def retrieve_last_reviews(dlgHistory : List[DialogueTurn]):
     for i in reversed(dlgHistory):
         if len(i.genie_reviews) > 0:
-            return i.genie_reviews, i.genie_reviews_summary
-    return [], []
+            return i.genie_reviews
+    return []
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
@@ -250,35 +252,39 @@ def compute_next_turn(
         except ValueError as e:
             logger.error('%s', str(e))
         
-        # determine whether to query reviews
-        if len(genie_results) > 0:
-            continuation = llm_generate(template_file='prompts/yelp_review.prompt', prompt_parameter_values={'dlg': dlgHistory, "dlg_turn": dlgHistory[-1]}, engine=engine,
-                                        max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-            if continuation.startswith("Yes"):
-                try:
-                    review_query = extract_quotation(continuation)
-                    dlgHistory[-1].reviews_query = review_query
-
-                    reviews = get_yelp_reviews(genie_results[0]['id']['value'])
-                    reviews = reviews[:3] # at most 3 reviews
-                    dlgHistory[-1].genie_reviews = reviews
-                    dlgHistory[-1].genie_reviews_summary = summarize_reviews(reviews)
-                    
-                except ValueError as e:
-                    logger.error('%s', str(e))
-            response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
-                                max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
-        else:
-            # for now, just directly bypass retrieving from reviews
+        if len(genie_results) == 0 and genie_new_ds is not None:
             response = "Sorry, I don't have that information."
-    else:
-        response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
-                                max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
-        logging.info('Nothing to send to Genie')
+            dlgHistory.append(DialogueTurn(agent_utterance=response))
+            return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
     
-        
+    # determine whether to Q&A reviews
+    continuation = llm_generate(template_file='prompts/yelp_review.prompt', prompt_parameter_values={'dlg': dlgHistory, "dlg_turn": dlgHistory[-1]}, engine=engine,
+                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+    if continuation.startswith("Yes"):
+        try:
+            review_query = extract_quotation(continuation)
+            dlgHistory[-1].reviews_query = review_query
+            
+            if len(genie_results) > 0:
+                reviews = get_yelp_reviews(genie_results[0]['id']['value'])
+                reviews = reviews[:3] # at most 3 reviews
+            else:
+                reviews =  retrieve_last_reviews(dlgHistory)
+            dlgHistory[-1].genie_reviews = reviews
+            
+            # if there are reviews to be queried, do a GPT-3 QA system on it
+            if len(reviews) > 0:
+                continuation = llm_generate(template_file='prompts/review_qa.prompt', prompt_parameter_values={'review': reviews, "question": review_query}, engine=engine,
+                                max_tokens=100, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                dlgHistory[-1].genie_reviews_answer = continuation
+            
+        except ValueError as e:
+            logger.error('%s', str(e))
+            
+    response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+                        max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
+    
     dlgHistory.append(DialogueTurn(agent_utterance=response))
-    
     return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
 
 class BackendConnection:
@@ -327,7 +333,7 @@ class BackendConnection:
         new_tuple = {"dialogID": dialog_id, "dlg_turn" : dlgHistory[-1].__dict__ , "turn_id": turn_id }
         self.table.insert_one(new_tuple)
         
-        return response, dlgHistory[-2]
+        return response, dlgHistory[-2], genie_user_target
         
 
 if __name__ == '__main__':
@@ -376,30 +382,3 @@ if __name__ == '__main__':
         with open(args.output_file, 'a') as output_file:
             output_file.write('=====\n' + datetime.now().strftime("%d/%m/%Y %H:%M:%S") +
                             '\n' + dialogue_history_to_text(new_dlg, they='User', you='Chatbot') + '\n')
-
-
-    # # determine whether to query reviews
-    # continuation = llm_generate(template_file='prompts/yelp_review.prompt', prompt_parameter_values={'dlg': dlgHistory, "dlg_turn": dlgHistory[-1]}, engine=engine,
-    #                             max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-    # if continuation.startswith("Yes"):
-    #     try:
-    #         review_query = extract_quotation(continuation)
-    #         dlgHistory[-1].reviews_query = review_query
-
-    #         # if genie returned results, then we fetch reviews from there
-    #         if len(genie_results) > 0:
-    #             reviews = get_yelp_reviews(genie_results[0]['id']['value'])
-    #             reviews = reviews[:3] # at most 3 reviews
-    #             dlgHistory[-1].genie_reviews = reviews
-    #             dlgHistory[-1].genie_reviews_summary = summarize_reviews(reviews)
-            
-    #         # otherwise, directly use the last available reviews
-    #         else:
-    #             reviews, review_summaries =  retrieve_last_reviews(dlgHistory)
-    #             dlgHistory[-1].genie_reviews = reviews
-    #             dlgHistory[-1].genie_reviews_summary = review_summaries
-                
-    #     except ValueError as e:
-    #         logger.error('%s', str(e))
-    # response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
-    #                         max_tokens=70, temperature=0.7, stop_tokens=['\n'], top_p=0.5, postprocess=False)
