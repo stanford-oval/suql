@@ -8,28 +8,24 @@ They: what is a good place to get brunch in Chicago?
 [Check the database? Yes. You check the database for "brunch restaurants in Chicago"]
 =====
 {# ask for rating #}
-You: Hi! How can I help you?
-They: I want a Chinese restaurant around Palo Alto.
-You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
-They: Is it better than Panda Express?
-[Check the database? Yes. You check the database for "rating of restaurant Panda Express in location equals palo alto"]
+They: show me a Chinese restaurant in upper east side, NY
+You: I found the 4.5 star Calle Dao Chelsea. It is a Chinese and Asian Fusion restaurant that serves brunch and has a menu that reflects the history of Chinese migration to Cuba.
+They: is it better than panda express?
+[Check the database? Yes. You check the database for "rating of restaurant Panda Express in location equals upper east side, NY"]
 =====
 {# follow up on phone number #}
-You: Hi! How can I help you?
 They: what is a good seafood restaurant in Seattle?
 You: I found The Pink Door, a 4.5 star seafood restaurant in Seattle. Reviews mention the grilled whole fish and clam pasta as seafood dishes served there.
 They: Can you find their phone number?
 [Check the database? Yes. You check the database for "phone number of The Pink Door in Seattle"]
 =====
 {# do not check db when asking about general knowledge #}
-You: Hi! How can I help you?
-They: I want a Chinese restaurant around Palo Alto.
-You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
-They: What chinese dish do you recommend?
+They: I want a Spanish restaurant in Kansas City
+You: I found the 4 star La Bodega. It has one of the best happy hours in the city and a cozy atmosphere that feels like you're in the countryside of Spain.
+They: What Spanish dish do you recommend?
 [Check the database? No.]
 =====
 {# show another one #}
-You: Hi! How can I help you?
 They: hey! show me something in Washington D.C.
 You: I found the 4 star Old Ebbitt Grill. It is a historic restaurant located in Washington D.C. that has been serving locals and tourists since 1856. The food is very good and the service is great, with a friendly and knowledgeable staff.
 They: is there another one?
@@ -44,7 +40,7 @@ They: how busy is the closest chinese restaurant?
 They: where is the closest iranian restaurant?
 You: I found the 4.5 star Arya Steakhouse. It has great food and amazing service, and is the perfect place for a special occasion.
 They: can you reserve it for me
-[Check the database? Yes. You check the database for "phone number of Arya Steakhouse in Palo Alto"]
+[Check the database? Yes. You check the database for "phone number of Arya Steakhouse"]
 =====
 {# also search location when searching by street #}
 You: Hi! How can I help you?
