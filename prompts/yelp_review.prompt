@@ -3,36 +3,35 @@ You have retrieved information from a restaurant database with answer.
 You can now access information about restaurant reviews, if needed. Please decide whether you'd like to query the reviews, and if so, what to query
 
 =====
+{# basic #}
 You: Hi! How can I help you?
-They: I want a Chinese restaurant around Palo Alto.
-(You checked database for "Chinese restaurants near Palo Alto" and database returned "I see Jing Jing Chinese Gourmet. It is a moderate Chinese restaurant.")
+They: I'd like an Italian place in Atlanta
+(You checked the database for "Italian restaurants in Atlanta" and database returned "I see BoccaLupo. It is a Italian restaurant rated 4.5 stars.")
 [Check the reviews? Yes. You check the reviews for "general information about the restaurant"]
 =====
-You: Hi! How can I help you?
-They: I want a Chinese restaurant around Palo Alto.
-You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
+{# comparison #}
+They: I want a Chinese restaurant in upper east side, NY
+You: I found the 4.5 star Calle Dao Chelsea. It is a Chinese and Asian Fusion restaurant that serves brunch and has a menu that reflects the history of Chinese migration to Cuba.
 They: Is it better than Panda Express?
-(You checked the database "rating of restaurant Panda Express in location equals palo alto" and database returned "Panda Express is a restaurant rated 2.5 stars.")
+(You checked the database for "rating of restaurant Panda Express in location equals upper east side, NY" and database returned "Panda Express is rated 3 stars.")
 [Check the reviews? Yes. You check the reviews for "how good is the restaurant"]
 =====
-You: Hi! How can I help you?
-They: I want a Chinese restaurant around Palo Alto.
-You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
-They: Is it better than Panda Express?
-You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
-They: OK, can you find their phone number?
-(You checked the database "phone number of restaurant Jing Jing Chinese Gourmet" and database returned "Daigo is a restaurant with phone number (650) 384-6880.")
+{# no need to check reviews #}
+They: show me a japanese restaurant in Kansas City
+You: I found the 4.5 star Blue Sushi Sake Grill. Reviews suggest that the restaurant has a sushi bar and a happy hour menu, and that it is a popular spot with a long wait on busy nights.
+They: what is its phone number?
+(You checked the database for "phone number of Blue Sushi Sake Grill in Kansas City" and database returned "Blue Sushi Sake Grill has phone number (913) 236-6100.")
 [Check the reviews? No.]
 =====
-You: Hi! How can I help you?
-They: I want a Chinese restaurant around Palo Alto.
-You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
-They: Is it better than Panda Express?
-You: It is higher rated than Panda Express, but some reviews do prefer Panda Express over Jing Jing Chinese Gormet.
-They: What Chinese dish do you recommend there?
+{# mentions of dishes from reviews #}
+They: I want a persian restaurant in Boston
+You: I found the 4.5 star Mediterranean Grill. It serves Persian food and is well-liked by customers. Reviews mention that it is a great place to find falafel. However, there have been issues with incorrect orders and plastic wrap in food.
+They: what persian dish do you recommend there?
 (You did not check the database)
-[Check the reviews? Yes. You check the reviews for "mentions of Chinese dishes at Jing Jing Chinese Gourmet"]
+[Check the reviews? Yes. You check the reviews for "mentions of recommended Persian dishes"]
+
 =====
+{# more complicated separation of review info from database #}
 You: Hi! How can I help you?
 They: I want an Italian restaurant in Seattle.
 You: I found The Pink Door, a 4.5 star Italian restaurant. Reviews mention that the atmosphere is beautiful, the service is friendly, and the lasagna is particularly good.
