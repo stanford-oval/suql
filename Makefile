@@ -6,7 +6,7 @@ engine ?= text-davinci-003
 .PHONY: yelpbot genie-server start-backend
 
 ### yelpbot
-yelpbot: yelp_loop.py yelp_conversation.prompt
+yelpbot: yelp_loop.py
 	python yelp_loop.py \
 	--engine $(engine) \
 	--output_file yelpbot.log
