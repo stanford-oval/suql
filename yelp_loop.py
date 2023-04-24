@@ -290,11 +290,11 @@ if __name__ == '__main__':
 
     # The dialogue loop
     # the agent starts the dialogue
-    new_dlg = [DialogueTurn(agent_utterance=args.greeting)]
-    print_chatbot(dialogue_history_to_text(
-        new_dlg, they='User', you='Chatbot'))
-
     genie = gs.Genie()
+    dlgHistory = [DialogueTurn(agent_utterance=args.greeting)]
+    genieDS, genie_aux = "null", []
+
+    print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))
 
     try:
         genie.initialize('localhost', 'yelp')
@@ -304,7 +304,12 @@ if __name__ == '__main__':
             if user_utterance in args.quit_commands:
                 break
             
-            new_dlg, response, _, _, _ = compute_next_turn(new_dlg, user_utterance, genie, engine=args.engine)
+            # this is single-user, so feeding in genieDS and genie_aux is unnecessary, but we do it to be consistent with backend_connection.py
+            dlgHistory, response, gds, gaux, _ = compute_next_turn(dlgHistory, user_utterance, genie, genieDS=genieDS, genie_aux=genie_aux, engine=args.engine)
+            if genieDS != 'null':
+                # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago
+                genieDS = gds
+                genie_aux = gaux
             print_chatbot('Chatbot: ' + response)
 
     finally:
@@ -313,4 +318,4 @@ if __name__ == '__main__':
 
         with open(args.output_file, 'a') as output_file:
             output_file.write('=====\n' + datetime.now().strftime("%d/%m/%Y %H:%M:%S") +
-                            '\n' + dialogue_history_to_text(new_dlg, they='User', you='Chatbot') + '\n')
+                            '\n' + dialogue_history_to_text(dlgHistory, they='User', you='Chatbot') + '\n')
