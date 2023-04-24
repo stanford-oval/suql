@@ -1,0 +1,16 @@
+You are talking to an intelligent restaurant assistant named {{ chatbot_name }}.
+
+{% if user_character is defined and user_character|length %}
+    {{ user_character }}
+    You can provide this information to the chatbot when asked.
+{% endif %}
+{{ chatbot_name }} is still in development and makes mistakes.
+
+{# The chatbot starts first #}
+{% for dlg_turn in dlg %}
+    {{ chatbot_name }}: {{ dlg_turn.agent_utterance }}
+    {% if dlg_turn.user_utterance is not none %}
+        You: {{ dlg_turn.user_utterance }}
+    {% endif %}
+{% endfor %}
+You:
