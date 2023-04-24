@@ -55,6 +55,7 @@ def _fill_template(template_file, prompt_parameter_values):
     today = date.today() # make a new function call each time since the date might change during a long-term server deployment
     prompt_parameter_values['today'] = today
     prompt_parameter_values['current_year'] = today.year
+    prompt_parameter_values['chatbot_name'] = 'RestaurantGenie'
 
     filled_prompt = template.render(**prompt_parameter_values)
     filled_prompt = '\n'.join([line.strip() for line in filled_prompt.split('\n')]) # remove whitespace at the beginning and end of each line
