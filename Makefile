@@ -22,6 +22,6 @@ start-backend: backend_connection.py
 simulate-user:
 	python user_simulator/user_simulator.py \
 	--engine $(engine) \
-	--output_file user_simulator/simulated_dialogs.log \
+	--output_file user_simulator/simulated_dialogs.txt \
 	--num_turns $(num_simulation_turns) \
 	--num_dialogs $(num_simulation_dialogs)
