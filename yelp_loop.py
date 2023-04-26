@@ -216,7 +216,7 @@ def compute_next_turn(
     genie_user_target = ""
     genie_results = []
     
-    dlgHistory[-1].user_utterance = user_utterance
+    dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
     dlgHistory[-1].reviews_query = None
     
     # determine whether to send to Genie      
@@ -233,7 +233,7 @@ def compute_next_turn(
         
         if len(genie_results) == 0 and genie_new_ds is not None:
             response = "Sorry, I don't have that information."
-            dlgHistory.append(DialogueTurn(agent_utterance=response))
+            dlgHistory[-1].agent_utterance = response
             return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
     
     # determine whether to Q&A reviews
@@ -262,8 +262,8 @@ def compute_next_turn(
             
     response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                         max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
+    dlgHistory[-1].agent_utterance = response
     
-    dlgHistory.append(DialogueTurn(agent_utterance=response))
     return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
 
         
@@ -291,7 +291,7 @@ if __name__ == '__main__':
     # The dialogue loop
     # the agent starts the dialogue
     genie = gs.Genie()
-    dlgHistory = [DialogueTurn(agent_utterance=args.greeting)]
+    dlgHistory = []
     genieDS, genie_aux = "null", []
 
     print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))

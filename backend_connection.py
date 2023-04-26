@@ -83,11 +83,10 @@ class BackendConnection:
     def compute_next(self, dialog_id, user_utterance, turn_id):
         tuples = list(self.table.find( { "dialogID": dialog_id } ).sort('turn_id', ASCENDING))
         
-        # for first turn we initiate dlgHistory as greeting
-        # this self.greeting msg is matched in the front end manually for now
         if (not tuples):
-            dlgHistory = [DialogueTurn(agent_utterance=self.greeting)]
+            dlgHistory = []
             genieDS, genie_aux = "null", []
+
         # otherwise we retrieve the dialog history
         else:
             dlgHistory = BackendConnection._reconstruct_dlgHistory(tuples)
@@ -96,20 +95,15 @@ class BackendConnection:
         dlgHistory, response, genieDS, genie_aux, genie_user_target = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, genie_aux=genie_aux, engine=self.engine)
         
         # update the current tuple with new DialogTurn
-        update_tuple = {"dialogID": dialog_id, "turn_id": turn_id - 1, "dlg_turn" : dlgHistory[-2].__dict__}
-        # if current tuple has genie information, updates it as well
+        new_tuple = {"dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}
+        # if current tuple has genie information, includes it as well
         if genieDS != 'null':
-            update_tuple.update({"genieDS" : genieDS, "genieAux": genie_aux, "genie_user_target": genie_user_target})
-        if (not tuples):
-            self.table.insert_one(update_tuple)
-        else:
-            self.table.update_one( {"dialogID": dialog_id, "turn_id": turn_id - 1}, {"$set": update_tuple} )
+            new_tuple.update({"genieDS" : genieDS, "genieAux": genie_aux, "genie_user_target": genie_user_target})
         
-        # insert a new tuple for next turn usage
-        new_tuple = {"dialogID": dialog_id, "dlg_turn" : dlgHistory[-1].__dict__ , "turn_id": turn_id }
+        # insert the new dialog turn into DB
         self.table.insert_one(new_tuple)
-        
-        return response, dlgHistory[-2], genie_user_target
+                
+        return response, dlgHistory[-1], genie_user_target
 
     @staticmethod
     def _reconstruct_dlgHistory(tuples):
@@ -203,4 +197,5 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.INFO, format=' %(name)s : %(levelname)-8s : %(message)s')
 
     context = (args.ssl_certificate_file, args.ssl_key_file)
-    app.run(host="0.0.0.0", port=5001, use_reloader=False, ssl_context=context)
+    # app.run(host="0.0.0.0", port=5001, use_reloader=False, ssl_context=context)
+    app.run(host="0.0.0.0", port=5001, use_reloader=False)

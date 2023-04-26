@@ -36,8 +36,8 @@ They: What chinese dish do you recommend in general?
 You: It depends on your personal taste. Some popular Chinese dishes include Kung Pao Chicken, Sweet and Sour Pork, Egg Fried Rice, and Chow Mein.
 
 {# The history of the conversation so far #}
+You: Hi! How can I help you?
 {% for dlg_turn in dlg %}
-You: {{ dlg_turn.agent_utterance }}
 They: {{ dlg_turn.user_utterance }}
     {# include the database query, genie response and reviews only for the last turn #}
     {% if loop.index == loop.length %}
@@ -51,6 +51,8 @@ They: {{ dlg_turn.user_utterance }}
         {% else %}
         (You did not check reviews.)
         {% endif %}
+    {% else %}
+        You: {{ dlg_turn.agent_utterance }}
     {% endif %}
 {% endfor %}
 You:
