@@ -197,5 +197,4 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.INFO, format=' %(name)s : %(levelname)-8s : %(message)s')
 
     context = (args.ssl_certificate_file, args.ssl_key_file)
-    # app.run(host="0.0.0.0", port=5001, use_reloader=False, ssl_context=context)
-    app.run(host="0.0.0.0", port=5001, use_reloader=False)
+    app.run(host="0.0.0.0", port=5001, use_reloader=False, ssl_context=context)
