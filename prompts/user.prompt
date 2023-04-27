@@ -1,16 +1,15 @@
-You are talking to an intelligent restaurant assistant named {{ chatbot_name }}.
+You are talking to an intelligent restaurant assistant named {{ chatbot_name }}. The assistant is still in development and makes mistakes.
 
 {% if user_character is defined and user_character|length %}
     {{ user_character }}
     You can provide this information to the chatbot when asked.
 {% endif %}
-{{ chatbot_name }} is still in development and makes mistakes.
 
-{# The chatbot starts first #}
+{# The history of the conversation so far #}
+{# in this prompt, all dialog turns are complete, meaning they have both user_utterance and agent_utterance #}
+{{ chatbot_name }}: Hi! How can I help you?
 {% for dlg_turn in dlg %}
+    You: {{ dlg_turn.user_utterance }}
     {{ chatbot_name }}: {{ dlg_turn.agent_utterance }}
-    {% if dlg_turn.user_utterance is not none %}
-        You: {{ dlg_turn.user_utterance }}
-    {% endif %}
 {% endfor %}
 You:

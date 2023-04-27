@@ -2,25 +2,26 @@ import argparse
 from datetime import datetime
 import logging
 import os
+import string
 import sys
 import random
 from typing import List
-from pyGenieScript import geniescript as gs
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from yelp_loop import (
-    compute_next_turn,
     DialogueTurn,
-    print_chatbot,
     dialogue_history_to_text,
 )
 from prompt_continuation import llm_generate
+from backend_connection import BackendConnection
+
 
 logger = logging.getLogger(__name__)
 
 user_characters = [
-    'You live in Mountain View, CA. Your high-school friend is visiting you from out of town, and has a 5-year old with him.',
+    "You live in Mountain View, CA. Your high-school friend is visiting you from out of town, and has a 5-year old with him.",
     "You are a middle-aged women living in NYC.",
+    "You are always looking for the trendy restuarants in town.",
 ]
 
 
@@ -95,47 +96,40 @@ if __name__ == "__main__":
             level=logging.INFO, format=" %(name)s : %(levelname)-8s : %(message)s"
         )
 
-    # the agent starts the dialogue
-    genie = gs.Genie()
-    dlgHistory = [DialogueTurn(agent_utterance=args.greeting)]
-    genieDS, genie_aux = "null", []
+    connection = BackendConnection()
 
-    print_chatbot(dialogue_history_to_text(dlgHistory, they="User", you="Chatbot"))
+    with open(args.output_file, "a") as output_file:
+        for dlg_idx in range(args.num_dialogs):
+            dialog_id = (
+                "simulated_"
+                + "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+                + "_"
+                + str(dlg_idx)
+            )
 
-    try:
-        genie.initialize("localhost", "yelp")
-
-        with open(args.output_file, "a") as output_file:
-            for dlg_id in range(args.num_dialogs):
-                for turn_id in range(args.num_turns):
-                    # sample a user characteristic
-                    user_utterance = simulate_one_user_turn(
-                        dlgHistory, random.choice(user_characters)
-                    )
-
-                    # this is single-user, so feeding in genieDS and genie_aux is unnecessary, but we do it to be consistent with backend_connection.py
-                    dlgHistory, response, gds, gaux, _ = compute_next_turn(
-                        dlgHistory,
-                        user_utterance,
-                        genie,
-                        genieDS=genieDS,
-                        genie_aux=genie_aux,
-                        engine=args.engine,
-                    )
-                    if genieDS != "null":
-                        # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago
-                        genieDS = gds
-                        genie_aux = gaux
-
-                # write the dialog to the output file
-                output_file.write(
-                    "=====\n"
-                    + datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                    + "\n"
-                    + dialogue_history_to_text(dlgHistory, they="User", you="Chatbot")
-                    + "\n"
+            dlgHistory = []
+            for turn_id in range(args.num_turns):
+                # sample a user characteristic
+                user_utterance = simulate_one_user_turn(
+                    dlgHistory,
+                    random.choice(user_characters),
                 )
 
-    finally:
-        # not necessary to close genie, but is good practice
-        genie.quit()
+                _, dlgItem, _ = connection.compute_next(
+                    dialog_id,
+                    user_utterance,
+                    turn_id,
+                )
+                print("dlgItem = ", dlgItem.to_text())
+                dlgHistory.append(dlgItem)
+
+            # write the dialog to the output file
+            output_file.write(
+                "=====\n"
+                + datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                + " dialog_id="
+                + dialog_id
+                + "\n"
+                + dialogue_history_to_text(dlgHistory, they="User(sim)", you="Chatbot")
+                + "\n"
+            )

@@ -54,3 +54,26 @@ User: Okay, no worries. I'll do some research on my own. Thank you anyway!
 Chatbot: You're welcome! Have a great day.
 User: Thanks, you too!
 Chatbot: You're welcome! Have a great day.
+=====
+26/04/2023 19:22:08 dialog_id=simulated_7BNO8NPG_0
+User(sim): Hi there! I'm looking for some trendy restaurants in town. Can you help me with that?
+[You check the database for "trendy restaurants in town"]
+[Database returns "Sorry, I did not understand that. Can you rephrase it?"]
+Chatbot: Sorry, I don't have that information.
+User(sim): That's okay. Can you search for trendy restaurants in my area and provide me with a list?
+[You check the database for "trendy restaurants in [user's location]"]
+[Database returns "Sorry, I did not understand that. Can you rephrase it?"]
+Chatbot: Sorry, I don't have that information.
+User(sim): Okay, no problem. Is there anything else you can help me with?
+Chatbot: Sure! What else can I help you with?
+User(sim): Can you recommend any popular dishes or cuisine types in the area?
+[You check the database for "popular dishes or cuisine types in the area"]
+[Database returns "I see Protégé. It is a American (New) restaurant."]
+Restaurant reviews: [
+Review 1: "My husband and I came to celebrate our anniversary and it was a wonderful experience. It was a casual, yet upscale vibe, which I really appreciate! Great..."
+Review 2: "Upscale, yet casual. The vibe at Protege is comfortable, a place where you get Michelin starred dishes that a fake foodie like myself can just enjoy..."
+Review 3: "Went to Protege for my one year anniversary with my man and so happy I did. This is a Michelin star restaurant and when it comes service and presentation,..."
+Question: "mentions of popular dishes or cuisine types"
+Answer: "Reviews mention that Protege has a casual yet upscale vibe, and serves Michelin starred dishes. No specific dishes or cuisine types were mentioned."
+]
+Chatbot: I found the American (New) restaurant Protégé. Reviews mention that it has a casual yet upscale vibe, and serves Michelin starred dishes. Unfortunately, no specific dishes or cuisine types were mentioned.
