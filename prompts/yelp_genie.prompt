@@ -47,8 +47,11 @@ You: Hi! How can I help you?
 They: show me a restaurant on K street, Washington DC
 [Check the database? Yes. You check the database for "location of restaurants on K street in Washington DC"]
 =====
+You: Hi! How can I help you?
 {% for dlg_turn in dlg %}
-You: {{ dlg_turn.agent_utterance }}
 They: {{ dlg_turn.user_utterance }}
+{% if dlg_turn.agent_utterance is not none %}
+You: {{ dlg_turn.agent_utterance }}
+{% endif %}
 {% endfor %}
 [Check the database?

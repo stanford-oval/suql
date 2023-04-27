@@ -29,7 +29,6 @@ You: I found the 4.5 star Mediterranean Grill. It serves Persian food and is wel
 They: what persian dish do you recommend there?
 (You did not check the database)
 [Check the reviews? Yes. You check the reviews for "mentions of recommended Persian dishes"]
-
 =====
 {# more complicated separation of review info from database #}
 You: Hi! How can I help you?
@@ -39,9 +38,12 @@ They: How busy is the restaurant when it opens?
 (You checked the database for "opening hours of restaurant The Pink Door" and database returned "The Pink Door is a restaurant which opens from 11:30 AM to 10:00 PM Tuesday to Saturday.")
 [Check the reviews? Yes. You check the reviews for "mentions of how busy is it the restaurant when it opens"]
 =====
+You: Hi! How can I help you?
 {% for dlg_turn in dlg %}
-You: {{ dlg_turn.agent_utterance }}
 They: {{ dlg_turn.user_utterance }}
+{% if dlg_turn.agent_utterance is not none %}
+You: {{ dlg_turn.agent_utterance }}
+{% endif %}
 {% endfor %}
 {% if dlg_turn.genie_query is not none %}
 (You checked the database for "{{ dlg_turn.genie_query }}" and database returned "{{ dlg_turn.genie_utterance }}")

@@ -23,8 +23,6 @@ Each time the user selects one of the agent utterances over the other, you make 
 
 import argparse
 import os
-import string
-import json
 import logging
 
 from flask import Flask, request
@@ -32,6 +30,11 @@ from flask_cors import CORS
 from flask_restful import Api, reqparse
 
 from yelp_loop import *
+
+from pymongo import MongoClient, ASCENDING
+
+# set up the MongoDB connection
+CONNECTION_STRING = os.environ.get("COSMOS_CONNECTION_STRING")
 
 
 app = Flask(__name__)
@@ -59,6 +62,67 @@ req_parser.add_argument("winner_system", type=str, location='json',
                         help='The system that was preferred by the user in the current dialog turn')
 req_parser.add_argument("loser_systems", type=list, location='json',
                         help='The system(s) that was not preferred by the user in the current dialog turn')
+
+class BackendConnection:
+    def __init__(
+        self,
+        greeting = "Hi! How can I help you?",
+        engine = "text-davinci-003") -> None:
+        
+        self.genie = gs.Genie()
+        self.genie.initialize('localhost', 'yelp')
+        
+        client = MongoClient(CONNECTION_STRING)
+        self.db = client['yelpbot']  # the database name is yelpbot
+        self.table = self.db['dialog_turns_dev'] # the collection that stores dialog turns
+        self.table.create_index("$**") # necessary to build an index before we can call sort()
+
+        self.greeting = greeting
+        self.engine = engine
+        
+    def compute_next(self, dialog_id, user_utterance, turn_id):
+        tuples = list(self.table.find( { "dialogID": dialog_id } ).sort('turn_id', ASCENDING))
+        
+        if (not tuples):
+            dlgHistory = []
+            genieDS, genie_aux = "null", []
+
+        # otherwise we retrieve the dialog history
+        else:
+            dlgHistory = BackendConnection._reconstruct_dlgHistory(tuples)
+            genieDS, genie_aux = BackendConnection._reconstruct_genieinfo(tuples)
+
+        dlgHistory, response, genieDS, genie_aux, genie_user_target = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, genie_aux=genie_aux, engine=self.engine)
+        
+        # update the current tuple with new DialogTurn
+        new_tuple = {"_id": '(' + str(dialog_id) + ', '+ str(turn_id) + ')', "dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}
+        # if current tuple has genie information, includes it as well
+        if genieDS != 'null':
+            new_tuple.update({"genieDS" : genieDS, "genieAux": genie_aux, "genie_user_target": genie_user_target})
+        
+        # insert the new dialog turn into DB
+        self.table.insert_one(new_tuple)
+                
+        return response, dlgHistory[-1], genie_user_target
+
+    @staticmethod
+    def _reconstruct_dlgHistory(tuples):
+        """Given a list of *sorted* mongodb dialog tuples, reconstruct a list of DialogTurns
+        Args:
+            tuples : a list of mongodb tuples, sorted in the order of first turn to last turn
+        """
+        return list(map(lambda x: DialogueTurn(**x["dlg_turn"]), tuples))
+
+    @staticmethod
+    def _reconstruct_genieinfo(tuples):
+        """Given a list of *sorted* mongodb dialog tuples, find the latest Genie information
+        Args:
+            tuples :a list of mongodb tuples, sorted in the order of first turn to last turn
+        """
+        for i in reversed(tuples):
+            if "genieDS" in i:
+                return i["genieDS"], i["genieAux"]
+        return "null", []
 
 connection = BackendConnection()
 
