@@ -69,9 +69,8 @@ class DialogueTurn:
         ]
         """
         ret = ''
-        ret += you + ': ' + self.agent_utterance
-        if self.user_utterance is not None:
-            ret += '\n' + they + ': ' + self.user_utterance
+        
+        ret += they + ': ' + self.user_utterance
         if self.genie_query is not None:
             ret += '\n' + '[You check the database for "' + \
                 self.genie_query + '"]'
@@ -87,6 +86,8 @@ class DialogueTurn:
             if self.genie_reviews_answer is not None:
                 ret += '\nAnswer: "' + self.genie_reviews_answer + '"'
             ret += '\n]'
+        if self.agent_utterance is not None:
+            ret += '\n' + you + ': ' + self.agent_utterance
         return ret
 
 
@@ -108,9 +109,11 @@ def dialogue_history_to_text(history: List[DialogueTurn], they='They', you='You'
     ret = ''
     for i in range(len(history)):
         ret += '\n' + history[i].to_text(they=they, you=you)
-    # remove the extra starting newline
-    if ret[0] == '\n':
-        ret = ret[1:]
+
+    if len(history) > 0:
+        # remove the extra starting newline
+        if ret[0] == '\n':
+            ret = ret[1:]
 
     return ret
 
