@@ -95,7 +95,7 @@ class BackendConnection:
         dlgHistory, response, genieDS, genie_aux, genie_user_target = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, genie_aux=genie_aux, engine=self.engine)
         
         # update the current tuple with new DialogTurn
-        new_tuple = {"dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}
+        new_tuple = {"_id": '(' + str(dialog_id) + ', '+ str(turn_id) + ')', "dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}
         # if current tuple has genie information, includes it as well
         if genieDS != 'null':
             new_tuple.update({"genieDS" : genieDS, "genieAux": genie_aux, "genie_user_target": genie_user_target})
