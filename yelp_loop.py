@@ -150,7 +150,8 @@ def wrapper_call_genie(
     query: str,
     dialog_state = None,
     aux = [],
-    engine = "text-davinci-003"
+    engine = "text-davinci-003",
+    update_parser_address = None
 ):
     """A wrapper around the Genie semantic parser, to determine if info if present in the database
     Args:
@@ -171,7 +172,7 @@ def wrapper_call_genie(
     ).lower()
     
     if (continuation.startswith("yes")):
-        ds, aux, user_target, genie_results = call_genie_internal(genie, dlgHistory, query, dialog_state = dialog_state, aux = aux)
+        ds, aux, user_target, genie_results = call_genie_internal(genie, dlgHistory, query, dialog_state = dialog_state, aux = aux, update_parser_address=update_parser_address)
         return ds, aux, user_target, genie_results
     else:
         dlgHistory[-1].genie_utterance = "I don't have that information"
@@ -183,7 +184,13 @@ def call_genie_internal(
     query: str,
     dialog_state = None,
     aux = [],
+    update_parser_address = None
 ):
+    if (update_parser_address is not None):
+        requests.post(update_parser_address + '/set_dlg_turn', json={
+            "dlg_turn": list(map(lambda x: x.__dict__, dlgHistory))
+        })
+    
     if dialog_state:
         genie_output = genie.query(query, dialog_state = dialog_state, aux=aux)
     else:
@@ -211,7 +218,8 @@ def compute_next_turn(
     genie : gs,
     genieDS : str = None,
     genie_aux = [],
-    engine = "text-davinci-003"):
+    engine = "text-davinci-003",
+    update_parser_address = None):
     
     # assign default values
     genie_new_ds = "null"
@@ -229,7 +237,8 @@ def compute_next_turn(
         try:
             genie_query = extract_quotation(continuation)
             dlgHistory[-1].genie_query = genie_query
-            genie_new_ds, genie_new_aux, genie_user_target, genie_results = wrapper_call_genie(genie, dlgHistory, genie_query, genieDS, aux=genie_aux, engine=engine)
+            genie_new_ds, genie_new_aux, genie_user_target, genie_results = wrapper_call_genie(
+                genie, dlgHistory, genie_query, genieDS, aux=genie_aux, engine=engine, update_parser_address=update_parser_address)
 
         except ValueError as e:
             logger.error('%s', str(e))
@@ -283,6 +292,9 @@ if __name__ == '__main__':
                         help='The conversation will continue until this string is typed in.')
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')
+    parser.add_argument('--use_GPT_parser', action='store_true',
+                        help='Use GPT parser as opposed to Genie parser')
+    GPT_parser_address = 'http://127.0.0.1:8400'
 
     args = parser.parse_args()
 
@@ -300,7 +312,7 @@ if __name__ == '__main__':
     print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))
 
     try:
-        genie.initialize('localhost', 'yelp')
+        genie.initialize(GPT_parser_address, 'yelp')
 
         while True:
             user_utterance = input_user()
@@ -308,7 +320,15 @@ if __name__ == '__main__':
                 break
             
             # this is single-user, so feeding in genieDS and genie_aux is unnecessary, but we do it to be consistent with backend_connection.py
-            dlgHistory, response, gds, gaux, _ = compute_next_turn(dlgHistory, user_utterance, genie, genieDS=genieDS, genie_aux=genie_aux, engine=args.engine)
+            dlgHistory, response, gds, gaux, _ = compute_next_turn(
+                dlgHistory,
+                user_utterance,
+                genie,
+                genieDS=genieDS,
+                genie_aux=genie_aux,
+                engine=args.engine,
+                update_parser_address=GPT_parser_address if args.use_GPT_parser else None
+            )
             if genieDS != 'null':
                 # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago
                 genieDS = gds

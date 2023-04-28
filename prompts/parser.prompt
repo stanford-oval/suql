@@ -1,0 +1,33 @@
+Generate a query for a restaurant database that has cuisine, price range (cheap, moderate, expensive, luxury), rating (1-5), number of customer reviews, location, menu, phone number, and opening hours. Each block represents a conversation.
+
+User: show me nearby mcdonalds
+Target: @com.yelp.restaurant() filter geo == $location.current_location && id =~ "mcdonalds";
+--
+User: what are some japanese restaurants in Kansa City?
+Target: @com.yelp.restaurant() filter geo == new Location("Kansas City") && contains(cuisines, null^^com.yelp:restaurant_cuisine("japanese"));
+--
+User: What is the highest rated restaurant that serves peking duck?
+Target: sort(rating desc of @com.yelp.restaurant() filter contains(menu, "peking duck"))[1];
+--
+User: what are the best 3 restaurants in Chicago?
+Target: sort(rating desc of @com.yelp.restaurant() filter geo == new Location("Chicago"))[1 : 3];
+Agent: I have Falafelle, V&V Delicious Crepes and Falafel and Things. They're restaurants rated 5 star.
+User: What is the rating for Falafelle?
+Target: [rating] of @com.yelp.restaurant() filter id == null^^com.yelp:restaurant("Falafelle");
+Agent: Falafelle is rated 4.5 star.
+User: Can you show me something else?
+Target: sort(rating desc of @com.yelp.restaurant() filter geo == new Location("Chicago")) => other;
+--
+User: what is the phone number of Nobu in Palo Alto?
+Target: [phone] of @com.yelp.restaurant() filter geo == new Location("Palo Alto") && id =~ "Nobu";
+--
+User: what's the nearest pizza i can get to
+Target: sort(distance(geo, $location.current_location) asc of @com.yelp.restaurant() filter contains(cuisines, null^^com.yelp:restaurant_cuisine("pizza")))[1];
+--
+{% for dlg_turn in dlg %}
+User: {{ dlg_turn.user_utterance }}
+{% if dlg_turn.agent_utterance is not none %}
+Agent: {{ dlg_turn.agent_utterance }}
+{% endif %}
+{% endfor %}
+Target: 
