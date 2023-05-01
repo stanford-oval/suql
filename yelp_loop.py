@@ -16,6 +16,7 @@ import html
 from utils import print_chatbot, input_user
 import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
+from server import GPT_parser_address
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -33,9 +34,9 @@ class DialogueTurn:
         genie_utterance: str = None,
         reviews_query: str = None,
         genie_reviews : List[str] = [],
-        genie_reviews_answer : str = None
-        ):
-        
+        genie_reviews_answer : str = None,
+        user_target : str = None,
+    ):
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
         self.genie_query = genie_query
@@ -43,7 +44,8 @@ class DialogueTurn:
         self.reviews_query = reviews_query
         self.genie_reviews = genie_reviews
         self.genie_reviews_answer = genie_reviews_answer
-
+        self.user_target = user_target
+        
     agent_utterance: str
     user_utterance: str
     genie_query: str
@@ -51,6 +53,7 @@ class DialogueTurn:
     reviews_query: str
     genie_reviews: List[str]
     genie_reviews_answer: str
+    user_target: str
 
     def to_text(self, they='They', you='You'):
         """
@@ -246,6 +249,7 @@ def compute_next_turn(
         if len(genie_results) == 0 and genie_new_ds is not None:
             response = "Sorry, I don't have that information."
             dlgHistory[-1].agent_utterance = response
+            dlgHistory[-1].user_target = genie_user_target
             return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
     
     # determine whether to Q&A reviews
@@ -275,6 +279,7 @@ def compute_next_turn(
     response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                         max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
+    dlgHistory[-1].user_target = genie_user_target
     
     return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
 
@@ -294,7 +299,6 @@ if __name__ == '__main__':
                         help='Do not output extra information about the intermediate steps.')
     parser.add_argument('--use_GPT_parser', action='store_true',
                         help='Use GPT parser as opposed to Genie parser')
-    GPT_parser_address = 'http://127.0.0.1:8400'
 
     args = parser.parse_args()
 

@@ -7,18 +7,31 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format=' %(name)s : %(levelname)-8s : %(message)s')
 
 
+# Set the server address
+host = "127.0.0.1"
+port = 8401
+GPT_parser_address = 'http://{}:{}'.format(host, port)
+
+def process_user_target(user_target: str):
+    try:
+        user_target = user_target.split("$continue")[1]
+    except Exception as e:
+        print("error while partitioning {}".format(user_target))
+        print(e)
+    return user_target
+
 class SemanticParser():
     def __init__(self):
         self.dlg_turns = []
         
     def parse(self, data):
-        # query = data.get('q')
+        query = data.get('q')
         continuation = llm_generate(template_file='prompts/parser.prompt',
-                        engine='text-davinci-003',
+                        engine='gpt-35-turbo',
                         stop_tokens=None,
                         max_tokens=100,
                         temperature=0,
-                        prompt_parameter_values={'dlg': self.dlg_turns},
+                        prompt_parameter_values={'dlg': self.dlg_turns, 'process_user_target': process_user_target, 'query': query},
                         postprocess=False)
         
         # put the result in a list since this is what genie accepts as of now
@@ -47,22 +60,19 @@ class SemanticParser():
     def set_dlg_turns(self, data):
         self.dlg_turns = data["dlg_turn"]
         return self.dlg_turns
-    
 
-# Set the server address
-host = "127.0.0.1"
-port = 8400
 
-s = SemanticParser()
+if __name__ == '__main__':
+    s = SemanticParser()
 
-@app.route('/en-US/query', methods=['POST'])
-def query():
-    data = request.get_json()
-    return s.parse(data)
+    @app.route('/en-US/query', methods=['POST'])
+    def query():
+        data = request.get_json()
+        return s.parse(data)
 
-@app.route('/set_dlg_turn', methods=['POST'])
-def set_dlgs_turns():
-    data = request.get_json()
-    return s.set_dlg_turns(data)
+    @app.route('/set_dlg_turn', methods=['POST'])
+    def set_dlgs_turns():
+        data = request.get_json()
+        return s.set_dlg_turns(data)
 
-app.run(host=host, port=port)
+    app.run(host=host, port=port)

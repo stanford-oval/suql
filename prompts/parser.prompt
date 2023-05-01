@@ -1,4 +1,4 @@
-Generate a query for a restaurant database that has cuisine, price range (cheap, moderate, expensive, luxury), rating (1-5), number of customer reviews, location, menu, phone number, and opening hours. Each block represents a conversation.
+Generate a query for a restaurant database that has cuisine, price (cheap, moderate, expensive, luxury), rating (1-5), number of customer reviews, location, menu, phone number, and opening hours. Each block represents a conversation.
 
 User: show me nearby mcdonalds
 Target: @com.yelp.restaurant() filter geo == $location.current_location && id =~ "mcdonalds";
@@ -24,10 +24,19 @@ Target: [phone] of @com.yelp.restaurant() filter geo == new Location("Palo Alto"
 User: what's the nearest pizza i can get to
 Target: sort(distance(geo, $location.current_location) asc of @com.yelp.restaurant() filter contains(cuisines, null^^com.yelp:restaurant_cuisine("pizza")))[1];
 --
-{% for dlg_turn in dlg %}
+User: show me a restaurant in palo alto
+Agent: I see Ramen Nagi. It is a moderate restaurant rated 4.5 stars.
+User: show me a cheap restaurant in mountain view
+Target: @com.yelp.restaurant() filter geo == new Location("Mountain View") && price == enum cheap;
+--
+{# Comment: we only include parts that would have been seen by Genie here #}
+{# Moving forward, we can give the direct user utterance here #}
+{% for dlg_turn in dlg[:-1] %}
+{% if dlg_turn.genie_utterance is not none %}
 User: {{ dlg_turn.user_utterance }}
-{% if dlg_turn.agent_utterance is not none %}
-Agent: {{ dlg_turn.agent_utterance }}
+Target: {{ process_user_target(dlg_turn.user_target) }}
+Agent: {{ dlg_turn.genie_utterance }}
 {% endif %}
 {% endfor %}
+User: {{ query }}
 Target: 
