@@ -1,4 +1,4 @@
-Generate a query for a restaurant database that has cuisine, price (cheap, moderate, expensive, luxury), rating (1-5), number of customer reviews, location, menu, phone number, and opening hours. Each block represents a conversation.
+You are a semantic parser. Generate a query for a restaurant database that has cuisine, price (cheap, moderate, expensive, luxury), rating (1-5), num_reviews, location, menu, reviews, phone_number, and opening_hours. Each block represents a conversation. You can only parse according to these fields. Do not generate fields beyond the given fields.
 
 User: show me nearby mcdonalds
 Target: @com.yelp.restaurant() filter geo == $location.current_location && id =~ "mcdonalds";
@@ -7,13 +7,19 @@ User: what are some japanese restaurants in Kansa City?
 Target: @com.yelp.restaurant() filter geo == new Location("Kansas City") && contains(cuisines, null^^com.yelp:restaurant_cuisine("japanese"));
 --
 User: What is the highest rated restaurant that serves peking duck?
-Target: sort(rating desc of @com.yelp.restaurant() filter contains(menu, "peking duck"))[1];
+Target: sort(rating desc of @com.yelp.restaurant() filter ~contains(menu, "peking duck"))[1];
+--
+User: Show me a family-friendly restaurant
+Target: @com.yelp.restaurant() filter reviews ~= ‘family-friendly’;
+Agent: I found Wesley's steakhouse. Reviews mention kids love going there with their parents. It should be a great weekend dinner for you and your family.
+User: What do the reviews say about the atmosphere in the restaurant?
+Target: [reviews ~= “What is the atmosphere?”] of @com.yelp.restaurant() filter id ~= 'Wesley's steakhouse';
 --
 User: what are the best 3 restaurants in Chicago?
 Target: sort(rating desc of @com.yelp.restaurant() filter geo == new Location("Chicago"))[1 : 3];
 Agent: I have Falafelle, V&V Delicious Crepes and Falafel and Things. They're restaurants rated 5 star.
 User: What is the rating for Falafelle?
-Target: [rating] of @com.yelp.restaurant() filter id == null^^com.yelp:restaurant("Falafelle");
+Target: [rating] of @com.yelp.restaurant() filter id ~= "Falafelle";
 Agent: Falafelle is rated 4.5 star.
 User: Can you show me something else?
 Target: sort(rating desc of @com.yelp.restaurant() filter geo == new Location("Chicago")) => other;
@@ -25,9 +31,13 @@ User: what's the nearest pizza i can get to
 Target: sort(distance(geo, $location.current_location) asc of @com.yelp.restaurant() filter contains(cuisines, null^^com.yelp:restaurant_cuisine("pizza")))[1];
 --
 User: show me a restaurant in palo alto
+Target: @com.yelp.restaurant() filter geo == new Location("Palo Alto");
 Agent: I see Ramen Nagi. It is a moderate restaurant rated 4.5 stars.
 User: show me a cheap restaurant in mountain view
 Target: @com.yelp.restaurant() filter geo == new Location("Mountain View") && price == enum cheap;
+--
+User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
+Target: @com.yelp.restaurant() filter reviews ~= 'short wait time';
 --
 {# Comment: we only include parts that would have been seen by Genie here #}
 {# Moving forward, we can give the direct user utterance here #}

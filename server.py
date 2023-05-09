@@ -28,12 +28,13 @@ class SemanticParser():
         query = data.get('q')
         continuation = llm_generate(template_file='prompts/parser.prompt',
                         engine='gpt-35-turbo',
-                        stop_tokens=None,
+                        stop_tokens=["Agent:"],
                         max_tokens=100,
                         temperature=0,
                         prompt_parameter_values={'dlg': self.dlg_turns, 'process_user_target': process_user_target, 'query': query},
                         postprocess=False)
         
+        continuation = continuation.rstrip("Agent:")
         # put the result in a list since this is what genie accepts as of now
         thingtalk_res = ['$dialogue @org.thingpedia.dialogue.transaction.execute; $continue ' + continuation]
         print(thingtalk_res)

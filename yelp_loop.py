@@ -153,10 +153,9 @@ def wrapper_call_genie(
     query: str,
     dialog_state = None,
     aux = [],
-    engine = "text-davinci-003",
     update_parser_address = None
 ):
-    """A wrapper around the Genie semantic parser, to determine if info if present in the database
+    f"""A wrapper around the Genie semantic parser, to determine if info if present in the database
     Args:
         genie (gs): pyGenieScript.geniescript.Genie class
         dlgHistory (List[DialogueTurn]): list of dlgHistory, to be modified in place
@@ -165,21 +164,19 @@ def wrapper_call_genie(
         aux (list, optional): Genie aux info. Defaults to [].
         engine (str, optional): LLM engine. Defaults to "text-davinci-003".
     Returns:
-        (dialog_state, aux, user_target, genie_results) from genie
+        (dialog_state, aux, user_target, genie_results, reviews) from genie
+        
+        reviews : [a list of dictionary], each dictionary is of format:
+        
+            "name": "reviews",
+            "operator": operator (most likely gonna be ~=),
+            "value": value (e.g. "what is a dog friendly restaurant"),
+            "type": "filter" or "projection"
+            
     """
-    continuation = llm_generate(
-        template_file='prompts/genie_wrapper.prompt',
-        prompt_parameter_values={'query': query},
-        engine=engine,
-        max_tokens=10, temperature=0.0, stop_tokens=['\n'], postprocess=False
-    ).lower()
     
-    if (continuation.startswith("yes")):
-        ds, aux, user_target, genie_results = call_genie_internal(genie, dlgHistory, query, dialog_state = dialog_state, aux = aux, update_parser_address=update_parser_address)
-        return ds, aux, user_target, genie_results
-    else:
-        dlgHistory[-1].genie_utterance = "I don't have that information"
-        return None, [], "", []
+    ds, aux, user_target, genie_results, reviews = call_genie_internal(genie, dlgHistory, query, dialog_state = dialog_state, aux = aux, update_parser_address=update_parser_address)
+    return ds, aux, user_target, genie_results, reviews
 
 def call_genie_internal(
     genie : gs,
@@ -194,10 +191,10 @@ def call_genie_internal(
             "dlg_turn": list(map(lambda x: x.__dict__, dlgHistory))
         })
     
-    if dialog_state:
-        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux)
+    if dialog_state is not None:
+        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux, neglect_filters=["reviews"])
     else:
-        genie_output = genie.query(query, aux=aux)
+        genie_output = genie.query(query, aux=aux, neglect_filters=["reviews"])
 
     if len(genie_output['response']) > 0:
         genie_utterance = genie_output['response'][0]
@@ -206,8 +203,68 @@ def call_genie_internal(
         genie_utterance = "Error parsing your request"
             
     dlgHistory[-1].genie_utterance = genie_utterance
-    return genie_output["ds"], genie_output["aux"], genie_output["user_target"], genie_output["results"]
+    
+    filters = genie_output["filters"]
+    review_info = []
+    print("filters {}".format(filters))
+    print("user target {}".format(genie_output["user_target"]))
+    for filter in filters:
+        if filter["name"] == "reviews":
+            review_info = get_field_information("reviews", filter["operator"], filter["value"], genie_output["user_target"])
+    
+    print(review_info)
+    
+    return genie_output["ds"], genie_output["aux"], genie_output["user_target"], genie_output["results"], review_info
 
+def get_field_information(name, operator, value, user_target):
+    # pattern = r'\[(.*?)\]'
+    # matches = re.findall(pattern, user_target)
+    
+    # some heurstics to determine if the substring occurs inside `[` and `]`
+    def determine_in_brakets(index):
+        index_copy = index
+        while (index >= 0):
+            if user_target[index] == "[":
+                break
+            elif user_target[index] == "]":
+                return False
+            index -= 1
+        
+        index = index_copy
+        while (index < len(user_target)):
+            if user_target[index] == "]":
+                break
+            elif user_target[index] == "[]":
+                return False
+            index += 1
+        
+        return True
+    
+    res = []
+    target_substring = "{} {} {}".format(name, operator, value)
+    
+    start_index = 0
+    index = user_target.find(target_substring, start_index)
+    while index >= 0:
+        
+        to_append = {
+            "name": name,
+            "operator": operator,
+            "value": value
+            }
+
+        if_projection = determine_in_brakets(index)
+        if if_projection:
+            to_append["type"] = "projection"
+        else:
+            to_append["type"] = "filter"
+        
+        res.append(to_append)
+        
+        start_index = index + 1
+        index = user_target.find(target_substring, start_index)
+    
+    return res
 
 def retrieve_last_reviews(dlgHistory : List[DialogueTurn]):
     for i in reversed(dlgHistory):
@@ -225,7 +282,7 @@ def compute_next_turn(
     update_parser_address = None):
     
     # assign default values
-    genie_new_ds = "null"
+    genie_new_ds = None
     genie_new_aux = []
     genie_user_target = ""
     genie_results = []
@@ -234,23 +291,20 @@ def compute_next_turn(
     dlgHistory[-1].reviews_query = None
     
     # determine whether to send to Genie      
-    continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-    if continuation.startswith("Yes"):
-        try:
-            genie_query = extract_quotation(continuation)
-            dlgHistory[-1].genie_query = genie_query
-            genie_new_ds, genie_new_aux, genie_user_target, genie_results = wrapper_call_genie(
-                genie, dlgHistory, genie_query, genieDS, aux=genie_aux, engine=engine, update_parser_address=update_parser_address)
+    try:
+        dlgHistory[-1].genie_query = user_utterance
+        genie_new_ds, genie_new_aux, genie_user_target, genie_results, reviews = wrapper_call_genie(
+            genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address)
+        print("reviews {}".format(reviews))
 
-        except ValueError as e:
-            logger.error('%s', str(e))
-        
-        if len(genie_results) == 0 and genie_new_ds is not None:
-            response = "Sorry, I don't have that information."
-            dlgHistory[-1].agent_utterance = response
-            dlgHistory[-1].user_target = genie_user_target
-            return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
+    except ValueError as e:
+        logger.error('%s', str(e))
+    
+    if len(genie_results) == 0 and genie_new_ds is not None:
+        response = "Sorry, I don't have that information."
+        dlgHistory[-1].agent_utterance = response
+        dlgHistory[-1].user_target = genie_user_target
+        return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
     
     # determine whether to Q&A reviews
     continuation = llm_generate(template_file='prompts/yelp_review.prompt', prompt_parameter_values={'dlg': dlgHistory, "dlg_turn": dlgHistory[-1]}, engine=engine,
@@ -311,12 +365,13 @@ if __name__ == '__main__':
     # the agent starts the dialogue
     genie = gs.Genie()
     dlgHistory = []
-    genieDS, genie_aux = "null", []
+    genieDS, genie_aux = None, []
 
     print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))
 
     try:
         genie.initialize(GPT_parser_address, 'yelp')
+        genie.query("what is a good restaurant that is dog friendly?", neglect_filters=["reviews"])
 
         while True:
             user_utterance = input_user()
@@ -333,7 +388,7 @@ if __name__ == '__main__':
                 engine=args.engine,
                 update_parser_address=GPT_parser_address if args.use_GPT_parser else None
             )
-            if genieDS != 'null':
+            if genieDS != None:
                 # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago
                 genieDS = gds
                 genie_aux = gaux
