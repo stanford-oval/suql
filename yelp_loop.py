@@ -192,9 +192,9 @@ def call_genie_internal(
         })
     
     if dialog_state is not None:
-        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux, neglect_filters=["reviews"])
+        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux, neglect_projections=["reviews"])
     else:
-        genie_output = genie.query(query, aux=aux, neglect_filters=["reviews"])
+        genie_output = genie.query(query, aux=aux, neglect_projections=["reviews"])
 
     if len(genie_output['response']) > 0:
         genie_utterance = genie_output['response'][0]
@@ -217,9 +217,6 @@ def call_genie_internal(
     return genie_output["ds"], genie_output["aux"], genie_output["user_target"], genie_output["results"], review_info
 
 def get_field_information(name, operator, value, user_target):
-    # pattern = r'\[(.*?)\]'
-    # matches = re.findall(pattern, user_target)
-    
     # some heurstics to determine if the substring occurs inside `[` and `]`
     def determine_in_brakets(index):
         index_copy = index
@@ -371,7 +368,7 @@ if __name__ == '__main__':
 
     try:
         genie.initialize(GPT_parser_address, 'yelp')
-        genie.query("what is a good restaurant that is dog friendly?", neglect_filters=["reviews"])
+        genie.query("what is a good restaurant that serves Chinese food")
 
         while True:
             user_utterance = input_user()
