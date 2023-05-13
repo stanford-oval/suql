@@ -1,8 +1,9 @@
 from transformers import AutoModel, AutoTokenizer
 import pymongo
-from typing import List, Dict
+from typing import List
 import os
 from flask import request, Flask
+import time
 
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
 tokenizer = AutoTokenizer.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -62,7 +63,9 @@ def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
 
 @app.route('/query', methods=['POST'])
 def query():
+    start_time = time.time()
     data = request.get_json()
+    print("receieved request {}".format(data))
     
     # input params in this `data`    
     # data["keyword"] : keyword to query
@@ -75,7 +78,10 @@ def query():
     num_max_restaurants = data["num_max_restaurants"] if "num_max_restaurants" in data else 5
 
     res = filter_reviews(data["restaurant_ids"][:num_max_restaurants], data["keyword"])
+    end_time = time.time()
     print(res)
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time} seconds")
     return res
 
 if __name__ == "__main__":

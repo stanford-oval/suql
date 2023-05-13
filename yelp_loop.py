@@ -176,6 +176,7 @@ def wrapper_call_genie(
     """
     
     ds, aux, user_target, genie_results, reviews = call_genie_internal(genie, dlgHistory, query, dialog_state = dialog_state, aux = aux, update_parser_address=update_parser_address)
+    
     return ds, aux, user_target, genie_results, reviews
 
 def call_genie_internal(
@@ -210,30 +211,46 @@ def call_genie_internal(
     print("user target {}".format(genie_output["user_target"]))
     for filter in filters:
         if filter["name"] == "reviews":
-            review_info = get_field_information("reviews", filter["operator"], filter["value"], genie_output["user_target"])
+            review_info += get_field_information("reviews", filter["operator"], filter["value"], genie_output["user_target"])
     
-    print(review_info)
-    
-    return genie_output["ds"], genie_output["aux"], genie_output["user_target"], genie_output["results"], review_info
+    # because Genie would append the search keyword at front followed by `\t`, delete those to retrieve the actual reviews
+    results = genie_output["results"]
+    for i in results:
+        if "reviews" in i:
+            splitted_reviews = i["reviews"].split('\t')
+            if len(splitted_reviews) > 1:
+                i["reviews"] = splitted_reviews[1:]
+
+    return genie_output["ds"], genie_output["aux"], genie_output["user_target"], results, review_info
 
 def get_field_information(name, operator, value, user_target):
     # some heurstics to determine if the substring occurs inside `[` and `]`
     def determine_in_brakets(index):
         index_copy = index
+        found = False
         while (index >= 0):
             if user_target[index] == "[":
+                found = True
                 break
             elif user_target[index] == "]":
                 return False
             index -= 1
         
+        if not found:
+            return False
+        
+        found = False
         index = index_copy
         while (index < len(user_target)):
             if user_target[index] == "]":
+                found = True
                 break
-            elif user_target[index] == "[]":
+            elif user_target[index] == "[":
                 return False
             index += 1
+            
+        if not found:
+            return False
         
         return True
     
@@ -256,7 +273,8 @@ def get_field_information(name, operator, value, user_target):
         else:
             to_append["type"] = "filter"
         
-        res.append(to_append)
+        if (to_append not in res):
+            res.append(to_append)
         
         start_index = index + 1
         index = user_target.find(target_substring, start_index)
@@ -293,9 +311,12 @@ def compute_next_turn(
         genie_new_ds, genie_new_aux, genie_user_target, genie_results, reviews = wrapper_call_genie(
             genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address)
         print("reviews {}".format(reviews))
+        
 
     except ValueError as e:
         logger.error('%s', str(e))
+    
+    # TODO: Wesley, handle reviews with projection and put your review system here. Whether it is a projection on reviews can be found by inspecting `reviews`.
     
     if len(genie_results) == 0 and genie_new_ds is not None:
         response = "Sorry, I don't have that information."
@@ -368,7 +389,6 @@ if __name__ == '__main__':
 
     try:
         genie.initialize(GPT_parser_address, 'yelp')
-        genie.query("what is a good restaurant that serves Chinese food")
 
         while True:
             user_utterance = input_user()
