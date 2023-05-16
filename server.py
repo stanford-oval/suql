@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format=' %(name)s : %(levelname)-8s : %(
 
 # Set the server address
 host = "127.0.0.1"
-port = 8401
+port = 8501  # change back to 8401 
 GPT_parser_address = 'http://{}:{}'.format(host, port)
 
 def process_user_target(user_target: str):
