@@ -16,7 +16,7 @@ collection = db['yelp_data']
 # Set the server address
 host = "127.0.0.1"
 port = 8500
-review_server_address = 'http://{}:{}/query'.format(host, port)
+review_server_address = 'http://{}:{}'.format(host, port)
 app = Flask(__name__)
 
 def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
@@ -65,7 +65,7 @@ def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
 def query():
     start_time = time.time()
     data = request.get_json()
-    print("receieved request {}".format(data))
+    print("/query receieved request {}".format(data))
     
     # input params in this `data`    
     # data["keyword"] : keyword to query
@@ -82,6 +82,29 @@ def query():
     print(res)
     elapsed_time = end_time - start_time
     print(f"Elapsed time: {elapsed_time} seconds")
+    return res
+
+@app.route('/getReviews', methods=['POST'])
+def getReviews():
+    data = request.get_json()
+    print("/getReviews receieved request {}".format(data))
+        
+    # input params in this `data`    
+    # data["restaurant_ids"] : list of restaurant ids to query reviews
+
+    if "restaurant_ids" not in data:
+        return None
+    
+    res = {}
+    for r_id in data["restaurant_ids"]:
+        query = {'id': r_id}
+        result = collection.find_one(query)
+        # filter out \t in reviews
+        if result:
+            res[r_id] = [i.replace('\t', ' ')  for i in result["reviews"]]
+        else:
+            res[r_id] = []
+    
     return res
 
 if __name__ == "__main__":
