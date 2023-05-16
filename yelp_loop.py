@@ -338,6 +338,7 @@ def compute_next_turn(
                 # QA system
                 response = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': projection_info['value']}, engine=engine,
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                dlgHistory[-1].agent_utterance = response
                 dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
 
             # always do a QA on reviews
