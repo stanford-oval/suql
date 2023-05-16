@@ -313,7 +313,7 @@ def compute_next_turn(
     if continuation.startswith("Yes"):
         try:
             dlgHistory[-1].genie_query = user_utterance
-            genie_new_ds, genie_new_aux, genie_user_target, genie_results, reviews = wrapper_call_genie(
+            genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info = wrapper_call_genie(
                 genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address)
     
         except ValueError as e:
@@ -325,59 +325,43 @@ def compute_next_turn(
             dlgHistory[-1].user_target = genie_user_target
             return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
 
-
         try:
-            # if reviews aren't in the database, we can query yelp
-            #
-            # from here we generate our list of reviews
-            # if filters, the reviews are only what we need
-            # if projection, we also return restaurant information which can be fed to GPT to generate a new response
-            # =====
-            
-            review_info = None
-            for r in reviews:
+            projection_info = None
+            for r in review_info:
                 if 'type' in r and r['type'] == 'projection':
-                    review_info = r
+                    projection_info = r
 
             # ad-hoc projection implementation
             # should be done in Genie
-            if review_info is not None and len(genie_results) > 0:
-                # projection_address = review_server_address + '/proj'
-                # restaurant_info = requests.post(projection_address, json={'keyword': r['value'], 
-                #                                         'restaurant_ids': genie_results, 
-                #                                         'num_max_restaurants': max_rest})
-                # restaurant_info = restaurant_info.json()
-
-                # make generic string about phone number, type of restaurant, ...?
+            if projection_info is not None and len(genie_results) > 0:
                 
                 # QA system
-                response = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results['reviews'], 'question': review_info['value']})
-                dlgHistory[-1].genie_reviews = genie_results['reviews']
+                response = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': projection_info['value']}, engine=engine,
+                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
 
             # always do a QA on reviews
             elif len(genie_results) > 0:
 
                 if ("reviews" in genie_results[0] and len(genie_results[0]["reviews"]) > 0):
-                    reviews = genie_results[0]["reviews"]
+                    dlgHistory[-1].genie_reviews = genie_results[0]["reviews"]
                 else:
-                    reviews = get_yelp_reviews(genie_results[0]['id']['value'])
-
-                dlgHistory[-1].genie_reviews = reviews
-
+                    dlgHistory[-1].genie_reviews = get_yelp_reviews(genie_results[0]['id']['value'])
 
                 filter_info = None
-                for r in reviews:
+                for r in review_info:
                     if 'type' in r and r['type'] == 'filter':
                         filter_info = r
 
                 # if there was a filter on reviews, then use the keyword to query reviews
                 if filter_info is not None:
-                    dlgHistory[-1].reviews_query = filter_info
+                    dlgHistory[-1].reviews_query = filter_info["value"]
                 # if there is no filter on reviews, just summarize:
                 else:
                     dlgHistory[-1].reviews_query = "general information about the restaurant"
 
-                dlgHistory[-1].genie_reviews_answer = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results['reviews'], 'question': dlgHistory[-1].reviews_query})
+                dlgHistory[-1].genie_reviews_answer = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': dlgHistory[-1].reviews_query}, engine=engine,
+                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
             
         except ValueError as e:
             logger.error('%s', str(e))

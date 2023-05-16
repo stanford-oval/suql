@@ -26,5 +26,5 @@ Your summary of relevant information from reviews: As suggested in reviews, this
 {{ review }}
 {% endfor %}
 
-Question; {{ question }}
+Question: {{ question }}
 Your summary of relevant information from reviews:
