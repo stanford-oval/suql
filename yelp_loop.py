@@ -200,12 +200,11 @@ def call_genie_internal(
         genie_output = genie.query(query, aux=aux, neglect_projections=["reviews"])
 
     if len(genie_output['response']) > 0:
-        genie_utterance = genie_output['response'][0]
+        dlgHistory[-1].genie_utterance = genie_output['response'][0]
     else:
         # a semantic parser error
-        genie_utterance = "Error parsing your request"
+        dlgHistory[-1].genie_utterance = "Error parsing your request"
             
-    dlgHistory[-1].genie_utterance = genie_utterance
     
     filters = genie_output["filters"]
     review_info = []
@@ -315,10 +314,10 @@ def compute_next_turn(
             dlgHistory[-1].genie_query = user_utterance
             genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info = wrapper_call_genie(
                 genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address)
-    
+
         except ValueError as e:
             logger.error('%s', str(e))
-    
+
         if len(genie_results) == 0 and genie_new_ds is not None:
             response = "Sorry, I don't have that information."
             dlgHistory[-1].agent_utterance = response
@@ -338,7 +337,7 @@ def compute_next_turn(
                 # QA system
                 response = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': projection_info['value']}, engine=engine,
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-                dlgHistory[-1].agent_utterance = response
+                dlgHistory[-1].genie_utterance = response
                 dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
 
             # always do a QA on reviews
@@ -354,15 +353,17 @@ def compute_next_turn(
                     if 'type' in r and r['type'] == 'filter':
                         filter_info = r
 
-                # if there was a filter on reviews, then use the keyword to query reviews
-                if filter_info is not None:
-                    dlgHistory[-1].reviews_query = filter_info["value"]
-                # if there is no filter on reviews, just summarize:
-                else:
-                    dlgHistory[-1].reviews_query = "general information about the restaurant"
 
-                dlgHistory[-1].genie_reviews_answer = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': dlgHistory[-1].reviews_query}, engine=engine,
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                if 'reviews' in genie_results[0]:
+                    # if there was a filter on reviews, then use the keyword to query reviews
+                    if filter_info is not None:
+                        dlgHistory[-1].reviews_query = filter_info["value"]
+                    # if there is no filter on reviews, just summarize:
+                    else:
+                        dlgHistory[-1].reviews_query = "general information about the restaurant"
+
+                    dlgHistory[-1].genie_reviews_answer = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': dlgHistory[-1].reviews_query}, engine=engine,
+                                    max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
             
         except ValueError as e:
             logger.error('%s', str(e))

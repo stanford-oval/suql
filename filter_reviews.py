@@ -106,11 +106,36 @@ def getReviews():
         query = {'id': r_id}
         result = collection.find_one(query)
         # filter out \t in reviews
-        if result:
+        if result and "reviews" in result:
             res[r_id] = [i.replace('\t', ' ')  for i in result["reviews"]]
         else:
             res[r_id] = []
     
+    print(res)
+    return res
+
+@app.route('/getMenus', methods=['POST'])
+def getMenus():
+    data = request.get_json()
+    print("/getReviews receieved request {}".format(data))
+        
+    # input params in this `data`    
+    # data["restaurant_ids"] : list of restaurant ids to query menu
+
+    if "restaurant_ids" not in data:
+        return None
+    
+    res = {}
+    for r_id in data["restaurant_ids"]:
+        query = {'id': r_id}
+        result = collection.find_one(query)
+        # filter out \t in reviews
+        if result and "dishes" in result:
+            res[r_id] = [i[0] for i in result["dishes"]]
+        else:
+            res[r_id] = []
+    
+    print(res)
     return res
 
 if __name__ == "__main__":

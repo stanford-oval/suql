@@ -10,7 +10,7 @@ User: What is the highest rated restaurant that serves peking duck?
 Target: sort(rating desc of @com.yelp.restaurant() filter ~contains(menu, "peking duck"))[1];
 --
 User: Show me a family-friendly restaurant
-Target: @com.yelp.restaurant() filter reviews =~ 'family-friendly';
+Target: @com.yelp.restaurant() filter reviews =~ 'did you find this restaurant to be family-friendly?';
 Agent: I found Wesley's steakhouse. Reviews mention kids love going there with their parents. It should be a great weekend dinner for you and your family.
 User: What do the reviews say about the atmosphere in the restaurant?
 Target: [reviews =~ "What is the atmosphere?"] of @com.yelp.restaurant() filter id =~ 'Wesley's steakhouse';
@@ -37,7 +37,7 @@ User: show me a cheap restaurant in mountain view
 Target: @com.yelp.restaurant() filter geo == new Location("Mountain View") && price == enum cheap;
 --
 User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
-Target: @com.yelp.restaurant() filter reviews =~ 'short wait time';
+Target: @com.yelp.restaurant() filter reviews =~ 'does this restaurant have short wait time?';
 --
 {# Comment: we only include parts that would have been seen by Genie here #}
 {# Moving forward, we can give the direct user utterance here #}
