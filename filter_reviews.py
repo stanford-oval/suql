@@ -57,9 +57,15 @@ def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
     for r in top_restaurants:
         # since reviews can only be of type String in Genie, the returned result will separate reviews by `\t`
         # thus, we make sure here that the review text does not contain `\t`
-        rest_recommendations.add((r[0], r[2].replace('\t', '')))
+        
+        # r[0] is the review
+        # r[1] is the similarity score
+        # r[2] is the restaurant id
+        rest_recommendations.add((r[0].replace('\t', ''), r[1].item(), r[2]))
 
-    return list(rest_recommendations)
+    res = list(rest_recommendations)
+    res = sorted(res, key=lambda x: x[1], reverse=True)
+    return res
 
 @app.route('/query', methods=['POST'])
 def query():
