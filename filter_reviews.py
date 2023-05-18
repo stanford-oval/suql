@@ -4,8 +4,10 @@ from typing import List
 import os
 from flask import request, Flask
 import time
+import torch
 
-model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
+device = torch.device("cuda")
+model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco").to(device)
 tokenizer = AutoTokenizer.from_pretrained("OpenMatch/cocodr-base-msmarco")
 
 mongo = os.environ.get('COSMOS_CONNECTION_STRING')
@@ -40,11 +42,13 @@ def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
             reviews.extend(doc['reviews'])
             restaurants.extend([doc['id'] for i in range(len(doc['reviews']))])
 
-        inputs = tokenizer(reviews, padding=True, truncation=True, return_tensors="pt")
+        inputs = tokenizer(reviews, padding=True, truncation=True, return_tensors="pt").to(device)
         embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1]\
             .squeeze(1)  # the embedding of the [CLS] token after the final layer
 
+        embeddings[0].to(device)
         for i in range(1, len(embeddings)):
+            embeddings[i].to(device)
             similarities.append((reviews[i], embeddings[0] @ embeddings[i], restaurants[i]))
 
     similarities.sort(key=lambda x: x[1], reverse=True)
