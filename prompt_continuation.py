@@ -16,6 +16,11 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+# create file handler which logs even debug messages
+fh = logging.FileHandler('prompts.log')
+fh.setLevel(logging.DEBUG)
+logger.addHandler(fh)
 
 #singleton
 jinja_environment = Environment(loader=FileSystemLoader('./'),
