@@ -38,16 +38,20 @@ class SemanticParser():
         continuation = continuation.rstrip("Agent:")
         
         # some syntactic sugars
+        
+        # on popular dishes:
         # add soft match
         continuation = continuation.replace(' contains(popular_dishes', ' ~contains(popular_dishes')
-        
         # replace `restaurant_dish` to simple string
         continuation = re.sub(r'null\^\^com\.yelp\:restaurant_dish\((.*?)\)', r'\1', continuation)
+        
+        # on id:
+        # "!= id", e.g., change `id != "Firehouse No.1 Gastropub"` to `!in_array~(id, ["Firehouse No.1 Gastropub"])`
+        continuation = re.sub('id != \"(.*?)\"', r'!in_array~(id, ["\1"])', continuation)
         
         # put the result in a list since this is what genie accepts as of now
         thingtalk_res = ['$dialogue @org.thingpedia.dialogue.transaction.execute; $continue ' + continuation]
         print(thingtalk_res)
-        
         
         result = {
             'candidates': [
