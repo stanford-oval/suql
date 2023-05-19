@@ -51,6 +51,9 @@ Target: @com.yelp.restaurant() filter reviews =~ 'does this restaurant have shor
 --
 User: i'm hungry, what should i have for lunch?
 Target: @com.yelp.restaurant();
+Agent: I found the 4.5 star Daigo. It is a family-owned business that serves traditional Japanese cuisine.
+User: Show me something else;
+Target: @com.yelp.restaurant() filter !in_array~(id, ["Daigo"]);
 --
 User: I want a great restaurant in Napa, CA
 Target: @com.yelp.restaurant() filter location == new Location("napa , ca") && rating >= 4;
