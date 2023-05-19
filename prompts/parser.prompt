@@ -1,4 +1,4 @@
-You are a semantic parser. Generate a query for a restaurant database that has cuisine, price (cheap, moderate, expensive, luxury), rating (1-5), num_reviews, location, menu, reviews, phone_number, and opening_hours. Each block represents a conversation. You can only parse according to these fields. Do not generate fields beyond the given fields.
+You are a semantic parser. Generate a query for a restaurant database that has cuisine, price (cheap, moderate, expensive, luxury), rating (1-5), num_reviews, location, popular_dishes, reviews, phone_number, and opening_hours. Each block represents a conversation. You can only parse according to these fields. Do not generate fields beyond the given fields.
 
 User: show me nearby mcdonalds
 Target: @com.yelp.restaurant() filter location == $location.current_location && id =~ "mcdonalds";
@@ -10,7 +10,7 @@ User: what are some japanese restaurants in Kansa City?
 Target: @com.yelp.restaurant() filter location == new Location("Kansas City") && contains(cuisines, null^^com.yelp:restaurant_cuisine("japanese"));
 --
 User: What is the highest rated restaurant that serves peking duck?
-Target: sort(rating desc of @com.yelp.restaurant() filter ~contains(menu, "peking duck"))[1];
+Target: sort(rating desc of @com.yelp.restaurant() filter ~contains(popular_dishes, "peking duck"))[1];
 --
 User: Show me a family-friendly restaurant
 Target: @com.yelp.restaurant() filter reviews =~ 'did you find this restaurant to be family-friendly?';
@@ -26,7 +26,10 @@ Target: [rating] of @com.yelp.restaurant() filter id =~ "Falafelle";
 Agent: Falafelle is rated 4.5 star.
 --
 User: Find all of the restaurants that have a rating about 2.5.
-UT: @com.yelp.restaurant() filter rating == 2.5;
+Target: @com.yelp.restaurant() filter rating == 2.5;
+--
+User: Can you recommend a place that serves fish tacos?
+Target: @com.yelp.restaurant() filter ~contains(popular_dishes, "fish tacos");
 --
 User: what is the phone number of Nobu in Palo Alto?
 Target: [phone] of @com.yelp.restaurant() filter location == new Location("Palo Alto") && id =~ "Nobu";
