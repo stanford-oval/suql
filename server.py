@@ -1,6 +1,7 @@
 from flask import request, Flask
 from prompt_continuation import llm_generate
 import logging
+import re
 
 app = Flask(__name__)
 
@@ -35,6 +36,14 @@ class SemanticParser():
                         postprocess=False)
         
         continuation = continuation.rstrip("Agent:")
+        
+        # some syntactic sugars
+        # add soft match
+        continuation = continuation.replace(' contains(popular_dishes', ' ~contains(popular_dishes')
+        
+        # replace `restaurant_dish` to simple string
+        continuation = re.sub(r'null\^\^com\.yelp\:restaurant_dish\((.*?)\)', r'\1', continuation)
+        
         # put the result in a list since this is what genie accepts as of now
         thingtalk_res = ['$dialogue @org.thingpedia.dialogue.transaction.execute; $continue ' + continuation]
         print(thingtalk_res)
