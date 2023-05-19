@@ -282,12 +282,6 @@ def get_field_information(name, operator, value, user_target):
     
     return res
 
-def retrieve_last_reviews(dlgHistory : List[DialogueTurn]):
-    for i in reversed(dlgHistory):
-        if len(i.genie_reviews) > 0:
-            return i.genie_reviews
-    return []
-
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
     user_utterance: str,
@@ -309,14 +303,11 @@ def compute_next_turn(
     # determine whether to send to Genie      
     continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-    if continuation.startswith("Yes"):
-        try:
-            dlgHistory[-1].genie_query = user_utterance
-            genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info = wrapper_call_genie(
-                genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address)
 
-        except ValueError as e:
-            logger.error('%s', str(e))
+    if continuation.startswith("Yes"):
+        dlgHistory[-1].genie_query = user_utterance
+        genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info = wrapper_call_genie(
+            genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address)
 
         if len(genie_results) == 0 and genie_new_ds is not None:
             response = "Sorry, I don't have that information."
@@ -336,7 +327,7 @@ def compute_next_turn(
                 
                 # QA system
                 response = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': projection_info['value']}, engine=engine,
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                                max_tokens=200, temperature=0.0, stop_tokens=['\n'], postprocess=False)
                 dlgHistory[-1].genie_utterance = response
                 dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
 
@@ -363,7 +354,9 @@ def compute_next_turn(
                         dlgHistory[-1].reviews_query = "general information about the restaurant"
 
                     dlgHistory[-1].genie_reviews_answer = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': dlgHistory[-1].reviews_query}, engine=engine,
-                                    max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                                    max_tokens=200, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                    
+                    dlgHistory[-1].genie_utterance += ' ' + dlgHistory[-1].genie_reviews_answer
             
         except ValueError as e:
             logger.error('%s', str(e))

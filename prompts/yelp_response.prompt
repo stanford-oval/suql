@@ -4,8 +4,7 @@ You can access a restaurant database to retrieve information about restaurants a
 {# basic example #}
 You: Hi! How can I help you?
 They: I want a Chinese restaurant in Kansas City
-(You checked the database for "Chinese restaurant in Kansas City" and database returned "I see Genghis Khan Mongolian Barbeque. It is a Chinese restaurant rated 4 stars.")
-(You checked reviews for "general information about the restaurant" and you got the answer "This restaurant has good food and service, as well as good cocktails. It serves egg drop soup and is highly rated by customers. It is a Chinese eatery located on 39th Street.")
+(The restaurant database returned "I see Genghis Khan Mongolian Barbeque. It is a Chinese restaurant rated 4 stars. This restaurant has good food and service, as well as good cocktails. It serves egg drop soup and is highly rated by customers. It is a Chinese eatery located on 39th Street.")
 You: I found the 4 star Genghis Khan Mongolian Barbeque. It has good food and service. Reviews praise the egg drop soup and cocktails there.
 
 {# comparison #}
@@ -13,26 +12,23 @@ You: Hi! How can I help you?
 They: show me a Chinese restaurant in upper east side, NY
 You: I found the 4 star Xi'an Famous Foods. It has a simple menu with noodles, Chinese "burgers", and dumplings. The popular dish is the cumin lamb noodles.
 They: how does it compare with Panda Express?
-(You checked the database for "rating of restaurant Panda Express in location equals upper east side, NY" and database returned "Panda Express is rated 3 stars.")
-(You checked reviews for "how good is the restaurant Panda Express?" and you got the answer "Reviews suggest that the food at this restaurant is of poor quality and the portions are small, leading to a negative overall experience.")
-You: Xi'an Famous Foods is rated higher than the 3 star Panda Express in upper east side, NY. Reviews suggest that the food at Panda Express is of poor quality and the portions are small, leading to a negative overall experience."
+(The restaurant database returned "Panda Express is rated 3 stars. Reviews suggest that the food at this restaurant is of poor quality and the portions are small, leading to a negative overall experience.")
+You: Xi'an Famous Foods is rated higher than the 3 star Panda Express in upper east side, NY. Reviews suggest that the food at Panda Express is of poor quality and the portions are small, leading to a negative overall experience.
 
 {# database lookup with no info - do not make up information #}
 You: Hi! How can I help you?
 They: I want a place with chicken wings in Tacoma
 You: I found The Camp Bar. It is a cheap Chicken Wings restaurant and reviews mention that the chicken wings there are amazing.
 They: ok. Can you find its reservation information?
-(You checked the database for "reservation information of The Camp Bar in Tacoma" and database returned "I don't have that information")
-(You checked reviews for "mentions of reservation information for The Camp Bar" and you got the answer "Reviews mention that The Camp Bar has a cool vibe, excellent service, and friendly people. There is street parking available, and they have a happy hour, but it is not posted. No mention of reservation information was made.")
-You: I'm sorry, but I couldn't find any reservation information for The Camp Bar. Reviews mention that they have a cool vibe, excellent service, and friendly people. There is street parking available, and they have a happy hour, but it is not posted.
+(The restaurant database returned "I don't have that information")
+You: I'm sorry, but I couldn't find any reservation information for The Camp Bar.
 
 {# general knowledge questions #}
 You: Hi! How can I help you?
 They: I want a Chinese restaurant around Palo Alto.
 You: I found the 3.5 star Jing Jing Chinese Gourmet. It has both indoor and outdoor seating, and has delicious lunch specials.
 They: What chinese dish do you recommend in general?
-(You checked the database for "best chinese dish" and database returned "I don't have that information")
-(You did not check reviews.)
+(You did not check the restaurant database.)
 You: It depends on your personal taste. Some popular Chinese dishes include Kung Pao Chicken, Sweet and Sour Pork, Egg Fried Rice, and Chow Mein.
 
 {# The history of the conversation so far #}
@@ -41,15 +37,10 @@ You: Hi! How can I help you?
 They: {{ dlg_turn.user_utterance }}
     {# include the database query, genie response and reviews only for the last turn #}
     {% if loop.index == loop.length %}
-        {% if dlg_turn.genie_query is not none %}
-        (You checked the database for "{{ dlg_turn.genie_query }}" and database returned "{{ dlg_turn.genie_utterance }}")
+        {% if dlg_turn.genie_utterance is not none %}
+        (The restaurant database returned "{{ dlg_turn.genie_utterance }}")
         {% else %}
-        (You did not check the database.)
-        {% endif %}
-        {% if dlg_turn.reviews_query is not none %}
-        (You checked reviews for "{{ dlg_turn.reviews_query }}" and you got the answer "{{ dlg_turn.genie_reviews_answer }}")
-        {% else %}
-        (You did not check reviews.)
+        (You did not check the restaurant database.)
         {% endif %}
     {% else %}
         You: {{ dlg_turn.agent_utterance }}
