@@ -47,7 +47,7 @@ User: show me a cheap restaurant in mountain view
 Target: @com.yelp.restaurant() filter location == new Location("Mountain View") && price == enum cheap;
 --
 User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
-Target: @com.yelp.restaurant() filter reviews =~ 'does this restaurant have short wait time?';
+Target: @com.yelp.restaurant() filter contains(cuisines, null^^com.yelp:restaurant_cuisine("chinese")) && reviews =~ 'does this restaurant have short wait time?';
 --
 User: i'm hungry, what should i have for lunch?
 Target: @com.yelp.restaurant();
