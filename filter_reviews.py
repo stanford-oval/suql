@@ -10,8 +10,8 @@ device = torch.device("cuda")
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco").to(device)
 tokenizer = AutoTokenizer.from_pretrained("OpenMatch/cocodr-base-msmarco")
 
-mongo = os.environ.get('COSMOS_CONNECTION_STRING')
-client = pymongo.MongoClient(mongo)
+# mongo = os.environ.get('COSMOS_CONNECTION_STRING')
+client = pymongo.MongoClient('localhost', 27017)
 db = client['yelpbot']
 collection = db['yelp_data']
 

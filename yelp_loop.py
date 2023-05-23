@@ -18,6 +18,7 @@ from utils import print_chatbot, input_user
 import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
 from server import GPT_parser_address
+import time
 # from query_reviews import review_server_address
 
 
@@ -177,7 +178,7 @@ def wrapper_call_genie(
             "type": "filter" or "projection"
             
     """
-    
+    start_time = time.time()
     ds, aux, user_target, genie_results, reviews = call_genie_internal(
         genie,
         dlgHistory,
@@ -188,7 +189,10 @@ def wrapper_call_genie(
         use_full_state = use_full_state
     )
     
-    return ds, aux, user_target, genie_results, reviews
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    
+    return ds, aux, user_target, genie_results, reviews, elapsed_time
 
 def call_genie_internal(
     genie : gs,
@@ -302,7 +306,7 @@ def review_qa(reviews, question, engine):
         else:
             break
     
-    continuation = llm_generate(
+    continuation, elapsed_time = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': review_res, 'question': question},
         engine=engine,
@@ -312,7 +316,7 @@ def review_qa(reviews, question, engine):
         postprocess=False
     )
     
-    return continuation
+    return continuation, elapsed_time
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
@@ -330,23 +334,34 @@ def compute_next_turn(
     genie_user_target = ""
     genie_results = []
     
+    first_classification_time = 0
+    review_time = 0
+    final_response_time = 0
+    genie_time = 0
+    
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
     dlgHistory[-1].reviews_query = None
     
-    # determine whether to send to Genie      
-    continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+    # determine whether to send to Genie
+    continuation, first_classification_time = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
         dlgHistory[-1].genie_query = user_utterance
-        genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info = wrapper_call_genie(
+        genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
             genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
 
         if len(genie_results) == 0 and genie_new_ds is not None:
             response = "Sorry, I don't have that information."
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].user_target = genie_user_target
-            return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
+            time_stmt = [
+                "Initial classifier: {:.2f}s".format(first_classification_time), 
+                "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
+                "response cut off"
+            ]
+            
+            return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
 
         try:
             projection_info = None
@@ -359,7 +374,7 @@ def compute_next_turn(
             if projection_info is not None and len(genie_results) > 0:
                 
                 # QA system
-                response = review_qa(genie_results[0]['reviews'], projection_info['value'], engine)
+                response, review_time = review_qa(genie_results[0]['reviews'], projection_info['value'], engine)
                 
                 dlgHistory[-1].genie_utterance = response
                 dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
@@ -386,19 +401,27 @@ def compute_next_turn(
                     else:
                         dlgHistory[-1].reviews_query = "general information about the restaurant"
 
-                    dlgHistory[-1].genie_reviews_answer = review_qa(genie_results[0]['reviews'], dlgHistory[-1].reviews_query, engine)
+                    dlgHistory[-1].genie_reviews_answer, review_time = review_qa(genie_results[0]['reviews'], dlgHistory[-1].reviews_query, engine)
                     
                     dlgHistory[-1].genie_utterance += ' ' + dlgHistory[-1].genie_reviews_answer
             
         except ValueError as e:
             logger.error('%s', str(e))
             
-    response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+    response, final_response_time = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                         max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
     dlgHistory[-1].user_target = genie_user_target
     
-    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
+    time_stmt = [
+        "Initial classifier: {:.2f}s".format(first_classification_time), 
+        "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
+        "Review QA: {:.2f}s".format(review_time),
+        "Final response: {:.2f}s".format(final_response_time)
+    ]
+    
+    
+    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
 
         
 

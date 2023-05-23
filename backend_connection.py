@@ -101,7 +101,7 @@ class BackendConnection:
 
         use_full_state = True if "generate_full" in system_name else False
 
-        dlgHistory, response, genieDS, genie_aux, genie_user_target = compute_next_turn(
+        dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
             dlgHistory,
             user_utterance,
             self.genie_GPT,
@@ -121,7 +121,7 @@ class BackendConnection:
         # insert the new dialog turn into DB
         self.table.insert_one(new_tuple)
                 
-        return response, dlgHistory[-1], genie_user_target
+        return response, dlgHistory[-1], genie_user_target, time_stmt
 
     @staticmethod
     def _reconstruct_dlgHistory(tuples):
@@ -160,7 +160,7 @@ def chat():
     system_name = request_args['system_name']
     # experiment_id = request_args['experiment_id']
     
-    response, dlgItem, genie_user_target = connection.compute_next(dialog_id, user_utterance, turn_id, system_name)
+    response, dlgItem, genie_user_target, time_stmt = connection.compute_next(dialog_id, user_utterance, turn_id, system_name)
 
     log = {}
     if (dlgItem.genie_query):
@@ -179,6 +179,8 @@ def chat():
         log["reviews"] = dlgItem.genie_reviews
         log["reviews - Q"] = dlgItem.reviews_query
         log["reviews - A"] = dlgItem.genie_reviews_answer
+
+    log["Elapsed Time"] = time_stmt
 
     return {'agent_utterance': response, 'log_object': log}
 
