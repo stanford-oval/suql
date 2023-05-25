@@ -155,7 +155,8 @@ def wrapper_call_genie(
     query: str,
     dialog_state = None,
     aux = [],
-    update_parser_address = None
+    update_parser_address = None,
+    use_full_state = False
 ):
     f"""A wrapper around the Genie semantic parser, to determine if info if present in the database
     Args:
@@ -177,7 +178,15 @@ def wrapper_call_genie(
             
     """
     
-    ds, aux, user_target, genie_results, reviews = call_genie_internal(genie, dlgHistory, query, dialog_state = dialog_state, aux = aux, update_parser_address=update_parser_address)
+    ds, aux, user_target, genie_results, reviews = call_genie_internal(
+        genie,
+        dlgHistory,
+        query,
+        dialog_state = dialog_state,
+        aux = aux,
+        update_parser_address=update_parser_address,
+        use_full_state = use_full_state
+    )
     
     return ds, aux, user_target, genie_results, reviews
 
@@ -187,7 +196,8 @@ def call_genie_internal(
     query: str,
     dialog_state = None,
     aux = [],
-    update_parser_address = None
+    update_parser_address = None,
+    use_full_state = False
 ):
     if (update_parser_address is not None):
         requests.post(update_parser_address + '/set_dlg_turn', json={
@@ -195,9 +205,9 @@ def call_genie_internal(
         })
     
     if dialog_state is not None:
-        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux, neglect_projections=["reviews"])
+        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux, neglect_projections=["reviews"], use_direct_sentence_state = use_full_state)
     else:
-        genie_output = genie.query(query, aux=aux, neglect_projections=["reviews"])
+        genie_output = genie.query(query, aux=aux, neglect_projections=["reviews"], use_direct_sentence_state = use_full_state)
 
     if len(genie_output['response']) > 0:
         dlgHistory[-1].genie_utterance = genie_output['response'][0]
@@ -282,6 +292,28 @@ def get_field_information(name, operator, value, user_target):
     
     return res
 
+def review_qa(reviews, question, engine):
+    review_res = []
+    # TODO: to be precise one needs to use the openAI tokenzer. for now I am just using some
+    # ad-hoc hard-coded character count
+    for i in reviews:
+        if len('\n'.join(review_res + [i])) < 14000:
+            review_res.append(i)
+        else:
+            break
+    
+    continuation = llm_generate(
+        'prompts/review_qa.prompt',
+        {'reviews': review_res, 'question': question},
+        engine=engine,
+        max_tokens=200,
+        temperature=0.0,
+        stop_tokens=['\n'],
+        postprocess=False
+    )
+    
+    return continuation
+
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
     user_utterance: str,
@@ -289,7 +321,8 @@ def compute_next_turn(
     genieDS : str = None,
     genie_aux = [],
     engine = "text-davinci-003",
-    update_parser_address = None):
+    update_parser_address = None,
+    use_full_state = False):
     
     # assign default values
     genie_new_ds = None
@@ -307,7 +340,7 @@ def compute_next_turn(
     if continuation.startswith("Yes"):
         dlgHistory[-1].genie_query = user_utterance
         genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info = wrapper_call_genie(
-            genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address)
+            genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
 
         if len(genie_results) == 0 and genie_new_ds is not None:
             response = "Sorry, I don't have that information."
@@ -326,8 +359,8 @@ def compute_next_turn(
             if projection_info is not None and len(genie_results) > 0:
                 
                 # QA system
-                response = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': projection_info['value']}, engine=engine,
-                                max_tokens=200, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                response = review_qa(genie_results[0]['reviews'], projection_info['value'], engine)
+                
                 dlgHistory[-1].genie_utterance = response
                 dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
 
@@ -353,8 +386,7 @@ def compute_next_turn(
                     else:
                         dlgHistory[-1].reviews_query = "general information about the restaurant"
 
-                    dlgHistory[-1].genie_reviews_answer = llm_generate('prompts/review_qa.prompt', {'reviews': genie_results[0]['reviews'], 'question': dlgHistory[-1].reviews_query}, engine=engine,
-                                    max_tokens=200, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                    dlgHistory[-1].genie_reviews_answer = review_qa(genie_results[0]['reviews'], dlgHistory[-1].reviews_query, engine)
                     
                     dlgHistory[-1].genie_utterance += ' ' + dlgHistory[-1].genie_reviews_answer
             
