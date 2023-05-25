@@ -23,7 +23,6 @@ Target: sort(rating desc of @com.yelp.restaurant() filter location == new Locati
 Agent: I have Falafelle, V&V Delicious Crepes and Falafel and Things. They're restaurants rated 5 star.
 User: What is the rating for Falafelle?
 Target: [rating] of @com.yelp.restaurant() filter id =~ "Falafelle";
-Agent: Falafelle is rated 4.5 star.
 --
 User: Find all of the restaurants that have a rating about 2.5.
 Target: @com.yelp.restaurant() filter rating == 2.5;
