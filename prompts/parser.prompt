@@ -34,7 +34,7 @@ Target: @com.yelp.restaurant() filter ~contains(popular_dishes, "fish tacos");
 User: what is the phone number of Nobu in Palo Alto?
 Target: [phone] of @com.yelp.restaurant() filter location == new Location("Palo Alto") && id =~ "Nobu";
 --
-User: show me "Gui's Vegetarian Steakhouse"
+User: tell me about "Gui's Vegetarian Steakhouse"
 Target: @com.yelp.restaurant() filter id =~ "Gui's Vegetarian Steakhouse";
 --
 User: what's the nearest pizza i can get to
