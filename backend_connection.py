@@ -30,6 +30,7 @@ from flask_cors import CORS
 from flask_restful import Api, reqparse
 
 from yelp_loop import *
+from server import GPT_parser_address
 
 from pymongo import MongoClient, ASCENDING
 
@@ -69,8 +70,14 @@ class BackendConnection:
         greeting = "Hi! How can I help you?",
         engine = "text-davinci-003") -> None:
         
-        self.genie = gs.Genie()
-        self.genie.initialize('localhost', 'yelp')
+        # Genie semantic parser is running on a random port set by pyGenieScript
+        
+        # GPT-based semantic parser is running on 8401
+        self.genie_GPT = gs.Genie()
+        self.genie_GPT.initialize(GPT_parser_address, force_update_manifest=True)
+        
+        # submit an empty query for each genie to circumvent https://stanford-oval.github.io/pyGenieScript/pyGenieScript/geniescript.html#Genie.query
+        # "Applies to v0.0.0b3: there is a TBD bug ..."
         
         client = MongoClient(CONNECTION_STRING)
         self.db = client['yelpbot']  # the database name is yelpbot
@@ -80,7 +87,7 @@ class BackendConnection:
         self.greeting = greeting
         self.engine = engine
         
-    def compute_next(self, dialog_id, user_utterance, turn_id):
+    def compute_next(self, dialog_id, user_utterance, turn_id, system_name):
         tuples = list(self.table.find( { "dialogID": dialog_id } ).sort('turn_id', ASCENDING))
         
         if (not tuples):
@@ -92,7 +99,18 @@ class BackendConnection:
             dlgHistory = BackendConnection._reconstruct_dlgHistory(tuples)
             genieDS, genie_aux = BackendConnection._reconstruct_genieinfo(tuples)
 
-        dlgHistory, response, genieDS, genie_aux, genie_user_target = compute_next_turn(dlgHistory, user_utterance, self.genie, genieDS=genieDS, genie_aux=genie_aux, engine=self.engine)
+        use_full_state = True if "generate_full" in system_name else False
+
+        dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
+            dlgHistory,
+            user_utterance,
+            self.genie_GPT,
+            genieDS=genieDS,
+            genie_aux=genie_aux,
+            engine=self.engine,
+            update_parser_address=GPT_parser_address,
+            use_full_state=use_full_state
+        )
         
         # update the current tuple with new DialogTurn
         new_tuple = {"_id": '(' + str(dialog_id) + ', '+ str(turn_id) + ')', "dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}
@@ -103,7 +121,7 @@ class BackendConnection:
         # insert the new dialog turn into DB
         self.table.insert_one(new_tuple)
                 
-        return response, dlgHistory[-1], genie_user_target
+        return response, dlgHistory[-1], genie_user_target, time_stmt
 
     @staticmethod
     def _reconstruct_dlgHistory(tuples):
@@ -139,10 +157,10 @@ def chat():
     user_utterance = request_args['new_user_utterance']
     dialog_id = request_args['dialog_id']
     turn_id = request_args['turn_id']
+    system_name = request_args['system_name']
     # experiment_id = request_args['experiment_id']
-    # system_name = request_args['system_name']
     
-    response, dlgItem, genie_user_target = connection.compute_next(dialog_id, user_utterance, turn_id)
+    response, dlgItem, genie_user_target, time_stmt = connection.compute_next(dialog_id, user_utterance, turn_id, system_name)
 
     log = {}
     if (dlgItem.genie_query):
@@ -151,7 +169,7 @@ def chat():
         
         # do some processing on genie_user_target to only preserve the sentence state representation
         try:
-            genie_user_target = "$continue" + genie_user_target.split("$continue")[1]
+            genie_user_target = "$continue" + dlgItem.user_target.split("$continue")[1]
         except Exception as e:
             print(e)
             
@@ -161,6 +179,8 @@ def chat():
         log["reviews"] = dlgItem.genie_reviews
         log["reviews - Q"] = dlgItem.reviews_query
         log["reviews - A"] = dlgItem.genie_reviews_answer
+
+    log["Elapsed Time"] = time_stmt
 
     return {'agent_utterance': response, 'log_object': log}
 

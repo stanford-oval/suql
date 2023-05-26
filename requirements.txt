@@ -4,3 +4,6 @@ tenacity
 Flask
 flask_restful
 flask-cors
+pymongo==4.3.3
+transformers==4.29.2
+torch==2.0.1

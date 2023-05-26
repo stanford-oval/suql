@@ -13,9 +13,13 @@ import logging
 import requests
 from datetime import datetime
 import html
+import json
 from utils import print_chatbot, input_user
 import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
+from server import GPT_parser_address
+import time
+# from query_reviews import review_server_address
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -33,9 +37,9 @@ class DialogueTurn:
         genie_utterance: str = None,
         reviews_query: str = None,
         genie_reviews : List[str] = [],
-        genie_reviews_answer : str = None
-        ):
-        
+        genie_reviews_answer : str = None,
+        user_target : str = None,
+    ):
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
         self.genie_query = genie_query
@@ -43,7 +47,8 @@ class DialogueTurn:
         self.reviews_query = reviews_query
         self.genie_reviews = genie_reviews
         self.genie_reviews_answer = genie_reviews_answer
-
+        self.user_target = user_target
+        
     agent_utterance: str
     user_utterance: str
     genie_query: str
@@ -51,6 +56,7 @@ class DialogueTurn:
     reviews_query: str
     genie_reviews: List[str]
     genie_reviews_answer: str
+    user_target: str
 
     def to_text(self, they='They', you='You'):
         """
@@ -150,9 +156,10 @@ def wrapper_call_genie(
     query: str,
     dialog_state = None,
     aux = [],
-    engine = "text-davinci-003"
+    update_parser_address = None,
+    use_full_state = False
 ):
-    """A wrapper around the Genie semantic parser, to determine if info if present in the database
+    f"""A wrapper around the Genie semantic parser, to determine if info if present in the database
     Args:
         genie (gs): pyGenieScript.geniescript.Genie class
         dlgHistory (List[DialogueTurn]): list of dlgHistory, to be modified in place
@@ -161,21 +168,31 @@ def wrapper_call_genie(
         aux (list, optional): Genie aux info. Defaults to [].
         engine (str, optional): LLM engine. Defaults to "text-davinci-003".
     Returns:
-        (dialog_state, aux, user_target, genie_results) from genie
+        (dialog_state, aux, user_target, genie_results, reviews) from genie
+        
+        reviews : [a list of dictionary], each dictionary is of format:
+        
+            "name": "reviews",
+            "operator": operator (most likely gonna be ~=),
+            "value": value (e.g. "what is a dog friendly restaurant"),
+            "type": "filter" or "projection"
+            
     """
-    continuation = llm_generate(
-        template_file='prompts/genie_wrapper.prompt',
-        prompt_parameter_values={'query': query},
-        engine=engine,
-        max_tokens=10, temperature=0.0, stop_tokens=['\n'], postprocess=False
-    ).lower()
+    start_time = time.time()
+    ds, aux, user_target, genie_results, reviews = call_genie_internal(
+        genie,
+        dlgHistory,
+        query,
+        dialog_state = dialog_state,
+        aux = aux,
+        update_parser_address=update_parser_address,
+        use_full_state = use_full_state
+    )
     
-    if (continuation.startswith("yes")):
-        ds, aux, user_target, genie_results = call_genie_internal(genie, dlgHistory, query, dialog_state = dialog_state, aux = aux)
-        return ds, aux, user_target, genie_results
-    else:
-        dlgHistory[-1].genie_utterance = "I don't have that information"
-        return None, [], "", []
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    
+    return ds, aux, user_target, genie_results, reviews, elapsed_time
 
 def call_genie_internal(
     genie : gs,
@@ -183,27 +200,123 @@ def call_genie_internal(
     query: str,
     dialog_state = None,
     aux = [],
+    update_parser_address = None,
+    use_full_state = False
 ):
-    if dialog_state:
-        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux)
+    if (update_parser_address is not None):
+        requests.post(update_parser_address + '/set_dlg_turn', json={
+            "dlg_turn": list(map(lambda x: x.__dict__, dlgHistory))
+        })
+    
+    if dialog_state is not None:
+        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux, neglect_projections=["reviews"], use_direct_sentence_state = use_full_state)
     else:
-        genie_output = genie.query(query, aux=aux)
+        genie_output = genie.query(query, aux=aux, neglect_projections=["reviews"], use_direct_sentence_state = use_full_state)
 
     if len(genie_output['response']) > 0:
-        genie_utterance = genie_output['response'][0]
+        dlgHistory[-1].genie_utterance = genie_output['response'][0]
     else:
         # a semantic parser error
-        genie_utterance = "Error parsing your request"
+        dlgHistory[-1].genie_utterance = "Error parsing your request"
             
-    dlgHistory[-1].genie_utterance = genie_utterance
-    return genie_output["ds"], genie_output["aux"], genie_output["user_target"], genie_output["results"]
+    
+    filters = genie_output["filters"]
+    review_info = []
+    print("filters {}".format(filters))
+    print("user target {}".format(genie_output["user_target"]))
+    for filter in filters:
+        if filter["name"] == "reviews":
+            review_info += get_field_information("reviews", filter["operator"], filter["value"], genie_output["user_target"])
+    
+    # because Genie would append the search keyword at front followed by `\t`, delete those to retrieve the actual reviews
+    results = genie_output["results"]
+    for i in results:
+        if "reviews" in i:
+            splitted_reviews = i["reviews"].split('\t')
+            if len(splitted_reviews) > 1:
+                i["reviews"] = splitted_reviews[1:]
 
+    return genie_output["ds"], genie_output["aux"], genie_output["user_target"], results, review_info
 
-def retrieve_last_reviews(dlgHistory : List[DialogueTurn]):
-    for i in reversed(dlgHistory):
-        if len(i.genie_reviews) > 0:
-            return i.genie_reviews
-    return []
+def get_field_information(name, operator, value, user_target):
+    # some heurstics to determine if the substring occurs inside `[` and `]`
+    def determine_in_brakets(index):
+        index_copy = index
+        found = False
+        while (index >= 0):
+            if user_target[index] == "[":
+                found = True
+                break
+            elif user_target[index] == "]":
+                return False
+            index -= 1
+        
+        if not found:
+            return False
+        
+        found = False
+        index = index_copy
+        while (index < len(user_target)):
+            if user_target[index] == "]":
+                found = True
+                break
+            elif user_target[index] == "[":
+                return False
+            index += 1
+            
+        if not found:
+            return False
+        
+        return True
+    
+    res = []
+    target_substring = "{} {} {}".format(name, operator, value)
+    
+    start_index = 0
+    index = user_target.find(target_substring, start_index)
+    while index >= 0:
+        
+        to_append = {
+            "name": name,
+            "operator": operator,
+            "value": value
+            }
+
+        if_projection = determine_in_brakets(index)
+        if if_projection:
+            to_append["type"] = "projection"
+        else:
+            to_append["type"] = "filter"
+        
+        if (to_append not in res):
+            res.append(to_append)
+        
+        start_index = index + 1
+        index = user_target.find(target_substring, start_index)
+    
+    return res
+
+def review_qa(reviews, question, engine):
+    review_res = []
+    # TODO: to be precise one needs to use the openAI tokenzer. for now I am just using some
+    # ad-hoc hard-coded character count
+    for i in reviews:
+        if len('\n'.join(review_res + [i])) < 14000:
+            review_res.append(i)
+        else:
+            break
+    
+    continuation, elapsed_time = llm_generate(
+        'prompts/review_qa.prompt',
+        {'reviews': review_res, 'question': question},
+        engine=engine,
+        max_tokens=200,
+        temperature=0.0,
+        stop_tokens=['\n'],
+        postprocess=False
+    )
+    
+    return continuation, elapsed_time
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
@@ -211,63 +324,104 @@ def compute_next_turn(
     genie : gs,
     genieDS : str = None,
     genie_aux = [],
-    engine = "text-davinci-003"):
+    engine = "text-davinci-003",
+    update_parser_address = None,
+    use_full_state = False):
     
     # assign default values
-    genie_new_ds = "null"
+    genie_new_ds = None
     genie_new_aux = []
     genie_user_target = ""
     genie_results = []
     
+    first_classification_time = 0
+    review_time = 0
+    final_response_time = 0
+    genie_time = 0
+    
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
     dlgHistory[-1].reviews_query = None
     
-    # determine whether to send to Genie      
-    continuation = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+    # determine whether to send to Genie
+    continuation, first_classification_time = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-    if continuation.startswith("Yes"):
-        try:
-            genie_query = extract_quotation(continuation)
-            dlgHistory[-1].genie_query = genie_query
-            genie_new_ds, genie_new_aux, genie_user_target, genie_results = wrapper_call_genie(genie, dlgHistory, genie_query, genieDS, aux=genie_aux, engine=engine)
 
-        except ValueError as e:
-            logger.error('%s', str(e))
-        
+    if continuation.startswith("Yes"):
+        dlgHistory[-1].genie_query = user_utterance
+        genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
+            genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
+
         if len(genie_results) == 0 and genie_new_ds is not None:
             response = "Sorry, I don't have that information."
             dlgHistory[-1].agent_utterance = response
-            return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
-    
-    # determine whether to Q&A reviews
-    continuation = llm_generate(template_file='prompts/yelp_review.prompt', prompt_parameter_values={'dlg': dlgHistory, "dlg_turn": dlgHistory[-1]}, engine=engine,
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-    if continuation.startswith("Yes"):
+            dlgHistory[-1].user_target = genie_user_target
+            time_stmt = [
+                "Initial classifier: {:.2f}s".format(first_classification_time), 
+                "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
+                "response cut off"
+            ]
+            
+            return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
+
         try:
-            review_query = extract_quotation(continuation)
-            dlgHistory[-1].reviews_query = review_query
-            
-            if len(genie_results) > 0:
-                reviews = get_yelp_reviews(genie_results[0]['id']['value'])
-                reviews = reviews[:3] # at most 3 reviews
-            else:
-                reviews =  retrieve_last_reviews(dlgHistory)
-            dlgHistory[-1].genie_reviews = reviews
-            
-            # if there are reviews to be queried, do a GPT-3 QA system on it
-            if len(reviews) > 0:
-                continuation = llm_generate(template_file='prompts/review_qa.prompt', prompt_parameter_values={'review': reviews, "question": review_query}, engine=engine,
-                                max_tokens=100, temperature=0.0, stop_tokens=['\n'], postprocess=False)
-                dlgHistory[-1].genie_reviews_answer = continuation
+            projection_info = None
+            for r in review_info:
+                if 'type' in r and r['type'] == 'projection':
+                    projection_info = r
+
+            # ad-hoc projection implementation
+            # should be done in Genie
+            if projection_info is not None and len(genie_results) > 0:
+                
+                # QA system
+                response, review_time = review_qa(genie_results[0]['reviews'], projection_info['value'], engine)
+                
+                dlgHistory[-1].genie_utterance = response
+                dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
+
+            # always do a QA on reviews
+            elif len(genie_results) > 0:
+
+                if ("reviews" in genie_results[0] and len(genie_results[0]["reviews"]) > 0):
+                    dlgHistory[-1].genie_reviews = genie_results[0]["reviews"]
+                else:
+                    dlgHistory[-1].genie_reviews = get_yelp_reviews(genie_results[0]['id']['value'])
+
+                filter_info = None
+                for r in review_info:
+                    if 'type' in r and r['type'] == 'filter':
+                        filter_info = r
+
+
+                if 'reviews' in genie_results[0]:
+                    # if there was a filter on reviews, then use the keyword to query reviews
+                    if filter_info is not None:
+                        dlgHistory[-1].reviews_query = filter_info["value"]
+                    # if there is no filter on reviews, just summarize:
+                    else:
+                        dlgHistory[-1].reviews_query = "general information about the restaurant"
+
+                    dlgHistory[-1].genie_reviews_answer, review_time = review_qa(genie_results[0]['reviews'], dlgHistory[-1].reviews_query, engine)
+                    
+                    dlgHistory[-1].genie_utterance += ' ' + dlgHistory[-1].genie_reviews_answer
             
         except ValueError as e:
             logger.error('%s', str(e))
             
-    response = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+    response, final_response_time = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                         max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
+    dlgHistory[-1].user_target = genie_user_target
     
-    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target
+    time_stmt = [
+        "Initial classifier: {:.2f}s".format(first_classification_time), 
+        "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
+        "Review QA: {:.2f}s".format(review_time),
+        "Final response: {:.2f}s".format(final_response_time)
+    ]
+    
+    
+    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
 
         
 
@@ -283,6 +437,8 @@ if __name__ == '__main__':
                         help='The conversation will continue until this string is typed in.')
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')
+    parser.add_argument('--use_GPT_parser', action='store_true',
+                        help='Use GPT parser as opposed to Genie parser')
 
     args = parser.parse_args()
 
@@ -295,12 +451,12 @@ if __name__ == '__main__':
     # the agent starts the dialogue
     genie = gs.Genie()
     dlgHistory = []
-    genieDS, genie_aux = "null", []
+    genieDS, genie_aux = None, []
 
     print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))
 
     try:
-        genie.initialize('localhost', 'yelp')
+        genie.initialize(GPT_parser_address, 'yelp')
 
         while True:
             user_utterance = input_user()
@@ -308,8 +464,16 @@ if __name__ == '__main__':
                 break
             
             # this is single-user, so feeding in genieDS and genie_aux is unnecessary, but we do it to be consistent with backend_connection.py
-            dlgHistory, response, gds, gaux, _ = compute_next_turn(dlgHistory, user_utterance, genie, genieDS=genieDS, genie_aux=genie_aux, engine=args.engine)
-            if genieDS != 'null':
+            dlgHistory, response, gds, gaux, _ = compute_next_turn(
+                dlgHistory,
+                user_utterance,
+                genie,
+                genieDS=genieDS,
+                genie_aux=genie_aux,
+                engine=args.engine,
+                update_parser_address=GPT_parser_address if args.use_GPT_parser else None
+            )
+            if genieDS != None:
                 # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago
                 genieDS = gds
                 genie_aux = gaux
