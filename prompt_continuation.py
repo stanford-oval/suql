@@ -14,6 +14,7 @@ from functools import partial
 from datetime import date
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
+import time
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -153,9 +154,13 @@ def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
     filled_prompt gives direct access to the underlying model, without having to load a prompt template from a .prompt file. Used for testing.
     ban_line_break_start can potentially double the cost, though in practice (and especially with good prompts) this only happens for a fraction of inputs
     """
+    start_time = time.time()
     if filled_prompt is None:
         filled_prompt = _fill_template(template_file, prompt_parameter_values)
-    return _generate(filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, postprocess, max_tries, ban_line_break_start)
+    res = _generate(filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, postprocess, max_tries, ban_line_break_start)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    return res, elapsed_time
     
 
 def batch_llm_generate(template_file: str, prompt_parameter_values: List[dict], engine,

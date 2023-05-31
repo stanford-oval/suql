@@ -28,7 +28,7 @@ user_characters = [
 def simulate_one_user_turn(
     dialog_history: List[DialogueTurn], user_character: str
 ) -> str:
-    return llm_generate(
+    res, _ = llm_generate(
         template_file="prompts/user.prompt",
         prompt_parameter_values={
             "dlg": dialog_history,
@@ -43,6 +43,7 @@ def simulate_one_user_turn(
         presence_penalty=0,
         postprocess=False,
     )
+    return res
 
 
 if __name__ == "__main__":
@@ -115,7 +116,7 @@ if __name__ == "__main__":
                     random.choice(user_characters),
                 )
 
-                _, dlgItem, _ = connection.compute_next(
+                _, dlgItem, _, _ = connection.compute_next(
                     dialog_id,
                     user_utterance,
                     turn_id,

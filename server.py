@@ -27,7 +27,7 @@ class SemanticParser():
         
     def parse(self, data):
         query = data.get('q')
-        continuation = llm_generate(template_file='prompts/parser.prompt',
+        continuation, _ = llm_generate(template_file='prompts/parser.prompt',
                         engine='gpt-35-turbo',
                         stop_tokens=["Agent:"],
                         max_tokens=100,
