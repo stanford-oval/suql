@@ -218,7 +218,6 @@ def call_genie_internal(
     
     filters = genie_output["filters"]
     review_info = []
-    print("filters {}".format(filters))
     print("user target {}".format(genie_output["user_target"]))
     for filter in filters:
         if filter["name"] == "reviews":
@@ -302,6 +301,9 @@ def review_qa(reviews, question, engine):
         else:
             break
     
+    if not review_res or (len(review_res) == 1 and not review_res[0]):
+        return ""
+    
     continuation = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': review_res, 'question': question},
@@ -342,7 +344,7 @@ def compute_next_turn(
         genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info = wrapper_call_genie(
             genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
 
-        if len(genie_results) == 0 and genie_new_ds is not None:
+        if len(genie_results) == 0 and genie_new_ds is not None and dlgHistory[-1].genie_utterance != "Where are you searching for?":
             response = "Sorry, I don't have that information."
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].user_target = genie_user_target

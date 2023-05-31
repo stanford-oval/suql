@@ -1,13 +1,13 @@
 You are a semantic parser. Generate a query for a restaurant database that has cuisine, price (cheap, moderate, expensive, luxury), rating (1-5), num_reviews, location, popular_dishes, reviews, phone_number, and opening_hours. Each block represents a conversation. You can only parse according to these fields. Do not generate fields beyond the given fields.
 
 User: show me nearby mcdonalds
-Target: @com.yelp.restaurant() filter location == $location.current_location && id =~ "mcdonalds";
+Target: @com.yelp.restaurant(location = $location.current_location) filter id =~ "mcdonalds";
 --
 User: Where is Burguer King?
 Target: [location] of @com.yelp.restaurant() filter id =~ "Burguer King";
 --
 User: what are some japanese restaurants in Kansa City?
-Target: @com.yelp.restaurant() filter location == new Location("Kansas City") && contains(cuisines, null^^com.yelp:restaurant_cuisine("japanese"));
+Target: @com.yelp.restaurant(location = new Location("Kansas City")) filter contains(cuisines, null^^com.yelp:restaurant_cuisine("japanese"));
 --
 User: What is the highest rated restaurant that serves peking duck?
 Target: sort(rating desc of @com.yelp.restaurant() filter ~contains(popular_dishes, "peking duck"))[1];
@@ -19,10 +19,10 @@ User: What do the reviews say about the atmosphere in the restaurant?
 Target: [reviews =~ "What is the atmosphere?"] of @com.yelp.restaurant() filter id =~ 'Wesley's steakhouse';
 --
 User: what are the best 3 restaurants in Chicago?
-Target: sort(rating desc of @com.yelp.restaurant() filter location == new Location("Chicago"))[1 : 3];
+Target: sort(rating desc of @com.yelp.restaurant(location = new Location("Chicago")))[1 : 3];
 Agent: I have Falafelle, V&V Delicious Crepes and Falafel and Things. They're restaurants rated 5 star.
 User: What is the rating for Falafelle?
-Target: [rating] of @com.yelp.restaurant() filter id =~ "Falafelle";
+Target: [rating] of @com.yelp.restaurant(location = new Location("Chicago")) filter id =~ "Falafelle";
 --
 User: Find all of the restaurants that have a rating about 2.5.
 Target: @com.yelp.restaurant() filter rating == 2.5;
@@ -31,7 +31,7 @@ User: Can you recommend a place that serves fish tacos?
 Target: @com.yelp.restaurant() filter ~contains(popular_dishes, "fish tacos");
 --
 User: what is the phone number of Nobu in Palo Alto?
-Target: [phone] of @com.yelp.restaurant() filter location == new Location("Palo Alto") && id =~ "Nobu";
+Target: [phone] of @com.yelp.restaurant(location = new Location("Palo Alto")) filter id =~ "Nobu";
 --
 User: show me "Gui's Vegetarian Steakhouse"
 Target: @com.yelp.restaurant() filter id =~ "Gui's Vegetarian Steakhouse";
@@ -40,10 +40,10 @@ User: what's the nearest pizza i can get to
 Target: sort(distance(location, $location.current_location) asc of @com.yelp.restaurant() filter contains(cuisines, null^^com.yelp:restaurant_cuisine("pizza")))[1];
 --
 User: show me a restaurant in palo alto
-Target: @com.yelp.restaurant() filter location == new Location("Palo Alto");
+Target: @com.yelp.restaurant(location = new Location("Palo Alto"));
 Agent: I see Ramen Nagi. It is a moderate restaurant rated 4.5 stars.
 User: show me a cheap restaurant in mountain view
-Target: @com.yelp.restaurant() filter location == new Location("Mountain View") && price == enum cheap;
+Target: @com.yelp.restaurant(location = new Location("Mountain View")) filter price == enum cheap;
 --
 User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
 Target: @com.yelp.restaurant() filter reviews =~ 'does this restaurant have short wait time?';
@@ -55,7 +55,7 @@ User: Show me something else;
 Target: @com.yelp.restaurant() filter !in_array~(id, ["Daigo"]);
 --
 User: I want a great restaurant in Napa, CA
-Target: @com.yelp.restaurant() filter location == new Location("napa , ca") && rating >= 4;
+Target: @com.yelp.restaurant(location = new Location("napa , ca")) filter rating >= 4;
 --
 {# Comment: we only include parts that would have been seen by Genie here #}
 {# Moving forward, we can give the direct user utterance here #}
