@@ -17,7 +17,7 @@ import json
 from utils import print_chatbot, input_user
 import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
-from server import GPT_parser_address
+from parser_server import GPT_parser_address
 import time
 # from query_reviews import review_server_address
 
