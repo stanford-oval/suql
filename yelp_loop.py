@@ -227,13 +227,7 @@ def call_genie_internal(
         if filter["name"] == "reviews":
             review_info += get_field_information("reviews", filter["operator"], filter["value"], genie_output["user_target"])
     
-    # because Genie would append the search keyword at front followed by `\t`, delete those to retrieve the actual reviews
     results = genie_output["results"]
-    for i in results:
-        if "reviews" in i:
-            splitted_reviews = i["reviews"].split('\t')
-            if len(splitted_reviews) > 1:
-                i["reviews"] = splitted_reviews[1:]
 
     return genie_output["ds"], genie_output["aux"], genie_output["user_target"], results, review_info
 
@@ -441,6 +435,8 @@ if __name__ == '__main__':
                         help='Do not output extra information about the intermediate steps.')
     parser.add_argument('--use_GPT_parser', action='store_true',
                         help='Use GPT parser as opposed to Genie parser')
+    parser.add_argument('--use_direct_sentence_state', action='store_true',
+                        help='Directly use GPT parser output as full state')
 
     args = parser.parse_args()
 
@@ -458,7 +454,7 @@ if __name__ == '__main__':
     print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))
 
     try:
-        genie.initialize(GPT_parser_address, 'yelp')
+        genie.initialize(GPT_parser_address, 'yelp', force_update_manifest=True)
 
         while True:
             user_utterance = input_user()
@@ -473,7 +469,8 @@ if __name__ == '__main__':
                 genieDS=genieDS,
                 genie_aux=genie_aux,
                 engine=args.engine,
-                update_parser_address=GPT_parser_address if args.use_GPT_parser else None
+                update_parser_address=GPT_parser_address if args.use_GPT_parser else None,
+                use_full_state=args.use_direct_sentence_state if args.use_direct_sentence_state else False
             )
             if genieDS != None:
                 # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago

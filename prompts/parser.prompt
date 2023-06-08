@@ -1,10 +1,10 @@
-You are a semantic parser. Generate a query for a restaurant database that has cuisine, price (cheap, moderate, expensive, luxury), rating (1-5), num_reviews, location, popular_dishes, reviews, phone_number, and opening_hours. Each block represents a conversation. You can only parse according to these fields. Do not generate fields beyond the given fields.
+You are a semantic parser. Generate a query for a restaurant database that has cuisine, price (cheap, moderate, expensive, luxury), rating (1-5), num_reviews, address, popular_dishes, reviews, phone_number, and opening_hours. Each block represents a conversation. You can only parse according to these fields. Do not generate fields beyond the given fields.
 
 User: show me nearby mcdonalds
 Target: @com.yelp.restaurant(location = $location.current_location) filter id =~ "mcdonalds";
 --
 User: Where is Burguer King?
-Target: [location] of @com.yelp.restaurant() filter id =~ "Burguer King";
+Target: [address] of @com.yelp.restaurant() filter id =~ "Burguer King";
 --
 User: what are some japanese restaurants in Kansa City?
 Target: @com.yelp.restaurant(location = new Location("Kansas City")) filter contains(cuisines, null^^com.yelp:restaurant_cuisine("japanese"));
@@ -13,10 +13,10 @@ User: What is the highest rated restaurant that serves peking duck?
 Target: sort(rating desc of @com.yelp.restaurant() filter ~contains(popular_dishes, "peking duck"))[1];
 --
 User: Show me a family-friendly restaurant
-Target: @com.yelp.restaurant() filter reviews =~ 'did you find this restaurant to be family-friendly?';
+Target: @com.yelp.restaurant() filter answer(reviews, 'did you find this restaurant to be family-friendly?');
 Agent: I found Wesley's steakhouse. Reviews mention kids love going there with their parents. It should be a great weekend dinner for you and your family.
 User: What do the reviews say about the atmosphere in the restaurant?
-Target: [reviews =~ "What is the atmosphere?"] of @com.yelp.restaurant() filter id =~ 'Wesley's steakhouse';
+Target: [answer(reviews, "What is the atmosphere?)] of @com.yelp.restaurant() filter id =~ 'Wesley's steakhouse';
 --
 User: what are the best 3 restaurants in Chicago?
 Target: sort(rating desc of @com.yelp.restaurant(location = new Location("Chicago")))[1 : 3];
@@ -46,7 +46,7 @@ User: show me a cheap restaurant in mountain view
 Target: @com.yelp.restaurant(location = new Location("Mountain View")) filter price == enum cheap;
 --
 User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
-Target: @com.yelp.restaurant() filter contains(cuisines, null^^com.yelp:restaurant_cuisine("chinese")) && reviews =~ 'does this restaurant have short wait time?';
+Target: @com.yelp.restaurant() filter contains(cuisines, null^^com.yelp:restaurant_cuisine("chinese")) && answer(reviews, 'does this restaurant have short wait time?');
 --
 User: i'm hungry, what should i have for lunch?
 Target: @com.yelp.restaurant();
