@@ -30,7 +30,7 @@ from flask_cors import CORS
 from flask_restful import Api, reqparse
 
 from yelp_loop import *
-from server import GPT_parser_address
+from parser_server import GPT_parser_address
 
 from pymongo import MongoClient, ASCENDING
 
