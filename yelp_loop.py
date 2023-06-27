@@ -19,6 +19,7 @@ import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
 from parser_server import GPT_parser_address
 import time
+from postgresql_connection import execute_sql
 # from query_reviews import review_server_address
 
 
@@ -314,6 +315,30 @@ def review_qa(reviews, question, engine):
     
     return continuation, elapsed_time
 
+def parse_execute_sql(dlgHistory, user_query):
+    continuation, _ = llm_generate(template_file='prompts/parser_sql.prompt',
+                engine='gpt-35-turbo',
+                stop_tokens=["Agent:"],
+                max_tokens=300,
+                temperature=0,
+                prompt_parameter_values={'dlg': dlgHistory, 'query': user_query},
+                postprocess=False)
+        
+    continuation = continuation.rstrip("Agent:")
+    # print("generated SQL query {}".format(continuation))
+    results, column_names = execute_sql(continuation)
+
+    final_res = []
+    for res in results:
+        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if column_name not in ["reviews", "_id", "id", "opening_hours"])
+        if "rating" in temp:
+            temp["rating"] = float(temp["rating"])
+        final_res.append(temp)
+    
+    print(final_res)
+    return final_res, continuation
+    
+
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
     user_utterance: str,
@@ -322,7 +347,8 @@ def compute_next_turn(
     genie_aux = [],
     engine = "text-davinci-003",
     update_parser_address = None,
-    use_full_state = False):
+    use_full_state = False,
+    generate_sql = False):
     
     # assign default values
     genie_new_ds = None
@@ -334,7 +360,7 @@ def compute_next_turn(
     review_time = 0
     final_response_time = 0
     genie_time = 0
-    
+
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
     dlgHistory[-1].reviews_query = None
     
@@ -344,65 +370,76 @@ def compute_next_turn(
 
     if continuation.startswith("Yes"):
         dlgHistory[-1].genie_query = user_utterance
-        genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
-            genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
+        if generate_sql:
+            results, sql = parse_execute_sql(dlgHistory, user_utterance)
+            dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
+            dlgHistory[-1].user_target = sql
+            genie_user_target = sql
+            if not results:
+                response = "Sorry, I don't have that information."
+                dlgHistory[-1].agent_utterance = response
+                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
+        
+        else:
+            genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
+                genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
 
-        if len(genie_results) == 0 and genie_new_ds is not None and dlgHistory[-1].genie_utterance != "Where are you searching for?":
-            response = "Sorry, I don't have that information."
-            dlgHistory[-1].agent_utterance = response
-            dlgHistory[-1].user_target = genie_user_target
-            time_stmt = [
-                "Initial classifier: {:.2f}s".format(first_classification_time), 
-                "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
-                "response cut off"
-            ]
-            
-            return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
-
-        try:
-            projection_info = None
-            for r in review_info:
-                if 'type' in r and r['type'] == 'projection':
-                    projection_info = r
-
-            # ad-hoc projection implementation
-            # should be done in Genie
-            if projection_info is not None and len(genie_results) > 0:
+            if len(genie_results) == 0 and genie_new_ds is not None and dlgHistory[-1].genie_utterance != "Where are you searching for?":
+                response = "Sorry, I don't have that information."
+                dlgHistory[-1].agent_utterance = response
+                dlgHistory[-1].user_target = genie_user_target
+                time_stmt = [
+                    "Initial classifier: {:.2f}s".format(first_classification_time), 
+                    "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
+                    "response cut off"
+                ]
                 
-                # QA system
-                response, review_time = review_qa(genie_results[0]['reviews'], projection_info['value'], engine)
-                
-                dlgHistory[-1].genie_utterance = response
-                dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
+                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
 
-            # always do a QA on reviews
-            elif len(genie_results) > 0:
-
-                if ("reviews" in genie_results[0] and len(genie_results[0]["reviews"]) > 0):
-                    dlgHistory[-1].genie_reviews = genie_results[0]["reviews"]
-                else:
-                    dlgHistory[-1].genie_reviews = get_yelp_reviews(genie_results[0]['id']['value'])
-
-                filter_info = None
+            try:
+                projection_info = None
                 for r in review_info:
-                    if 'type' in r and r['type'] == 'filter':
-                        filter_info = r
+                    if 'type' in r and r['type'] == 'projection':
+                        projection_info = r
 
-
-                if 'reviews' in genie_results[0]:
-                    # if there was a filter on reviews, then use the keyword to query reviews
-                    if filter_info is not None:
-                        dlgHistory[-1].reviews_query = filter_info["value"]
-                    # if there is no filter on reviews, just summarize:
-                    else:
-                        dlgHistory[-1].reviews_query = "general information about the restaurant"
-
-                    dlgHistory[-1].genie_reviews_answer, review_time = review_qa(genie_results[0]['reviews'], dlgHistory[-1].reviews_query, engine)
+                # ad-hoc projection implementation
+                # should be done in Genie
+                if projection_info is not None and len(genie_results) > 0:
                     
-                    dlgHistory[-1].genie_utterance += ' ' + dlgHistory[-1].genie_reviews_answer
-            
-        except ValueError as e:
-            logger.error('%s', str(e))
+                    # QA system
+                    response, review_time = review_qa(genie_results[0]['reviews'], projection_info['value'], engine)
+                    
+                    dlgHistory[-1].genie_utterance = response
+                    dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
+
+                # always do a QA on reviews
+                elif len(genie_results) > 0:
+
+                    if ("reviews" in genie_results[0] and len(genie_results[0]["reviews"]) > 0):
+                        dlgHistory[-1].genie_reviews = genie_results[0]["reviews"]
+                    else:
+                        dlgHistory[-1].genie_reviews = get_yelp_reviews(genie_results[0]['id']['value'])
+
+                    filter_info = None
+                    for r in review_info:
+                        if 'type' in r and r['type'] == 'filter':
+                            filter_info = r
+
+
+                    if 'reviews' in genie_results[0]:
+                        # if there was a filter on reviews, then use the keyword to query reviews
+                        if filter_info is not None:
+                            dlgHistory[-1].reviews_query = filter_info["value"]
+                        # if there is no filter on reviews, just summarize:
+                        else:
+                            dlgHistory[-1].reviews_query = "general information about the restaurant"
+
+                        dlgHistory[-1].genie_reviews_answer, review_time = review_qa(genie_results[0]['reviews'], dlgHistory[-1].reviews_query, engine)
+                        
+                        dlgHistory[-1].genie_utterance += ' ' + dlgHistory[-1].genie_reviews_answer
+                
+            except ValueError as e:
+                logger.error('%s', str(e))
             
     response, final_response_time = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                         max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
@@ -437,6 +474,8 @@ if __name__ == '__main__':
                         help='Use GPT parser as opposed to Genie parser')
     parser.add_argument('--use_direct_sentence_state', action='store_true',
                         help='Directly use GPT parser output as full state')
+    parser.add_argument('--use_sql', action='store_true',
+                        help='Uses sql generation')
 
     args = parser.parse_args()
 
@@ -454,7 +493,7 @@ if __name__ == '__main__':
     print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))
 
     try:
-        genie.initialize(GPT_parser_address, 'yelp', force_update_manifest=True)
+        genie.initialize(GPT_parser_address, 'yelp')
 
         while True:
             user_utterance = input_user()
@@ -470,7 +509,8 @@ if __name__ == '__main__':
                 genie_aux=genie_aux,
                 engine=args.engine,
                 update_parser_address=GPT_parser_address if args.use_GPT_parser else None,
-                use_full_state=args.use_direct_sentence_state if args.use_direct_sentence_state else False
+                use_full_state=args.use_direct_sentence_state if args.use_direct_sentence_state else False,
+                generate_sql=args.use_sql if args.use_sql else False
             )
             if genieDS != None:
                 # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago
