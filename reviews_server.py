@@ -80,6 +80,53 @@ def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
     res = sorted(res, key=lambda x: x[1], reverse=True)
     return res
 
+def baseline_filter(rest_ids, to_query):
+    """
+    params:
+		rest_ids: a list of restaruant ids
+		to_query: a 'filter criteria' 
+	return:
+		rest_recommendations: a list of restaurants
+    """
+    similarities = []  # tuple of sentence, similarity to the query
+
+    for id in rest_ids:
+        query = {'id': id}
+        result = collection.find(query)
+        info = [to_query]
+
+        rest_similarities = []
+
+        for doc in result:
+            info.extend(doc['data'])
+        
+        inputs = tokenizer(info, padding=True, truncation=True, return_tensors='pt').to(device)
+        embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hiddent_states[-1][:,:1].squeeze(1)
+
+        embeddings[0].to(device)
+
+        for i in range(1, len(embeddings)):
+            embeddings[i].to(device)
+            rest_similarities.append((embeddings[0] @ embeddings[i], id))
+
+        scores = [rest_similarities[i][0].item() for i in range(len(rest_similarities))]
+		max_score = max(scores)
+		max_idx = scores.index(max_score)
+
+		similarities.append((info[max_idx + 1], max_score, id))
+	
+
+	similarities.sort(key= lambda x: x[1], reverse=True)
+
+    num_to_get = min(len(similarities) - 1, 5)
+    top_restaurants = similarities[:num_to_get]
+
+    rest_recommendations = [similarities[i][2] for i in range(num_to_get)]
+	# rest_info = collection.find({'id': similarities[0][2]})
+	
+	return rest_recommendations
+
+
 @app.route('/query', methods=['POST'])
 def query():
     start_time = time.time()

@@ -1,0 +1,65 @@
+Your task is to read through a restaurant review, and fill in a JSON representing a database of information about the restaurant. 
+The categories of this restaurant are listed below, along with the data type:
+
+name: string
+family-friendly: bool
+wait-time: enum (short, medium, long)
+scenario: list of enum [(casual, romantic, formal)]
+volume: enum (soft, loud)
+service: enum (poor, average, great)
+vegan-options: bool
+gluten-free-options: bool
+live-music: bool
+serves-alcohol: bool
+michelin: enum (none, bib, one, two, three)
+large-groups: bool
+
+If information is not available within the restaurant reviews, do not create information yourself, and rather fill it in with None.
+
+Reviews: "I had a wonderful dining experience at The House of Prime Rib. The restaurant had a cozy and romantic atmosphere, perfect for a date night or a fancy dinner. The wait time was moderate, but the attentive service made up for it. The extensive wine list complemented the meal. I highly recommend The House of Prime Rib for a special evening out." 
+Completed JSON: {
+name: "The House of Prime Rib",
+family-friendly: None,
+wait-time: "medium",
+scenario: ["romantic", "formal"],
+volume: "soft",
+service: "great",
+vegan-options: None,
+gluten-free-options: None,
+live-music: None,
+serves-alcohol: true,
+michelin: "none",
+large-groups: false
+}
+---
+Reviews: I had an unforgettable dining experience at Selby's, a Michelin-starred restaurant, with my wife and kids. The service was exceptional, and the wait time was surprisingly short considering the restaurant's reputation. The elegant and formal setting created a refined atmosphere. They had both vegan and gluten-free options available, and the chef's culinary skills were evident in every dish. The restaurant also had a well-curated wine selection. Dining at Selby's was truly a treat for the senses.
+Completed JSON: {
+name: "Selby's",
+family-friendly: True,
+wait-time: "short",
+scenario: ["formal"],
+volume: "soft",
+service: "great",
+vegan-options: true,
+gluten-free-options: true,
+live-music: None,
+serves-alcohol: true,
+michelin: "one",
+large-groups: None
+}
+---
+Reviews: I visited The Cheesecake Factory with a large group of friends. The restaurant was lively and the volume was loud, but that added to the fun atmosphere. The service was average, but the wait time for our food was surprisingly short considering our group size. The menu had a good variety of options, including vegan and gluten-free choices. They also had a full bar with an impressive cocktail selection. The Cheesecake Factory is a great place for gatherings and celebrations.
+Completed JSON: {
+name: "The Cheesecake Factory",
+family-friendly: None,
+wait-time: "short",
+scenario: ["casual"],
+volume: "loud",
+service: "average",
+vegan-options: true,
+gluten-free-options: true,
+live-music: false,
+serves-alcohol: true,
+michelin: "none",
+large-groups: true
+}

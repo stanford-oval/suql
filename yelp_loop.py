@@ -14,7 +14,7 @@ import requests
 from datetime import datetime
 import html
 import json
-from utils import print_chatbot, input_user
+from utils import print_chatbot, input_user, linearize
 import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
 from parser_server import GPT_parser_address
@@ -380,21 +380,29 @@ def compute_next_turn(
                 dlgHistory[-1].agent_utterance = response
                 return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
         
-        else:
-            genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
-                genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
+        # TODO: copy the above if-statement, and then get the restaurants and put it in results 
+        # set sql to none
+        # based on user_utterance, call my new function and give a recommendation of restaurants
 
-            if len(genie_results) == 0 and genie_new_ds is not None and dlgHistory[-1].genie_utterance != "Where are you searching for?":
-                response = "Sorry, I don't have that information."
-                dlgHistory[-1].agent_utterance = response
-                dlgHistory[-1].user_target = genie_user_target
-                time_stmt = [
-                    "Initial classifier: {:.2f}s".format(first_classification_time), 
-                    "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
-                    "response cut off"
-                ]
-                
-                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
+        else:
+            results = 
+
+            # the model doesn't suggest any restaurants (the score isn't high enough)
+            if results == []:  
+                genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
+                    genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
+
+                if len(genie_results) == 0 and genie_new_ds is not None and dlgHistory[-1].genie_utterance != "Where are you searching for?":
+                    response = "Sorry, I don't have that information."
+                    dlgHistory[-1].agent_utterance = response
+                    dlgHistory[-1].user_target = genie_user_target
+                    time_stmt = [
+                        "Initial classifier: {:.2f}s".format(first_classification_time), 
+                        "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
+                        "response cut off"
+                    ]
+                    
+                    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
 
             try:
                 projection_info = None
