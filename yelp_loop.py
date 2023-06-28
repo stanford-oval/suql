@@ -21,6 +21,7 @@ from parser_server import GPT_parser_address
 import time
 from postgresql_connection import execute_sql
 # from query_reviews import review_server_address
+from reviews_server import baseline_filter
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -348,7 +349,7 @@ def compute_next_turn(
     engine = "text-davinci-003",
     update_parser_address = None,
     use_full_state = False,
-    generate_sql = False):
+    sys_type = 'generate_sql'):
     
     # assign default values
     genie_new_ds = None
@@ -370,7 +371,7 @@ def compute_next_turn(
 
     if continuation.startswith("Yes"):
         dlgHistory[-1].genie_query = user_utterance
-        if generate_sql:
+        if sys_type == 'generate_sql':
             results, sql = parse_execute_sql(dlgHistory, user_utterance)
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
             dlgHistory[-1].user_target = sql
@@ -384,25 +385,33 @@ def compute_next_turn(
         # set sql to none
         # based on user_utterance, call my new function and give a recommendation of restaurants
 
+        elif sys_type == 'baseline':
+            results = baseline_filter(user_utterance)
+            sql = None
+            dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
+            dlgHistory[-1].user_target = sql
+            genie_user_target = sql
+
+            if not results:
+                response = "Sorry, I don't have that information."
+                dlgHistory[-1].agent_utterance = response
+                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
+
         else:
-            results = 
+            genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
+                genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
 
-            # the model doesn't suggest any restaurants (the score isn't high enough)
-            if results == []:  
-                genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
-                    genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
-
-                if len(genie_results) == 0 and genie_new_ds is not None and dlgHistory[-1].genie_utterance != "Where are you searching for?":
-                    response = "Sorry, I don't have that information."
-                    dlgHistory[-1].agent_utterance = response
-                    dlgHistory[-1].user_target = genie_user_target
-                    time_stmt = [
-                        "Initial classifier: {:.2f}s".format(first_classification_time), 
-                        "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
-                        "response cut off"
-                    ]
-                    
-                    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
+            if len(genie_results) == 0 and genie_new_ds is not None and dlgHistory[-1].genie_utterance != "Where are you searching for?":
+                response = "Sorry, I don't have that information."
+                dlgHistory[-1].agent_utterance = response
+                dlgHistory[-1].user_target = genie_user_target
+                time_stmt = [
+                    "Initial classifier: {:.2f}s".format(first_classification_time), 
+                    "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
+                    "response cut off"
+                ]
+                
+                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
 
             try:
                 projection_info = None

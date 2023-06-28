@@ -6,6 +6,7 @@ from flask import request, Flask
 import time
 import torch
 from prompt_continuation import llm_generate
+from utils import linearize
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -80,15 +81,20 @@ def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
     res = sorted(res, key=lambda x: x[1], reverse=True)
     return res
 
-def baseline_filter(rest_ids, to_query):
+def baseline_filter(to_query):
     """
     params:
-		rest_ids: a list of restaruant ids
+		rest_ids: a list of restaruant ids 
 		to_query: a 'filter criteria' 
 	return:
 		rest_recommendations: a list of restaurants
     """
+    collection = db['schematized']
     similarities = []  # tuple of sentence, similarity to the query
+    rest_ids = []
+
+    for doc in collection:
+        rest_ids.append[doc['id']]
 
     for id in rest_ids:
         query = {'id': id}
@@ -98,7 +104,8 @@ def baseline_filter(rest_ids, to_query):
         rest_similarities = []
 
         for doc in result:
-            info.extend(doc['data'])
+            doc_data = linearize(result)
+            info.extend(doc_data)
         
         inputs = tokenizer(info, padding=True, truncation=True, return_tensors='pt').to(device)
         embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hiddent_states[-1][:,:1].squeeze(1)
@@ -114,6 +121,8 @@ def baseline_filter(rest_ids, to_query):
 		max_idx = scores.index(max_score)
 
 		similarities.append((info[max_idx + 1], max_score, id))
+
+        torch.cuda.empty_cache()
 	
 
 	similarities.sort(key= lambda x: x[1], reverse=True)
