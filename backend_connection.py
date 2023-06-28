@@ -73,11 +73,8 @@ class BackendConnection:
         # Genie semantic parser is running on a random port set by pyGenieScript
         
         # GPT-based semantic parser is running on 8401
-        self.genie_GPT = gs.Genie()
-        self.genie_GPT.initialize(GPT_parser_address, force_update_manifest=True)
-        
-        # submit an empty query for each genie to circumvent https://stanford-oval.github.io/pyGenieScript/pyGenieScript/geniescript.html#Genie.query
-        # "Applies to v0.0.0b3: there is a TBD bug ..."
+        self.genie_v0614baseline = gs.Genie()
+        self.genie_v0614baseline.initialize(GPT_parser_address, thingpedia_dir="/home/oval/genie-llm/baseline_manifest/")
         
         client = MongoClient(CONNECTION_STRING)
         self.db = client['yelpbot']  # the database name is yelpbot
@@ -99,18 +96,29 @@ class BackendConnection:
             dlgHistory = BackendConnection._reconstruct_dlgHistory(tuples)
             genieDS, genie_aux = BackendConnection._reconstruct_genieinfo(tuples)
 
-        use_full_state = True if "generate_full" in system_name else False
-
-        dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
-            dlgHistory,
-            user_utterance,
-            self.genie_GPT,
-            genieDS=genieDS,
-            genie_aux=genie_aux,
-            engine=self.engine,
-            update_parser_address=GPT_parser_address,
-            use_full_state=use_full_state
-        )
+        if system_name == "v0616baseline_sql":
+            dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
+                dlgHistory,
+                user_utterance,
+                self.genie_v0614baseline,
+                genieDS=genieDS,
+                genie_aux=genie_aux,
+                engine=self.engine,
+                update_parser_address=GPT_parser_address,
+                use_full_state=True,
+                generate_sql=True
+            )         
+        else:
+            dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
+                dlgHistory,
+                user_utterance,
+                self.genie_v0614baseline,
+                genieDS=genieDS,
+                genie_aux=genie_aux,
+                engine=self.engine,
+                update_parser_address=GPT_parser_address,
+                use_full_state=True
+            )
         
         # update the current tuple with new DialogTurn
         new_tuple = {"_id": '(' + str(dialog_id) + ', '+ str(turn_id) + ')', "dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}
@@ -165,7 +173,7 @@ def chat():
     log = {}
     if (dlgItem.genie_query):
         log["genie_query"] = dlgItem.genie_query
-        log["genie_utterance"] = dlgItem.genie_utterance
+        log["genie_utterance"] = json.loads(dlgItem.genie_utterance)
         
         # do some processing on genie_user_target to only preserve the sentence state representation
         try:
