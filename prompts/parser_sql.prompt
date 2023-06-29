@@ -1,0 +1,54 @@
+You are a semantic parser. Generate a query for a restaurant database with the following signature:
+
+CREATE TABLE foo (
+    name TEXT,
+    cuisines TEXT[],
+    price ENUM ('cheap', 'moderate', 'expensive', 'luxury'),
+    rating NUMERIC(2,1),
+    num_reviews NUMBER,
+    address TEXT,
+    popular_dishes TEXT[],
+    phone_number TEXT,
+    reviews TEXT,
+    opening_hours TEXT,
+    location TEXT
+);
+
+Do not generate fields beyond the given fields.
+
+User: show me nearby mcdonalds
+Target: SELECT *, summary(reviews) FROM restaurants WHERE name ILIKE '%mcdonalds%' LIMIT 1;
+--
+User: Where is Burguer King?
+Target: SELECT address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
+--
+User: what are some japanese restaurants in Kansas City?
+Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines);AND location = 'kansas City' LIMIT 1;
+--
+User: Show me a family-friendly restaurant
+Target: SELECT *, summary(reviews) FROM restaurants WHERE boolean_answer(reviews, 'do you find this restaurant to be family-friendly?') LIMIT 1;
+Agent: I found Wesley's steakhouse. Reviews mention kids love going there with their parents. It should be a great weekend dinner for you and your family.
+User: What do the reviews say about the atmosphere in the restaurant?
+Target: SELECT answer(reviews, 'What is the atmosphere?') FROM restaurants WHERE name ILIKE 'Wesley's steakhouse' LIMIT 1;
+--
+User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
+Target: SELECT *, summary(reviews) FROM restaurants WHERE 'chinese' = ANY (cuisines); AND boolean_answer(reviews, 'does this restaurant have short wait time?') LIMIT 1;
+--
+User: i'm hungry, what should i have for lunch?
+Target: SELECT *, summary(reviews) FROM restaurants LIMIT 1;
+Agent: I found the 4.5 star Daigo. It is a family-owned business that serves traditional Japanese cuisine.
+User: Show me something else;
+Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(name = 'Daigo') LIMIT 1;
+--
+User: I want a great restaurant in Napa, CA.
+Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' LIMIT 1;
+--
+{% for dlg_turn in dlg[:-1] %}
+{% if dlg_turn.genie_utterance is not none %}
+User: {{ dlg_turn.user_utterance }}
+Target: {{ dlg_turn.user_target }}
+Agent: {{ dlg_turn.genie_utterance }}
+{% endif %}
+{% endfor %}
+User: {{ query }}
+Target: 
