@@ -24,7 +24,7 @@ collection = db['yelp_data']
 
 # Set the server address
 host = "127.0.0.1"
-port = 8500
+port = 8503
 review_server_address = 'http://{}:{}'.format(host, port)
 app = Flask(__name__)
 
@@ -90,6 +90,8 @@ def baseline_filter(to_query):
 	return:
 		rest_recommendations: a list of restaurants
     """
+    client = pymongo.MongoClient('localhost', 27017)
+    db = client['yelpbot']
     collection = db['schematized']
     similarities = []  # tuple of sentence, similarity to the query
     rest_ids = []
@@ -117,6 +119,7 @@ def baseline_filter(to_query):
         similarities.append((info[max_idx + 1], max_score, doc))
 
         torch.cuda.empty_cache()
+        print('done')
     
     similarities.sort(key= lambda x: x[1], reverse=True)
 
@@ -310,4 +313,5 @@ def boolean_answer():
     
 
 if __name__ == "__main__":
+    #print(baseline_filter("this is a good restaurant for large groups"))
     app.run(host=host, port=port)
