@@ -65,8 +65,8 @@ def linearize(document, k):
     :return: a list of k-token-sized chunks (str) representing the linearized format of the restaurant
     """
     def convert_price(dollars):
-        dollar_amt = ['$', '$$', '$$$', '$$$$']
-        english = ['cheap', 'moderate', 'expensive', 'luxury']
+        dollar_amt = ['', '$', '$$', '$$$', '$$$$']
+        english = ['', 'cheap', 'moderate', 'expensive', 'luxury']
 
         for i, d in enumerate(dollar_amt):
             if dollars == d:
@@ -108,55 +108,52 @@ def linearize(document, k):
         return reviews_string
     
 
-    if 'price' in document and 'hours' in document:
-        name = document['name']
-        cuisines = [c['title'] for c in document['categories']]
-        price = convert_price(document['price'])
-        rating = document['rating']
-        num_reviews = document['review_count']
-        address = convert_address(document['location']['display_address'])
-        dishes = [dish[0] for dish in document['dishes']]
-        phone_number = document['display_phone']
-        opening_hours = convert_hours(document['hours'][0]['open'])
-        reviews = convert_reviews(document['reviews'])
-        
-        linearized = ""
-
-        linearized += 'name, ' + name + '\n'
-
-        linearized += 'cuisines, ' 
-        for i, c in enumerate(cuisines):
-            if i < len(cuisines) - 1:
-                linearized += c + ', '
-            else:
-                linearized += c
-        linearized += '\n'
-
-        linearized += 'price, ' + price + '\n'
-
-        linearized += 'rating, ' + str(rating) + '\n'
-
-        linearized += 'num_reviews, ' + str(num_reviews) + '\n'
-
-        linearized += 'address, ' + address + '\n'
-
-        linearized += 'dishes, ' 
-        for i, d in enumerate(dishes):
-            if i < len(dishes) - 1:
-                linearized += d + ', '
-            else:
-                linearized += d
-        linearized += '\n'
-
-        linearized += 'phone_number, ' + phone_number + '\n'
-
-        linearized += 'opening_hours, ' + opening_hours + '\n'
-
-        linearized += 'reviews, ' + reviews + '\n'
-
-        linearized = chunk_text(linearized, k)
-
-        return linearized
+    name = document['name']
+    cuisines = [c['title'] for c in document['categories']]
+    price = convert_price(document['price'])
+    rating = document['rating']
+    num_reviews = document['review_count']
+    address = convert_address(document['location']['display_address'])
+    dishes = [dish[0] for dish in document['dishes']]
+    phone_number = document['display_phone']
+    opening_hours = convert_hours(document['hours'][0]['open']) if document['hours'] != "" else ""
+    reviews = convert_reviews(document['reviews'])
     
-    else:
-        return []
+    linearized = ""
+
+    linearized += 'name, ' + name + '\n'
+
+    linearized += 'cuisines, ' 
+    for i, c in enumerate(cuisines):
+        if i < len(cuisines) - 1:
+            linearized += c + ', '
+        else:
+            linearized += c
+    linearized += '\n'
+
+    linearized += 'price, ' + price + '\n'
+
+    linearized += 'rating, ' + str(rating) + '\n'
+
+    linearized += 'num_reviews, ' + str(num_reviews) + '\n'
+
+    linearized += 'address, ' + address + '\n'
+
+    linearized += 'dishes, ' 
+    for i, d in enumerate(dishes):
+        if i < len(dishes) - 1:
+            linearized += d + ', '
+        else:
+            linearized += d
+    linearized += '\n'
+
+    linearized += 'phone_number, ' + phone_number + '\n'
+
+    linearized += 'opening_hours, ' + opening_hours + '\n'
+
+    linearized += 'reviews, ' + reviews + '\n'
+
+    linearized = chunk_text(linearized, k)
+
+    return linearized
+    

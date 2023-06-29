@@ -491,8 +491,11 @@ if __name__ == '__main__':
                         help='Use GPT parser as opposed to Genie parser')
     parser.add_argument('--use_direct_sentence_state', action='store_true',
                         help='Directly use GPT parser output as full state')
-    parser.add_argument('--use_sql', action='store_true',
-                        help='Uses sql generation')
+    parser.add_argument('--sys_type', type=str, default='generate_sql',
+                        choices=['generate_sql', 'generate_baseline', 'none'])
+    # parser.add_argument('--use_sql', action='store_true',
+    #                     help='Uses sql generation')
+    # parser.add_argument('--use_baseline', action=)
 
     args = parser.parse_args()
 
@@ -527,7 +530,7 @@ if __name__ == '__main__':
                 engine=args.engine,
                 update_parser_address=GPT_parser_address if args.use_GPT_parser else None,
                 use_full_state=args.use_direct_sentence_state if args.use_direct_sentence_state else False,
-                generate_sql=args.use_sql if args.use_sql else False
+                sys_type=args.sys_type
             )
             if genieDS != None:
                 # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago

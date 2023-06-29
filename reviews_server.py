@@ -7,6 +7,7 @@ import time
 import torch
 from prompt_continuation import llm_generate
 from utils import linearize
+import json
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -93,47 +94,45 @@ def baseline_filter(to_query):
     similarities = []  # tuple of sentence, similarity to the query
     rest_ids = []
 
-    for doc in collection:
-        rest_ids.append[doc['id']]
+    cursor = collection.find()
 
-    for id in rest_ids:
-        query = {'id': id}
-        result = collection.find(query)
-        info = [to_query]
-
+    for doc in cursor:
         rest_similarities = []
-
-        for doc in result:
-            doc_data = linearize(result)
-            info.extend(doc_data)
+        info = [to_query]
+        doc_data = linearize(doc, 100)
+        info.extend(doc_data)
         
         inputs = tokenizer(info, padding=True, truncation=True, return_tensors='pt').to(device)
-        embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hiddent_states[-1][:,:1].squeeze(1)
+        embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:,:1].squeeze(1)
 
         embeddings[0].to(device)
 
         for i in range(1, len(embeddings)):
             embeddings[i].to(device)
-            rest_similarities.append((embeddings[0] @ embeddings[i], id))
+            rest_similarities.append((embeddings[0] @ embeddings[i], doc))
 
         scores = [rest_similarities[i][0].item() for i in range(len(rest_similarities))]
-		max_score = max(scores)
-		max_idx = scores.index(max_score)
-
-		similarities.append((info[max_idx + 1], max_score, id))
+        max_score = max(scores)
+        max_idx = scores.index(max_score)
+        similarities.append((info[max_idx + 1], max_score, doc))
 
         torch.cuda.empty_cache()
-	
+    
+    similarities.sort(key= lambda x: x[1], reverse=True)
 
-	similarities.sort(key= lambda x: x[1], reverse=True)
-
-    num_to_get = min(len(similarities) - 1, 5)
+    num_to_get = min(len(similarities), 5)
     top_restaurants = similarities[:num_to_get]
 
-    rest_recommendations = [similarities[i][2] for i in range(num_to_get)]
-	# rest_info = collection.find({'id': similarities[0][2]})
-	
-	return rest_recommendations
+    collection = db['yelp_data']
+
+    rest_recommendations = []
+    for rec in top_restaurants:
+        docs = collection.find({'id': rec[2]['id']})
+        for d in docs:
+            rest_recommendations.append(d)
+            break
+
+    return rest_recommendations
 
 
 @app.route('/query', methods=['POST'])
