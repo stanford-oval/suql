@@ -54,6 +54,8 @@ def chunk_text(text, k, use_spacy=True):
             else:
                 res.append(carryover + i)
                 carryover = ""
+        if carryover != "":
+            res.append(carryover.rstrip())
         return res
             
     all_chunks = []
