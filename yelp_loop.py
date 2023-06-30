@@ -14,7 +14,7 @@ import requests
 from datetime import datetime
 import html
 import json
-from utils import print_chatbot, input_user, linearize
+from utils import print_chatbot, input_user, num_tokens_from_string
 import readline  # enables keyboard arrows when typing in the terminal
 from pyGenieScript import geniescript as gs
 from parser_server import GPT_parser_address
@@ -324,21 +324,103 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
                 temperature=0,
                 prompt_parameter_values={'dlg': dlgHistory, 'query': user_query},
                 postprocess=False)
+    
+    NOT_USABLE_FIELDS = [
+        "reviews",
+        "_id",
+        "id",
+        "opening_hours",
+
+        # schematized fields        
+        "ambiance",
+        "specials",
+        "reservation_info",
+        "nutrition_info",
+        "signature_cocktails",
+        "has_private_event_spaces",
+        "promotions",
+        "parking_options",
+        "game_day_specials",
+        "live_sports_events",
+        "dress_code",
+        "happy_hour_info",
+        "highlights",
+        "service",
+        "has_outdoor_seating",
+        "drinks",
+        "dietary_restrictions",
+        "experience",
+        "nutritious_options",
+        "creative_menu",
+        "has_student_discount",
+        "has_senior_discount",
+        "local_cuisine",
+        "trendy",
+        "wheelchair_accessible",
+        "noise_level",
+        "kids_menu",
+        "childrens_activities",
+        "if_family_friendly",
+        "wait_time",
+        "has_live_music",
+        "serves_alcohol",
+        "michelin",
+        "accomodates_large_groups",
         
+        # the citation fields        
+        "ambiance_citation",
+        "specials_citation",
+        "reservation_info_citation",
+        "nutrition_info_citation",
+        "signature_cocktails_citation",
+        "has_private_event_spaces_citation",
+        "promotions_citation",
+        "parking_options_citation",
+        "game_day_specials_citation",
+        "live_sports_events_citation",
+        "dress_code_citation",
+        "happy_hour_info_citation",
+        "highlights_citation",
+        "service_citation",
+        "has_outdoor_seating_citation",
+        "drinks_citation",
+        "dietary_restrictions_citation",
+        "experience_citation",
+        "nutritious_options_citation",
+        "creative_menu_citation",
+        "has_student_discount_citation",
+        "has_senior_discount_citation",
+        "local_cuisine_citation",
+        "trendy_citation",
+        "wheelchair_accessible_citation",
+        "noise_level_citation",
+        "kids_menu_citation",
+        "childrens_activities_citation",
+        "if_family_friendly_citation",
+        "wait_time_citation",
+        "has_live_music_citation",
+        "serves_alcohol_citation",
+        "michelin_citation",
+        "accomodates_large_groups_citation"
+        ]
+     
     continuation = continuation.rstrip("Agent:")
     # print("generated SQL query {}".format(continuation))
     results, column_names = execute_sql(continuation)
 
     final_res = []
     for res in results:
-        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if column_name not in ["reviews", "_id", "id", "opening_hours"])
+        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if column_name not in NOT_USABLE_FIELDS)
         if "rating" in temp:
             temp["rating"] = float(temp["rating"])
+        
+        if num_tokens_from_string(json.dumps(final_res + [temp], indent=4)) > 3500:
+            break
+        
         final_res.append(temp)
     
     print(final_res)
     return final_res, continuation
-    
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
@@ -467,7 +549,7 @@ def compute_next_turn(
             except ValueError as e:
                 logger.error('%s', str(e))
             
-    response, final_response_time = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+    response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                         max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
     dlgHistory[-1].user_target = genie_user_target

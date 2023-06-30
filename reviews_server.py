@@ -6,7 +6,7 @@ from flask import request, Flask
 import time
 import torch
 from prompt_continuation import llm_generate
-from utils import linearize
+from utils import linearize, chunk_text
 import json
 
 cuda_ok = torch.cuda.is_available()
@@ -24,7 +24,7 @@ collection = db['yelp_data']
 
 # Set the server address
 host = "127.0.0.1"
-port = 8503
+port = 8500
 review_server_address = 'http://{}:{}'.format(host, port)
 app = Flask(__name__)
 
@@ -261,6 +261,15 @@ def boolean_retrieve_reviews(reviews, question):
         _type_: _description_
     """
     similarities = []  # tuple of (sentence, similarity to the first one)
+
+    # with open("log.log", "a") as fd:
+        # fd.write("before chunking {}\n".format(reviews))
+    
+    reviews = [chunk_text(review, 10, use_spacy=True) for review in reviews]  # this gives list of lists
+    reviews = [item for review_list in reviews for item in review_list]  # this gives them in a single list
+    
+    # with open("log.log", "a") as fd:
+        # fd.write("after chunking {}\n".format(reviews))
     
     # the first element of reviews is the question itself
     reviews = [question] + reviews
