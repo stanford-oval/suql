@@ -23,12 +23,6 @@ They: Can you find their phone number?
 They: have you heard of girl and the goat at Chicago?
 [Check the database? Yes]
 =====
-{# keep on checking database even if there are errors #}
-They: have you heard of girl and the goat at Chicago?
-You: Sorry. I don't have that information
-They: have you heard of girl and the goat at Chicago?
-[Check the database? Yes]
-=====
 {# do not check db when asking about general knowledge #}
 They: I want a Spanish restaurant in Kansas City
 You: I found the 4 star La Bodega. It has one of the best happy hours in the city and a cozy atmosphere that feels like you're in the countryside of Spain.
@@ -49,6 +43,12 @@ They: what is hat yai fried chicken?
 They: hey! show me something in Washington D.C.
 You: I found the 4 star Old Ebbitt Grill. It is a historic restaurant located in Washington D.C. that has been serving locals and tourists since 1856. The food is very good and the service is great, with a friendly and knowledgeable staff.
 They: is there another one?
+[Check the database? Yes]
+=====
+{# keep on checking database even if there are errors #}
+They: have you heard of girl and the goat at Chicago?
+You: Sorry. I don't have that information
+They: have you heard of girl and the goat at Chicago?
 [Check the database? Yes]
 =====
 You: Hi! How can I help you?
