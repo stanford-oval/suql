@@ -5,13 +5,48 @@ CREATE TABLE restaurants (
     cuisines TEXT[],
     price ENUM ('cheap', 'moderate', 'expensive', 'luxury'),
     rating NUMERIC(2,1),
-    num_reviews NUMBER,
+    num_reviews INTEGER,
     address TEXT,
     popular_dishes TEXT[],
     phone_number TEXT,
     reviews TEXT,
     opening_hours TEXT,
-    location TEXT
+    location TEXT,
+
+    ambiance TEXT,
+    specials TEXT,
+    reservation_info TEXT,
+    nutrition_info TEXT,
+    signature_cocktails TEXT[],
+    has_private_event_spaces BOOLEAN,
+    promotions TEXT,
+    parking_options TEXT,
+    game_day_specials TEXT,
+    live_sports_events TEXT,
+    dress_code TEXT,
+    happy_hour_info TEXT,
+    highlights TEXT,
+    service TEXT,
+    has_outdoor_seating BOOLEAN,
+    drinks TEXT[],
+    dietary_restrictions TEXT[],
+    experience TEXT,
+    nutritious_options TEXT,
+    creative_menu TEXT,
+    has_student_discount BOOLEAN,
+    has_senior_discount BOOLEAN,
+    local_cuisine TEXT[],
+    trendy TEXT,
+    wheelchair_accessible BOOLEAN,
+    noise_level TEXT,
+    kids_menu TEXT[],
+    childrens_activities TEXT[],
+    if_family_friendly BOOLEAN,
+    wait_time TEXT,
+    has_live_music BOOLEAN,
+    serves_alcohol BOOLEAN,
+    michelin TEXT,
+    accomodates_large_groups BOOLEAN
 );
 
 Do not generate fields beyond the given fields.
@@ -23,7 +58,7 @@ User: Where is Burguer King?
 Target: SELECT address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
 --
 User: what are some japanese restaurants in Kansas City?
-Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'kansas City' LIMIT 1;
+Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines);AND location = 'kansas City' LIMIT 1;
 --
 User: Show me a family-friendly restaurant
 Target: SELECT *, summary(reviews) FROM restaurants WHERE boolean_answer(reviews, 'do you find this restaurant to be family-friendly?') LIMIT 1;
@@ -37,7 +72,7 @@ Target: SELECT *, summary(reviews) FROM restaurants WHERE 'chinese' = ANY (cuisi
 User: i'm hungry, what should i have for lunch?
 Target: SELECT *, summary(reviews) FROM restaurants LIMIT 1;
 Agent: I found the 4.5 star Daigo. It is a family-owned business that serves traditional Japanese cuisine.
-User: Show me something else.
+User: Show me something else;
 Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(name = 'Daigo') LIMIT 1;
 --
 User: I want a great restaurant in Napa, CA.

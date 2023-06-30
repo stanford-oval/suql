@@ -96,29 +96,17 @@ class BackendConnection:
             dlgHistory = BackendConnection._reconstruct_dlgHistory(tuples)
             genieDS, genie_aux = BackendConnection._reconstruct_genieinfo(tuples)
 
-        if system_name == "v0616baseline_sql":
-            dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
-                dlgHistory,
-                user_utterance,
-                self.genie_v0614baseline,
-                genieDS=genieDS,
-                genie_aux=genie_aux,
-                engine=self.engine,
-                update_parser_address=GPT_parser_address,
-                use_full_state=True,
-                generate_sql=True
-            )         
-        else:
-            dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
-                dlgHistory,
-                user_utterance,
-                self.genie_v0614baseline,
-                genieDS=genieDS,
-                genie_aux=genie_aux,
-                engine=self.engine,
-                update_parser_address=GPT_parser_address,
-                use_full_state=True
-            )
+        dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
+            dlgHistory,
+            user_utterance,
+            self.genie_v0614baseline,
+            genieDS=genieDS,
+            genie_aux=genie_aux,
+            engine=self.engine,
+            update_parser_address=GPT_parser_address,
+            use_full_state=True,
+            sys_type=system_name
+        )
         
         # update the current tuple with new DialogTurn
         new_tuple = {"_id": '(' + str(dialog_id) + ', '+ str(turn_id) + ')', "dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}

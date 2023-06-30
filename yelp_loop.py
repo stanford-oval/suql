@@ -316,8 +316,8 @@ def review_qa(reviews, question, engine):
     
     return continuation, elapsed_time
 
-def parse_execute_sql(dlgHistory, user_query):
-    continuation, _ = llm_generate(template_file='prompts/parser_sql.prompt',
+def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
+    continuation, _ = llm_generate(template_file=prompt_file,
                 engine='gpt-35-turbo',
                 stop_tokens=["Agent:"],
                 max_tokens=300,
@@ -349,7 +349,10 @@ def compute_next_turn(
     engine = "text-davinci-003",
     update_parser_address = None,
     use_full_state = False,
-    sys_type = 'generate_sql'):
+    sys_type = 'baseline_w_textfcns'):
+    
+    print(sys_type)
+    assert(sys_type in ["semantic_index", "baseline_w_textfcns", "baseline_linearization", "v0614baseline_thingtalk"])
     
     # assign default values
     genie_new_ds = None
@@ -371,8 +374,8 @@ def compute_next_turn(
 
     if continuation.startswith("Yes"):
         dlgHistory[-1].genie_query = user_utterance
-        if sys_type == 'generate_sql':
-            results, sql = parse_execute_sql(dlgHistory, user_utterance)
+        if sys_type == "baseline_w_textfcns":
+            results, sql = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
             dlgHistory[-1].user_target = sql
             genie_user_target = sql
@@ -381,11 +384,17 @@ def compute_next_turn(
                 dlgHistory[-1].agent_utterance = response
                 return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
         
-        # TODO: copy the above if-statement, and then get the restaurants and put it in results 
-        # set sql to none
-        # based on user_utterance, call my new function and give a recommendation of restaurants
-
-        elif sys_type == 'baseline':
+        elif sys_type == 'semantic_index':
+            results, sql = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
+            dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
+            dlgHistory[-1].user_target = sql
+            genie_user_target = sql
+            if not results:
+                response = "Sorry, I don't have that information."
+                dlgHistory[-1].agent_utterance = response
+                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
+            
+        elif sys_type == 'baseline_linearization':
             results = baseline_filter(user_utterance)
             sql = None
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
@@ -492,7 +501,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_direct_sentence_state', action='store_true',
                         help='Directly use GPT parser output as full state')
     parser.add_argument('--sys_type', type=str, default='generate_sql',
-                        choices=['generate_sql', 'generate_baseline', 'none'])
+                        choices=["semantic_index", "baseline_w_textfcns", "baseline_linearization", "v0614baseline_thingtalk"])
     # parser.add_argument('--use_sql', action='store_true',
     #                     help='Uses sql generation')
     # parser.add_argument('--use_baseline', action=)
