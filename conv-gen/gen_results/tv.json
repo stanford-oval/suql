@@ -1,0 +1,510 @@
+{
+  "price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "brand": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "model": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "TV_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "TVs": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "input_lag": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "usage": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "refresh_rate": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "sound_quality": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "display_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "screen_size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "picture_quality": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "HDR": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "response_time": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "resolution": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "HDMI_ports": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "smart_features": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "audio_output": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "warranty": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "wall_mount": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "smart": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "reliability": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "style": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "energy_efficiency": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "design": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "aesthetics": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "room": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "color_accuracy": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "technology": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "quality": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "viewing_angles": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "special_features": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "smart_tv": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "purpose": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "availability": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "features": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "soundbar_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "location": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "hdr": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "promotion": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "webOS": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "difference": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "TV_brand": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "TV_model": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "selected": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "compatible_with": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "service_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "connectivity_options": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "delivery": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "soundbars": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "customer_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "local_dimming": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "description": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "motion_blur": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "delivery_address": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "tips": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product_price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "stock": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_date": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "fitness_mode": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "store": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "series": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "plan_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "audio_features": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "reviews": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "bass_quality": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "treble_quality": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "frame_color": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "setup_instructions": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "service_price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "plan_price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "sound_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "compatible_tv_brand": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "protection_plan": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "gaming_modes": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "store_location": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "demo": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_difficulty": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "return_policy": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "duration": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "payment_method": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_cost": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "subwoofer": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "purchased": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "compatible_tv": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_services": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "warranty_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "delivery_date": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "soundbar": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "video_demo_link": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "financing_options": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "available_date": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "ease_of_setup": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "total_price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "warranty_cost": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "credit_card": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "built_in_speakers": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "inventory": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product_brand": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product_model": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_service": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "brand_reputation": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "discount": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "budget": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "audio_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "Warranties": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "tv_model": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "Delivery": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "bass": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "category": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "bluetooth": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "mounting_tips": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "extended_warranty": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "warranty_coverage": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "item": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "date": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "viewing": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "setup_help": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "delivery_time": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "extended_warranty_price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "TVs_delivery": {
+    "citation": "list of free text",
+    "value": "free text"
+  }
+}

@@ -1,0 +1,586 @@
+{
+  "brand": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "model": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "energy_efficiency": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "products": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "cooling_capacity": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "room_size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "coverage": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "noise_level": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "efficiency": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "house_size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "warranty": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "category": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "system_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "location": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "unit_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "status": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "rating": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "features": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "capacity": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "cleaning": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "btu_rating": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "remote_control": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "ACs": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "description": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "lifespan": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "electricity_cost": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "unit_size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "property_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "btu": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "electricity_usage": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "phone_number": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "available": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "email": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "BTUs": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "company_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_time": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "cooling_time": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "sq_ft": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "energy_efficiency_rating": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "window_size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "energy_efficient": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "ceiling_height": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "central": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "reliability": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "space": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "special_features": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "filter_replacement": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_cost": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "max_room_size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "additional_info": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "units": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "budget": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "central_AC": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "energy_star_rating": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "availability": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_date": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "additional_features": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "room_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_process": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "square_footage": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "schedule": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "office_space": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "BTU": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "ductless_mini_split": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_guide": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "area": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "date": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance_date": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "service_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "stock": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_services": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "customer_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "filter_change_frequency": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "ductless": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_company": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "repairs": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "service_interval": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "filter_cleaning": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "time": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance_plan": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance_plan_price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance_plans": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "company": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installer_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installers": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "energy_star": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "ductwork_required": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "store_location": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "easy_to_use": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance_guide": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "window_unit": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "customer_email": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "customer_phone": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "pros": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "cons": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "specs": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "customer_support": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_schedule": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "system": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "services": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "price_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "efficiency_rating": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "SEER_rating": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "inventory": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance_cost": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "plan_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "SEER": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "quantity": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance_time": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "financing_options": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installer_phone": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installer_email": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "reviews": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "end_conversation": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "phone": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "service": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "contractor_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "specialty": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "repair_cost": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "item": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "duration": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "available_dates": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "frequency": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "maintenance_frequency": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "plan_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "system_model": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product_quantity": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "id": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "product_id": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "cart": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "user": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "air_filter_change_frequency": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "appointment_date": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "price_range": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "mount_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "installation_fee": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "orders": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "companies": {
+    "citation": "list of free text",
+    "value": "free text"
+  }
+}

@@ -1,0 +1,406 @@
+{
+  "name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_name": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "category": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "genre": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "fun_factor": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "age": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "type": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "difficulty_level": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "age_range": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "cooperative": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "competitive": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "rating": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "easy_to_learn": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "release_year": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "max_players": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "platform": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "publisher": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "developer": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "games_table": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "player_count": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "theme": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "inspiration": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "elements": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "difficulty": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "premise": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "engagement": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "teamwork": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "planning": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "games": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "num_players": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_difficulty": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_duration": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_player_count": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "play_time": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_age_rating": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "learning_curve": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "min_players": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "description": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "suitable_for_children": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "designer": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "status": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "price": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_rules_link": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "group_size": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_age": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "title": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "enemy": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_category": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "complexity": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_description": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_learning_curve": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "player_id": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "players_table": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_id": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "current_game_id": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "weight": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "strategy": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "combination": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "mechanic": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game_length": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "in_stock": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_video_game": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_sport": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_board_game": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "playtime": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "suitable_for_younger_children": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_book_or_movie": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_real_life_event_or_historical_period": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_tv_show_or_movie_franchise": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_comic_book_or_graphic_novel": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "objective": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_book": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_movie": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "corporations": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "duration": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "min_age": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "rpg": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "puzzle": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "deck_building": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "resource_management": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "subject": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "roleplaying": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "suitable_for_younger_kids": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "subtheme": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_history": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_real_event": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_tv_show": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_movie_franchise": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_comic_book": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "based_on_graphic_novel": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "quick_play": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "long_play": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "long": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "max_age": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "popularity": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "eng": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "challenge": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "quest": {
+    "citation": "list of free text",
+    "value": "free text"
+  },
+  "game": {
+    "citation": "list of free text",
+    "value": "free text"
+  }
+}
