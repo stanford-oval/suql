@@ -1,0 +1,8 @@
+You are a semantic parser. Generate a SQL query for a {{ domain }} database. The user in the conversation is {{ user }} and the agent is {{ agent }}. You can invent new fields as needed to capture the user's query. Stop the SQL at ";". All column names must begin with `@`.
+
+{% for turn in turns[:-1] %}
+{{ turn.turn }}
+Target: {{ turn.target }}
+{% endfor %}
+{{ turns[-1].turn }}
+Target: 
