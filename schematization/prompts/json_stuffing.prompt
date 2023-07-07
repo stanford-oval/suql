@@ -74,8 +74,8 @@ Example Output:
 ===
 Documents:
 
-{% for review in reviews %}
-{{ review }}
+{% for doc in documents %}
+{{ doc }}
 {% endfor %}
 
 JSON format:

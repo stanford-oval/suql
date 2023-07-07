@@ -1,0 +1,5 @@
+The following is not a valid JSON. Correct it to a valid JSON. You are allowed to drop properties if the JSON seems corrupted at the end.
+
+{{ json }}
+
+Only output the JSON. Do not output anything else.

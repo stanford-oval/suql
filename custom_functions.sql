@@ -18,6 +18,9 @@ $$ LANGUAGE plpython3u;
 CREATE OR REPLACE FUNCTION boolean_answer (source TEXT[20], question TEXT)
   RETURNS BOOLEAN
 AS $$
+if source is None or len(source) == 0:
+  return False
+
 import requests
 import json
 
@@ -48,6 +51,33 @@ response.raise_for_status()  # Raise an exception if the request was not success
 parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
 return parsed_result["result"]
 $$ LANGUAGE plpython3u;
+
+CREATE OR REPLACE FUNCTION _string_equals(field_value TEXT, comp_value TEXT, field_name TEXT) ()
+  RETURNS BOOLEAN
+AS $$
+
+if field_value == comp_value:
+  return True
+
+results = plpy.execute("SELECT DISTINCT {} FROM restaurants".format(field_name))
+results = [result[field_name] for result in results]
+
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/stringEquals"
+
+response = requests.post(url=URL, data=json.dumps({
+    "comp_value" : comp_value,
+    "field_value" : field_value,
+    "field_name" : field_name
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+return parsed_result["result"]
+
+$$ LANGUAGE plpython3u;
+
 
 CREATE TABLE restaurants (
     _id SERIAL PRIMARY KEY,

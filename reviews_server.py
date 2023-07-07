@@ -319,6 +319,20 @@ def boolean_answer():
         return res
     
     return None
+
+@app.route('/stringEquals', methods=['POST'])
+def string_equals():
+    data = request.get_json()
+    print("/stringEquals receieved request {}".format(data))
+        
+    # input params in this `data`    
+    # data["comp_value"]  : text to compare against
+    # data["field_value"] : text in the db to compare
+    # data["field_name"]  : field name of this value
+
+    if "comp_value" not in data or "field_value" not in data or "field_name" not in db:
+        return None
+    
     
 
 if __name__ == "__main__":
