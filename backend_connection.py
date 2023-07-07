@@ -70,12 +70,6 @@ class BackendConnection:
         greeting = "Hi! How can I help you?",
         engine = "text-davinci-003") -> None:
         
-        # Genie semantic parser is running on a random port set by pyGenieScript
-        
-        # GPT-based semantic parser is running on 8401
-        self.genie_v0614baseline = gs.Genie()
-        self.genie_v0614baseline.initialize(GPT_parser_address, thingpedia_dir="/home/oval/genie-llm/baseline_manifest/")
-        
         client = MongoClient(CONNECTION_STRING)
         self.db = client['yelpbot']  # the database name is yelpbot
         self.table = self.db['dialog_turns_dev'] # the collection that stores dialog turns
@@ -99,12 +93,7 @@ class BackendConnection:
         dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
             dlgHistory,
             user_utterance,
-            self.genie_v0614baseline,
-            genieDS=genieDS,
-            genie_aux=genie_aux,
             engine=self.engine,
-            update_parser_address=GPT_parser_address,
-            use_full_state=True,
             sys_type=system_name
         )
         
