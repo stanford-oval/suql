@@ -16,13 +16,6 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 import json
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-# create file handler which logs even debug messages
-fh = logging.FileHandler('prompts.log')
-fh.setLevel(logging.DEBUG)
-logger.addHandler(fh)
-
 #singleton
 jinja_environment = Environment(loader=FileSystemLoader('./'),
                   autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True, line_comment_prefix='#')
@@ -67,54 +60,64 @@ def _fill_template(template_file, prompt_parameter_values):
     # filled_prompt = '\n'.join([line.strip() for line in filled_prompt.split('\n')]) # remove whitespace at the beginning and end of each line
     return filled_prompt
 
-def _generate(filled_prompt_system, filled_prompt_user, engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, max_tries):
-    # don't try multiple times if the temperature is 0, because the results will be the same
-    if max_tries > 1 and temperature == 0:
-        max_tries = 1
+def _generate(filled_prompt_system, filled_prompt_user, engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, max_tries, log_file_path):    
+    with open(log_file_path, "a") as fd:
+    
+        # don't try multiple times if the temperature is 0, because the results will be the same
+        if max_tries > 1 and temperature == 0:
+            max_tries = 1
 
-    messages = []
-    if filled_prompt_system != "": 
-        messages.append({"role": "system", "content": filled_prompt_system})
-    if filled_prompt_user != "":
-        messages.append({"role": "user", "content": filled_prompt_user})
-    
-    
-    logger.info('LLM input = %s', json.dumps(messages, indent=2))
-    
-    for _ in range(max_tries):
-        no_line_break_length = 0
-            
-        generation_output = openai_chat_completion_with_backoff(engine=engine,
-                                                        messages=messages,
-                                                        max_tokens=max_tokens - no_line_break_length,
-                                                        temperature=temperature,
-                                                        top_p=top_p,
-                                                        frequency_penalty=frequency_penalty,
-                                                        presence_penalty=presence_penalty,
-                                                        stop=stop_tokens,
-                                                        )
-        generation_output = generation_output['choices'][0]['message']['content']
+        messages = []
+        if filled_prompt_system != "": 
+            messages.append({"role": "system", "content": filled_prompt_system})
+        if filled_prompt_user != "":
+            messages.append({"role": "user", "content": filled_prompt_user})
+        
+        
+        if filled_prompt_system == "":
+            fd.write('LLM input (user) = {}\n'.format(filled_prompt_user))
+        elif filled_prompt_user == "":
+            fd.write('LLM input (system) = {}\n'.format(filled_prompt_system))
+        else:
+            fd.write('LLM input = {}\n'.format(json.dumps(messages, indent=2)))
+        
+        for _ in range(max_tries):
+            no_line_break_length = 0
+                
+            generation_output = openai_chat_completion_with_backoff(engine=engine,
+                                                            messages=messages,
+                                                            max_tokens=max_tokens - no_line_break_length,
+                                                            temperature=temperature,
+                                                            top_p=top_p,
+                                                            frequency_penalty=frequency_penalty,
+                                                            presence_penalty=presence_penalty,
+                                                            stop=stop_tokens,
+                                                            )
+            generation_output = generation_output['choices'][0]['message']['content']
 
-        generation_output = generation_output.strip()
+            generation_output = generation_output.strip()
 
-        if len(generation_output) > 0:
-            break
-    
-    logger.info('LLM output = %s', generation_output)
+            if len(generation_output) > 0:
+                break
+        
+        fd.write('LLM output = {}\n'.format(generation_output))
 
     return generation_output
 
 
 def llm_generate(template_file_system: str, template_file_user: str, prompt_parameter_values: dict, engine,
-            max_tokens, temperature, stop_tokens, top_p=0.9, frequency_penalty=0, presence_penalty=0, max_tries=1, all_user=False):
+            max_tokens, temperature, stop_tokens, top_p=0.9, frequency_penalty=0, presence_penalty=0, max_tries=1, all_user=False, all_system=False, log_file_path="prompts.log"):
     """
     filled_prompt gives direct access to the underlying model, without having to load a prompt template from a .prompt file. Used for testing.
     ban_line_break_start can potentially double the cost, though in practice (and especially with good prompts) this only happens for a fraction of inputs
     """
     if all_user:
         filled_prompt = _fill_template(template_file_user, prompt_parameter_values)
-        return _generate("", filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, max_tries)
+        return _generate("", filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, max_tries, log_file_path)
+    elif all_system:
+        filled_prompt = _fill_template(template_file_user, prompt_parameter_values)
+        return _generate(filled_prompt, "", engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, max_tries, log_file_path)
     else:
         filled_prompt_system = _fill_template(template_file_system, prompt_parameter_values)
         filled_prompt_user = _fill_template(template_file_user, prompt_parameter_values)
-        return _generate(filled_prompt_system, filled_prompt_user, engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, max_tries)
+        return _generate(filled_prompt_system, filled_prompt_user, engine, max_tokens, temperature, stop_tokens, top_p, frequency_penalty, presence_penalty, max_tries, log_file_path)
