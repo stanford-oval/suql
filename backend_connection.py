@@ -78,19 +78,17 @@ class BackendConnection:
         self.greeting = greeting
         self.engine = engine
         
-    def compute_next(self, dialog_id, user_utterance, turn_id, system_name):
+    def compute_next(self, dialog_id, user_utterance, turn_id, system_name) -> DialogueTurn:
         tuples = list(self.table.find( { "dialogID": dialog_id } ).sort('turn_id', ASCENDING))
         
+        # initialize empty dialog in the first turn
         if (not tuples):
             dlgHistory = []
-            genieDS, genie_aux = "null", []
-
         # otherwise we retrieve the dialog history
         else:
             dlgHistory = BackendConnection._reconstruct_dlgHistory(tuples)
-            genieDS, genie_aux = BackendConnection._reconstruct_genieinfo(tuples)
 
-        dlgHistory, response, genieDS, genie_aux, genie_user_target, time_stmt = compute_next_turn(
+        dlgHistory = compute_next_turn(
             dlgHistory,
             user_utterance,
             engine=self.engine,
@@ -99,14 +97,11 @@ class BackendConnection:
         
         # update the current tuple with new DialogTurn
         new_tuple = {"_id": '(' + str(dialog_id) + ', '+ str(turn_id) + ')', "dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}
-        # if current tuple has genie information, includes it as well
-        if genieDS != 'null':
-            new_tuple.update({"genieDS" : genieDS, "genieAux": genie_aux, "genie_user_target": genie_user_target})
         
         # insert the new dialog turn into DB
         self.table.insert_one(new_tuple)
                 
-        return response, dlgHistory[-1], genie_user_target, time_stmt
+        return dlgHistory[-1]
 
     @staticmethod
     def _reconstruct_dlgHistory(tuples):
@@ -145,29 +140,25 @@ def chat():
     system_name = request_args['system_name']
     # experiment_id = request_args['experiment_id']
     
-    response, dlgItem, genie_user_target, time_stmt = connection.compute_next(dialog_id, user_utterance, turn_id, system_name)
+    dlgItem = connection.compute_next(dialog_id, user_utterance, turn_id, system_name)
 
     log = {}
-    if (dlgItem.genie_query):
-        log["genie_query"] = dlgItem.genie_query
-        log["genie_utterance"] = json.loads(dlgItem.genie_utterance)
-        
-        # do some processing on genie_user_target to only preserve the sentence state representation
-        try:
-            genie_user_target = "$continue" + dlgItem.user_target.split("$continue")[1]
-        except Exception as e:
-            print(e)
-            
-        log["genie_user_target"] = genie_user_target
-    
-    if (dlgItem.reviews_query):
-        log["reviews"] = dlgItem.genie_reviews
-        log["reviews - Q"] = dlgItem.reviews_query
-        log["reviews - A"] = dlgItem.genie_reviews_answer
+    log["1st_sql"] = dlgItem.temp_target
+    log["2nd_sql"] = dlgItem.user_target
+    log["db_results"] = json.loads(dlgItem.genie_utterance) if dlgItem.genie_utterance is not None else None
 
-    log["Elapsed Time"] = time_stmt
+    def pp_time(time_statement):
+        return [
+            "Initial classifier: {:.2f}s".format(time_statement["first_classification"]), 
+            "1st SQL gen: {:.2f}s".format(time_statement["first_sql_gen"]),
+            "2nd SQL gen (rewrite): {:.2f}s".format(time_statement["second_sql_gen"]),
+            "SQL execution: {:.2f}s".format(time_statement["sql_execution"]),
+            "Final response: {:.2f}s".format(time_statement["final_response"])
+        ]
 
-    return {'agent_utterance': response, 'log_object': log}
+    log["Elapsed Time"] = pp_time(dlgItem.time_statement)
+
+    return {'agent_utterance': dlgItem.agent_utterance, 'log_object': log}
 
 @app.route("/user_rating", methods=["POST"])
 def user_rating():

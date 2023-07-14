@@ -1,6 +1,8 @@
 import psycopg2
+import time
 
 def execute_sql(sql_query):
+    start_time = time.time()
 
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
@@ -31,4 +33,9 @@ def execute_sql(sql_query):
     # Close the cursor and connection
     cursor.close()
     conn.close()
-    return list(results), column_names
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    return list(results), column_names, elapsed_time
+
+if __name__ == "__main__":
+    print(execute_sql("SELECT * FROM restaurants LIMIT 1"))

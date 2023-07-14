@@ -1,0 +1,16 @@
+Rewrite a SQL query according to a specific pattern.
+
+Input: SELECT * FROM foo WHERE boolean_answer(field_1, 'value1');
+Output: SELECT *, boolean_answer_score(field_1, 'value1') AS _score FROM foo ORDER BY _score DESC;
+
+Input: SELECT * FROM foo WHERE boolean_answer(field_1, "value1") AND field2 = 'value2';
+Output: SELECT *, boolean_answer_score(field_1, 'value1') AS _score FROM foo WHERE field2 = 'value2' ORDER BY _score DESC;
+
+Input: SELECT boolean_answer(field_1, 'value1'), field2 FROM foo WHERE field3 = 'value3';
+Output: SELECT boolean_answer(field_1, 'value1'), field2 FROM foo WHERE field3 = 'value3';
+
+Input: SELECT summary(field_1), field2 FROM foo WHERE field3 = 'value3' AND boolean_answer(field_2, 'value2');
+Output: SELECT summary(field_1), field2, boolean_answer_score(field_3, 'value3') AS _score FROM foo WHERE field3 = 'value3' ORDER BY _score DESC;
+
+Input: {{ sql }}
+Output: 

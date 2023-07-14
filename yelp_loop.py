@@ -7,6 +7,7 @@ GPT-3 + Yelp Genie skill
 
 import sys
 import os
+import re
 from typing import List
 import argparse
 import logging
@@ -34,30 +35,27 @@ class DialogueTurn:
         self,
         agent_utterance: str = None,
         user_utterance: str = None,
-        genie_query: str = None,
         genie_utterance: str = None,
-        reviews_query: str = None,
-        genie_reviews : List[str] = [],
-        genie_reviews_answer : str = None,
+        temp_target : str = None,
         user_target : str = None,
+        sys_type : str = None,
+        time_statement : dict = None
     ):
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
-        self.genie_query = genie_query
         self.genie_utterance = genie_utterance
-        self.reviews_query = reviews_query
-        self.genie_reviews = genie_reviews
-        self.genie_reviews_answer = genie_reviews_answer
+        self.temp_target = temp_target
         self.user_target = user_target
+        self.sys_type = sys_type
+        time_statement = time_statement
         
     agent_utterance: str
     user_utterance: str
-    genie_query: str
     genie_utterance: str
-    reviews_query: str
-    genie_reviews: List[str]
-    genie_reviews_answer: str
     user_target: str
+    temp_target: str
+    sys_type: str
+    time_statement: dict
 
     def to_text(self, they='They', you='You'):
         """
@@ -234,7 +232,7 @@ def review_qa(reviews, question, engine):
     return continuation, elapsed_time
 
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
-    continuation, _ = llm_generate(template_file=prompt_file,
+    first_sql, first_sql_time = llm_generate(template_file=prompt_file,
                 engine='gpt-35-turbo',
                 stop_tokens=["Agent:"],
                 max_tokens=300,
@@ -318,12 +316,30 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         "has_live_music_citation",
         "serves_alcohol_citation",
         "michelin_citation",
-        "accomodates_large_groups_citation"
+        "accomodates_large_groups_citation",
+        
+        # special internal fields
+        "_score",
+        "_schematization_results"
         ]
-     
-    continuation = continuation.rstrip("Agent:")
-    # print("generated SQL query {}".format(continuation))
-    results, column_names = execute_sql(continuation)
+    
+    print("generated SQL query before rewriting: {}".format(first_sql))
+    
+    # do another rewrite if "boolean_answer" is in the prediction
+    second_sql = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", first_sql)
+    second_sql_time = 0
+    if "boolean_answer" in second_sql:
+        second_sql, second_sql_time = llm_generate(template_file="prompts/parser_rewrite_sql.prompt",
+            engine='gpt-35-turbo',
+            stop_tokens=[";"],
+            max_tokens=300,
+            temperature=0,
+            prompt_parameter_values={'sql': second_sql},
+            postprocess=False)
+    
+    print("generated SQL query after rewriting: {}".format(second_sql))
+    
+    results, column_names, sql_execution_time = execute_sql(second_sql)
 
     final_res = []
     for res in results:
@@ -337,7 +353,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         final_res.append(temp)
     
     print(final_res)
-    return final_res, continuation
+    return final_res, first_sql, second_sql, first_sql_time, second_sql_time, sql_execution_time
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
@@ -346,74 +362,66 @@ def compute_next_turn(
     sys_type = 'baseline_w_textfcns'):
     
     print(sys_type)
-    assert(sys_type in ["semantic_index", "baseline_w_textfcns", "baseline_linearization", "v0614baseline_thingtalk"])
-    
-    # assign default values
-    genie_new_ds = None
-    genie_new_aux = []
-    genie_user_target = ""
-    genie_results = []
+    assert(sys_type in ["semantic_index", "baseline_w_textfcns", "baseline_linearization"])
     
     first_classification_time = 0
-    review_time = 0
+    first_sql_gen_time = 0
+    second_sql_gen_time = 0
+    sql_execution = 0
     final_response_time = 0
-    genie_time = 0
 
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
-    dlgHistory[-1].reviews_query = None
+    dlgHistory[-1].sys_type = sys_type
     
     # determine whether to send to Genie
     continuation, first_classification_time = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
-        dlgHistory[-1].genie_query = user_utterance
         if sys_type == "baseline_w_textfcns":
-            results, sql = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
+            results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = sql
-            genie_user_target = sql
-            if not results:
-                response = "Sorry, I don't have that information."
-                dlgHistory[-1].agent_utterance = response
-                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
+            dlgHistory[-1].temp_target = first_sql
+            dlgHistory[-1].user_target = second_sql
         
         elif sys_type == 'semantic_index':
-            results, sql = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
+            results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
+            dlgHistory[-1].temp_target = first_sql
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = sql
-            genie_user_target = sql
-            if not results:
-                response = "Sorry, I don't have that information."
-                dlgHistory[-1].agent_utterance = response
-                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
+            dlgHistory[-1].user_target = second_sql
             
         elif sys_type == 'baseline_linearization':
             results = baseline_filter(user_utterance)
-            sql = None
+            dlgHistory[-1].temp_target = None
+            dlgHistory[-1].user_target = None
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = sql
-            genie_user_target = sql
 
-            if not results:
-                response = "Sorry, I don't have that information."
-                dlgHistory[-1].agent_utterance = response
-                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
+        # for all systems, cut it out if no response returned
+        if not results:
+            response = "Sorry, I don't have that information."
+            dlgHistory[-1].agent_utterance = response
+            dlgHistory[-1].time_statement = {
+                "first_classification": first_classification_time,
+                "first_sql_gen": first_sql_gen_time,
+                "second_sql_gen": second_sql_gen_time,
+                "sql_execution": sql_execution,
+                "final_response": final_response_time
+            }
+            return dlgHistory
             
     response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
                         max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
-    dlgHistory[-1].user_target = genie_user_target
     
-    time_stmt = [
-        "Initial classifier: {:.2f}s".format(first_classification_time), 
-        "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
-        "Review QA: {:.2f}s".format(review_time),
-        "Final response: {:.2f}s".format(final_response_time)
-    ]
+    dlgHistory[-1].time_statement = {
+        "first_classification": first_classification_time,
+        "first_sql_gen": first_sql_gen_time,
+        "second_sql_gen": second_sql_gen_time,
+        "sql_execution": sql_execution,
+        "final_response": final_response_time
+    }
     
-    
-    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
+    return dlgHistory
 
         
 
@@ -434,7 +442,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_direct_sentence_state', action='store_true',
                         help='Directly use GPT parser output as full state')
     parser.add_argument('--sys_type', type=str, default='generate_sql',
-                        choices=["semantic_index", "baseline_w_textfcns", "baseline_linearization", "v0614baseline_thingtalk"])
+                        choices=["semantic_index", "baseline_w_textfcns", "baseline_linearization"])
     # parser.add_argument('--use_sql', action='store_true',
     #                     help='Uses sql generation')
     # parser.add_argument('--use_baseline', action=)
@@ -460,17 +468,13 @@ if __name__ == '__main__':
                 break
             
             # this is single-user, so feeding in genieDS and genie_aux is unnecessary, but we do it to be consistent with backend_connection.py
-            dlgHistory, response, gds, gaux, _, _ = compute_next_turn(
+            dlgHistory = compute_next_turn(
                 dlgHistory,
                 user_utterance,
                 engine=args.engine,
                 sys_type=args.sys_type
             )
-            if genieDS != None:
-                # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago
-                genieDS = gds
-                genie_aux = gaux
-            print_chatbot('Chatbot: ' + response)
+            print_chatbot('Chatbot: ' + dlgHistory[-1].agent_utterance)
 
     finally:
         with open(args.output_file, 'a') as output_file:
