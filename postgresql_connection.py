@@ -1,7 +1,11 @@
 import psycopg2
 import time
+import re
 
 def execute_sql(sql_query):
+    if not ("LIMIT" in sql_query):
+        sql_query = re.sub(r';$', ' LIMIT 5;', sql_query, flags=re.MULTILINE)
+    
     start_time = time.time()
 
     # Establish a connection to the PostgreSQL database
@@ -17,6 +21,7 @@ def execute_sql(sql_query):
     cursor = conn.cursor()
 
     try:
+        print("executing SQL {}".format(sql_query))
         # Execute the SQL query
         cursor.execute(sql_query)
 
