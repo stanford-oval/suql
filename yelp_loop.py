@@ -336,6 +336,9 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
             temperature=0,
             prompt_parameter_values={'sql': second_sql},
             postprocess=False)
+        
+    if not ("LIMIT" in second_sql):
+        second_sql = re.sub(r';$', ' LIMIT 5;', second_sql, flags=re.MULTILINE)
     
     print("generated SQL query after rewriting: {}".format(second_sql))
     

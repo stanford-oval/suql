@@ -1,10 +1,7 @@
 import psycopg2
 import time
-import re
 
 def execute_sql(sql_query):
-    if not ("LIMIT" in sql_query):
-        sql_query = re.sub(r';$', ' LIMIT 5;', sql_query, flags=re.MULTILINE)
     
     start_time = time.time()
 
