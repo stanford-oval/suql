@@ -254,6 +254,9 @@ def answer():
 
 
 def _compute_embeddings(documents, question, chunking_param=15):
+    # computes embedding of `documents`` for a specific `chunking_param``
+    # then returns the similarity score between `question` and `documents`, sorted by desc order
+    # this function caches the embedding of `documents` in a local mongodb, for a specific `chunking_param`
     
     def _compute_embeddings_for_chunk(chunked_documents):
         inputs = tokenizer(chunked_documents, padding=True, truncation=True, return_tensors="pt").to(device)
