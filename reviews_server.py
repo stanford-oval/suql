@@ -10,6 +10,7 @@ from prompt_continuation import llm_generate
 from utils import linearize, chunk_text
 import json
 from tqdm import tqdm
+from schematization.tokenizer import num_tokens_from_string
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -227,10 +228,8 @@ def answer():
     
     text_res = []
     if isinstance(data["text"], list):
-        # TODO: to be precise one needs to use the openAI tokenzer. for now I am just using some
-        # ad-hoc hard-coded character count
         for i in data["text"]:
-            if len('\n'.join(text_res + [i])) < 14000:
+            if num_tokens_from_string('\n'.join(text_res + [i])) < 3800:
                 text_res.append(i)
             else:
                 break
@@ -240,7 +239,7 @@ def answer():
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': text_res, 'question': data["question"]},
-        engine="text-davinci-003",
+        engine='gpt-35-turbo',
         max_tokens=200,
         temperature=0.0,
         stop_tokens=['\n'],
@@ -387,7 +386,6 @@ def boolean_answer_score():
 
     
     return None
-
 
 @app.route('/stringEquals', methods=['POST'])
 def string_equals():
