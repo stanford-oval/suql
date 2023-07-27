@@ -11,6 +11,7 @@ from utils import linearize, chunk_text
 import json
 from tqdm import tqdm
 from schematization.tokenizer import num_tokens_from_string
+from free_text_support.overload_ops import in_any_no_cache, equal_no_cache
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -217,7 +218,7 @@ def getMenus():
 @app.route('/answer', methods=['POST'])
 def answer():
     data = request.get_json()
-    print("/answer receieved request {}".format(data))
+    # print("/answer receieved request {}".format(data))
         
     # input params in this `data`    
     # data["text"] : text to QA upon
@@ -402,6 +403,38 @@ def string_equals():
 
     if "comp_value" not in data or "field_value" not in data or "field_name" not in db:
         return None
+    
+@app.route('/inAny', methods=['POST'])
+def in_any():
+    data = request.get_json()
+    # input params in this `data`    
+    # data["comp_value"]  : text to compare against
+    # data["field_values"] : list of text in the db to compare
+
+    if "comp_value" not in data or "field_values" not in data:
+        return None
+    
+    res = {
+        "result" : in_any_no_cache(data["comp_value"], data["field_values"])
+    }
+    
+    return res
+
+@app.route('/equals', methods=['POST'])
+def equals():
+    data = request.get_json()
+    # input params in this `data`    
+    # data["comp_value"]  : text to compare against
+    # data["field_values"] : list of text in the db to compare
+
+    if "comp_value" not in data or "field_values" not in data:
+        return None
+    
+    res = {
+        "result" : equal_no_cache(data["comp_value"], data["field_values"])
+    }
+    
+    return res
 
 def get_all_processed():
     restaurants = list(schematized.find())

@@ -104,6 +104,40 @@ return parsed_result["result"]
 
 $$ LANGUAGE plpython3u;
 
+CREATE OR REPLACE FUNCTION _in_any (comp_value TEXT, field_values TEXT[])
+  RETURNS BOOLEAN
+AS $$
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/inAny"
+
+response = requests.post(url=URL, data=json.dumps({
+    "comp_value" : comp_value,
+    "field_values": field_values
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+return parsed_result["result"]
+$$ LANGUAGE plpython3u;
+
+CREATE OR REPLACE FUNCTION _equals (comp_value TEXT, field_value TEXT)
+  RETURNS BOOLEAN
+AS $$
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/equals"
+
+response = requests.post(url=URL, data=json.dumps({
+    "comp_value" : comp_value,
+    "field_values": field_value
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+return parsed_result["result"]
+$$ LANGUAGE plpython3u;
+
 
 CREATE TABLE restaurants (
     _id SERIAL PRIMARY KEY,

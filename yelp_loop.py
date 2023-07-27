@@ -76,9 +76,6 @@ class DialogueTurn:
         ret = ''
         
         ret += they + ': ' + self.user_utterance
-        if self.genie_query is not None:
-            ret += '\n' + '[You check the database for "' + \
-                self.genie_query + '"]'
         if self.genie_utterance is not None:
             # print(self.genie_utterance)
             ret += '\n' + '[Database returns "' + self.genie_utterance + '"]'
@@ -94,17 +91,6 @@ class DialogueTurn:
         if self.agent_utterance is not None:
             ret += '\n' + you + ': ' + self.agent_utterance
         return ret
-
-
-def summarize_reviews(reviews: str) -> str:
-    summaries = batch_llm_generate(template_file='prompts/yelp_review_summary.prompt',
-                           engine='text-davinci-003',
-                           stop_tokens=None,
-                           max_tokens=100,
-                           temperature=0.7,
-                           prompt_parameter_values=[{'review': r} for r in reviews],
-                           postprocess=False)
-    return summaries
 
 
 def dialogue_history_to_text(history: List[DialogueTurn], they='They', you='You') -> str:
@@ -206,30 +192,19 @@ def get_field_information(name, operator, value, user_target):
     
     return res
 
-def review_qa(reviews, question, engine):
-    review_res = []
-    # TODO: to be precise one needs to use the openAI tokenzer. for now I am just using some
-    # ad-hoc hard-coded character count
-    for i in reviews:
-        if len('\n'.join(review_res + [i])) < 14000:
-            review_res.append(i)
-        else:
-            break
+def sql_rewrites(in_sql, special_fields = []):
+    if special_fields:
+        special_fields_regex = r'(?!(?:{})\b)'.format('|'.join(special_fields))
+    else:
+        special_fields_regex = ''
     
-    if not review_res or (len(review_res) == 1 and not review_res[0]):
-        return ""
-    
-    continuation, elapsed_time = llm_generate(
-        'prompts/review_qa.prompt',
-        {'reviews': review_res, 'question': question},
-        engine=engine,
-        max_tokens=200,
-        temperature=0.0,
-        stop_tokens=['\n'],
-        postprocess=False
-    )
-    
-    return continuation, elapsed_time
+    # rewrite all string equals with the special `_equals` function
+    in_sql = re.sub(r"(?<=\s){}([^\s]+) = '([^']*)'".format(special_fields_regex), r"_equals(\1, '\2')", in_sql)
+    # rewrite all string in array with the special `_in_any` function
+    in_sql = re.sub(r"'([^']*)' = ANY \(([^\s]+)\)", r"_in_any('\1', \2)", in_sql)
+    # do another rewrite if answer(field_name, value) = 'Yes' is in the prediction
+    in_sql = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", in_sql)
+    return in_sql
 
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
     first_sql, first_sql_time = llm_generate(template_file=prompt_file,
@@ -325,9 +300,9 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
     
     print("generated SQL query before rewriting: {}".format(first_sql))
     
-    # do another rewrite if "boolean_answer" is in the prediction
-    second_sql = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", first_sql)
+    second_sql = sql_rewrites(first_sql, special_fields=["location", "price"])
     second_sql_time = 0
+    # do another rewrite if "boolean_answer" is in the prediction
     if "boolean_answer" in second_sql:
         second_sql, second_sql_time = llm_generate(template_file="prompts/parser_rewrite_sql.prompt",
             engine='gpt-35-turbo',
