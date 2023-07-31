@@ -199,9 +199,9 @@ def sql_rewrites(in_sql, special_fields = []):
         special_fields_regex = ''
     
     # rewrite all string equals with the special `_equals` function
-    in_sql = re.sub(r"(?<=\s){}([^\s]+) = '([^']*)'".format(special_fields_regex), r"_equals(\1, '\2')", in_sql)
+    # in_sql = re.sub(r"(?<=\s){}([^\s]+) = '([^']*)'".format(special_fields_regex), r"_equals(\1, '\2')", in_sql)
     # rewrite all string in array with the special `_in_any` function
-    in_sql = re.sub(r"'([^']*)' = ANY \(([^\s]+)\)", r"_in_any('\1', \2)", in_sql)
+    # in_sql = re.sub(r"'([^']*)' = ANY \(([^\s]+)\)", r"_in_any('\1', \2)", in_sql)
     # do another rewrite if answer(field_name, value) = 'Yes' is in the prediction
     in_sql = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", in_sql)
     return in_sql
@@ -300,7 +300,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
     
     print("generated SQL query before rewriting: {}".format(first_sql))
     
-    second_sql = sql_rewrites(first_sql, special_fields=["location", "price"])
+    second_sql = sql_rewrites(first_sql)
     second_sql_time = 0
     # do another rewrite if "boolean_answer" is in the prediction
     if "boolean_answer" in second_sql:

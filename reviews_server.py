@@ -227,6 +227,11 @@ def answer():
     if "text" not in data or "question" not in data:
         return None
     
+    if not data["text"]:
+        return {
+            "result": "no information"
+        }
+    
     text_res = []
     if isinstance(data["text"], list):
         for i in data["text"]:
