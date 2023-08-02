@@ -47,7 +47,7 @@ Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND loca
 {% if dlg_turn.genie_utterance is not none %}
 User: {{ dlg_turn.user_utterance }}
 Target: {{ dlg_turn.user_target }}
-Agent: {{ dlg_turn.genie_utterance }}
+Agent: {{ dlg_turn.agent_utterance }}
 {% endif %}
 {% endfor %}
 User: {{ query }}

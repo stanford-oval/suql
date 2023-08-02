@@ -8,10 +8,11 @@ def execute_sql(sql_query):
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
         database="restaurants",
-        user="postgres",
-        password="postgres",
+        user="yelpbot_user",
+        password="yelpbot_user",
         host="127.0.0.1",
-        port="5432"
+        port="5432",
+        options='-c statement_timeout=45000'
     )
 
     # Create a cursor object to execute SQL queries
@@ -30,7 +31,9 @@ def execute_sql(sql_query):
 
     except psycopg2.Error as e:
         print("Error executing SQL query:", e)
-        return [], []
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        return [], [], elapsed_time
 
     # Close the cursor and connection
     cursor.close()

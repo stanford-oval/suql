@@ -1,0 +1,9 @@
+In a restaurant database, the {{ field_name }} field has the following set of options. "{{ predicated_field_value }}" is not one of the possible choices. You need to classify "{{ predicated_field_value }}" into one or more of the values below. Select from the following options: 
+
+{% for choice in field_value_choices %}
+{{ choice }}
+{% endfor %}
+
+You can only select from the above choices. Your response should be a list of comma separated values.
+
+Your answer: 

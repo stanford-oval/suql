@@ -22,12 +22,22 @@ import time
 from postgresql_connection import execute_sql
 # from query_reviews import review_server_address
 from reviews_server import baseline_filter
+from langchain.output_parsers import CommaSeparatedListOutputParser
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from prompt_continuation import llm_generate, batch_llm_generate
 
 logger = logging.getLogger(__name__)
+
+def fetch_cuisine_list():
+    with open("cuisines.json", "r") as fd:
+        data = json.load(fd)
+    
+    res = list(map(lambda x : x["canonical"], data["data"]))
+    return sorted(res)
+
+CUISINE_LIST = fetch_cuisine_list()
 
 
 class DialogueTurn:
@@ -192,19 +202,53 @@ def get_field_information(name, operator, value, user_target):
     
     return res
 
-def sql_rewrites(in_sql, special_fields = []):
-    if special_fields:
-        special_fields_regex = r'(?!(?:{})\b)'.format('|'.join(special_fields))
-    else:
-        special_fields_regex = ''
-    
-    # rewrite all string equals with the special `_equals` function
-    # in_sql = re.sub(r"(?<=\s){}([^\s]+) = '([^']*)'".format(special_fields_regex), r"_equals(\1, '\2')", in_sql)
-    # rewrite all string in array with the special `_in_any` function
-    # in_sql = re.sub(r"'([^']*)' = ANY \(([^\s]+)\)", r"_in_any('\1', \2)", in_sql)
+def sql_rewrites(in_sql : str, classification_fields = {}):
+    output_parser = CommaSeparatedListOutputParser()
+
+    total_rewrite_time = 0
+    temp = in_sql
+    # the classification_fields is a dictionary.
+    # each key is the field name, and each value is the list of available enum values
+    for field_name, field_values in classification_fields.items():
+        macthes = re.finditer(r"'([^']*)' = ANY \({}\)".format(field_name), in_sql)
+        for match in macthes:
+            predicated_field_value = match.group(1)
+            if not predicated_field_value in field_values:
+                # we need to do a classification here
+                classified_field_value_raw, rewrite_time = llm_generate(
+                    template_file='prompts/field_classification.prompt',
+                    engine='gpt-35-turbo',
+                    stop_tokens=["\n"],
+                    max_tokens=70,
+                    temperature=0,
+                    prompt_parameter_values={
+                        "field_value_choices": field_values,
+                        "predicated_field_value": predicated_field_value,
+                        "field_name": field_name
+                    },
+                    postprocess=False)
+                total_rewrite_time += rewrite_time
+                classified_field_values_list = output_parser.parse(classified_field_value_raw)
+                
+                replacement_predicates = []
+                for classified_field_value in classified_field_values_list:
+                    print("1111 {}".format(classified_field_value))
+                    if classified_field_value in field_values:
+                        replacement_predicates.append("'{}' = ANY ({})".format(classified_field_value, field_name))
+                if replacement_predicates:
+                    replacement = " OR ".join(replacement_predicates)
+                    replacement = "( " + replacement + " )"
+                else:
+                    replacement = "TRUE"
+                
+                print("match, group 0: {}".format(match.group(0)))
+                temp = temp.replace(match.group(0), replacement)
+                print("temp, after replacement: {}".format(temp))
+                
     # do another rewrite if answer(field_name, value) = 'Yes' is in the prediction
-    in_sql = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", in_sql)
-    return in_sql
+    # TODO: handle other similar queries
+    temp = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", temp)
+    return temp, total_rewrite_time
 
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
     first_sql, first_sql_time = llm_generate(template_file=prompt_file,
@@ -300,17 +344,19 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
     
     print("generated SQL query before rewriting: {}".format(first_sql))
     
-    second_sql = sql_rewrites(first_sql)
-    second_sql_time = 0
+    second_sql, second_sql_time = sql_rewrites(first_sql, classification_fields={
+        "cuisines": CUISINE_LIST
+    })
     # do another rewrite if "boolean_answer" is in the prediction
     if "boolean_answer" in second_sql:
-        second_sql, second_sql_time = llm_generate(template_file="prompts/parser_rewrite_sql.prompt",
+        second_sql, second_sql_time_ = llm_generate(template_file="prompts/parser_rewrite_sql.prompt",
             engine='gpt-35-turbo',
             stop_tokens=[";"],
             max_tokens=300,
             temperature=0,
             prompt_parameter_values={'sql': second_sql},
             postprocess=False)
+        second_sql_time += second_sql_time_
         
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 5;', second_sql, flags=re.MULTILINE)
@@ -337,10 +383,10 @@ def compute_next_turn(
     dlgHistory : List[DialogueTurn],
     user_utterance: str,
     engine = "text-davinci-003",
-    sys_type = 'baseline_w_textfcns'):
+    sys_type = "sql_textfcns_v0801"):
     
     print(sys_type)
-    assert(sys_type in ["semantic_index", "baseline_w_textfcns", "baseline_linearization"])
+    assert(sys_type in ["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
     
     first_classification_time = 0
     first_sql_gen_time = 0
@@ -356,19 +402,19 @@ def compute_next_turn(
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
-        if sys_type == "baseline_w_textfcns":
+        if sys_type == "sql_textfcns_v0801":
             results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
             dlgHistory[-1].temp_target = first_sql
             dlgHistory[-1].user_target = second_sql
         
-        elif sys_type == 'semantic_index':
+        elif sys_type == "semantic_index_w_textfncs":
             results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
             dlgHistory[-1].temp_target = first_sql
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
             dlgHistory[-1].user_target = second_sql
             
-        elif sys_type == 'baseline_linearization':
+        elif sys_type == "baseline_linearization":
             results = baseline_filter(user_utterance)
             dlgHistory[-1].temp_target = None
             dlgHistory[-1].user_target = None
@@ -419,8 +465,8 @@ if __name__ == '__main__':
                         help='Use GPT parser as opposed to Genie parser')
     parser.add_argument('--use_direct_sentence_state', action='store_true',
                         help='Directly use GPT parser output as full state')
-    parser.add_argument('--sys_type', type=str, default='generate_sql',
-                        choices=["semantic_index", "baseline_w_textfcns", "baseline_linearization"])
+    parser.add_argument('--sys_type', type=str, default='sql_textfcns_v0801',
+                        choices=["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
     # parser.add_argument('--use_sql', action='store_true',
     #                     help='Uses sql generation')
     # parser.add_argument('--use_baseline', action=)

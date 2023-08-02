@@ -1,0 +1,1580 @@
+{
+    "result": "ok",
+    "data": [
+      {
+        "value": "icecream",
+        "name": "Ice Cream & Frozen Yogurt",
+        "canonical": "ice cream and frozen yogurt"
+      },
+      {
+        "value": "afghani",
+        "name": "Afghan",
+        "canonical": "afghan"
+      },
+      {
+        "value": "african",
+        "name": "African",
+        "canonical": "african"
+      },
+      {
+        "value": "andalusian",
+        "name": "Andalusian",
+        "canonical": "andalusian"
+      },
+      {
+        "value": "arabian",
+        "name": "Arabian",
+        "canonical": "arabian"
+      },
+      {
+        "value": "arabpizza",
+        "name": "Arab Pizza",
+        "canonical": "arab pizza"
+      },
+      {
+        "value": "argentine",
+        "name": "Argentine",
+        "canonical": "argentine"
+      },
+      {
+        "value": "armenian",
+        "name": "Armenian",
+        "canonical": "armenian"
+      },
+      {
+        "value": "asianfusion",
+        "name": "Asian Fusion",
+        "canonical": "asian fusion"
+      },
+      {
+        "value": "asturian",
+        "name": "Asturian",
+        "canonical": "asturian"
+      },
+      {
+        "value": "australian",
+        "name": "Australian",
+        "canonical": "australian"
+      },
+      {
+        "value": "austrian",
+        "name": "Austrian",
+        "canonical": "austrian"
+      },
+      {
+        "value": "baguettes",
+        "name": "Baguettes",
+        "canonical": "baguettes"
+      },
+      {
+        "value": "bangladeshi",
+        "name": "Bangladeshi",
+        "canonical": "bangladeshi"
+      },
+      {
+        "value": "basque",
+        "name": "Basque",
+        "canonical": "basque"
+      },
+      {
+        "value": "bavarian",
+        "name": "Bavarian",
+        "canonical": "bavarian"
+      },
+      {
+        "value": "bbq",
+        "name": "Barbeque",
+        "canonical": "barbeque"
+      },
+      {
+        "value": "bbq",
+        "name": "Barbecue",
+        "canonical": "barbecue"
+      },
+      {
+        "value": "bbq",
+        "name": "BBQ",
+        "canonical": "bbq"
+      },
+      {
+        "value": "beergarden",
+        "name": "Beer Garden",
+        "canonical": "beer garden"
+      },
+      {
+        "value": "beerhall",
+        "name": "Beer Hall",
+        "canonical": "beer hall"
+      },
+      {
+        "value": "beisl",
+        "name": "Beisl",
+        "canonical": "beisl"
+      },
+      {
+        "value": "belgian",
+        "name": "Belgian",
+        "canonical": "belgian"
+      },
+      {
+        "value": "bistros",
+        "name": "Bistros",
+        "canonical": "bistros"
+      },
+      {
+        "value": "blacksea",
+        "name": "Black Sea",
+        "canonical": "black sea"
+      },
+      {
+        "value": "brasseries",
+        "name": "Brasseries",
+        "canonical": "brasseries"
+      },
+      {
+        "value": "brazilian",
+        "name": "Brazilian",
+        "canonical": "brazilian"
+      },
+      {
+        "value": "brazilianempanadas",
+        "name": "Brazilian Empanadas",
+        "canonical": "brazilian empanadas"
+      },
+      {
+        "value": "breakfast_brunch",
+        "name": "Breakfast & Brunch",
+        "canonical": "breakfast & brunch"
+      },
+      {
+        "value": "british",
+        "name": "British",
+        "canonical": "british"
+      },
+      {
+        "value": "buffets",
+        "name": "Buffets",
+        "canonical": "buffets"
+      },
+      {
+        "value": "bulgarian",
+        "name": "Bulgarian",
+        "canonical": "bulgarian"
+      },
+      {
+        "value": "burgers",
+        "name": "Burgers",
+        "canonical": "burgers"
+      },
+      {
+        "value": "burmese",
+        "name": "Burmese",
+        "canonical": "burmese"
+      },
+      {
+        "value": "cafes",
+        "name": "Cafes",
+        "canonical": "cafes"
+      },
+      {
+        "value": "cafeteria",
+        "name": "Cafeteria",
+        "canonical": "cafeteria"
+      },
+      {
+        "value": "cajun",
+        "name": "Cajun/Creole",
+        "canonical": "cajun/creole"
+      },
+      {
+        "value": "cambodian",
+        "name": "Cambodian",
+        "canonical": "cambodian"
+      },
+      {
+        "value": "canteen",
+        "name": "Canteen",
+        "canonical": "canteen"
+      },
+      {
+        "value": "caribbean",
+        "name": "Caribbean",
+        "canonical": "caribbean"
+      },
+      {
+        "value": "catalan",
+        "name": "Catalan",
+        "canonical": "catalan"
+      },
+      {
+        "value": "centralbrazilian",
+        "name": "Central Brazilian",
+        "canonical": "central brazilian"
+      },
+      {
+        "value": "cheesesteaks",
+        "name": "Cheesesteaks",
+        "canonical": "cheesesteaks"
+      },
+      {
+        "value": "chicken_wings",
+        "name": "Chicken Wings",
+        "canonical": "chicken wings"
+      },
+      {
+        "value": "chickenshop",
+        "name": "Chicken Shop",
+        "canonical": "chicken shop"
+      },
+      {
+        "value": "chilean",
+        "name": "Chilean",
+        "canonical": "chilean"
+      },
+      {
+        "value": "chinese",
+        "name": "Chinese",
+        "canonical": "chinese"
+      },
+      {
+        "value": "comfortfood",
+        "name": "Comfort",
+        "canonical": "comfort"
+      },
+      {
+        "value": "congee",
+        "name": "Congee",
+        "canonical": "congee"
+      },
+      {
+        "value": "corsican",
+        "name": "Corsican",
+        "canonical": "corsican"
+      },
+      {
+        "value": "creperies",
+        "name": "Creperies",
+        "canonical": "creperies"
+      },
+      {
+        "value": "cuban",
+        "name": "Cuban",
+        "canonical": "cuban"
+      },
+      {
+        "value": "currysausage",
+        "name": "Curry Sausage",
+        "canonical": "curry sausage"
+      },
+      {
+        "value": "cypriot",
+        "name": "Cypriot",
+        "canonical": "cypriot"
+      },
+      {
+        "value": "czech",
+        "name": "Czech",
+        "canonical": "czech"
+      },
+      {
+        "value": "czechslovakian",
+        "name": "Czech/Slovakian",
+        "canonical": "czech/slovakian"
+      },
+      {
+        "value": "danish",
+        "name": "Danish",
+        "canonical": "danish"
+      },
+      {
+        "value": "delis",
+        "name": "Delis",
+        "canonical": "delis"
+      },
+      {
+        "value": "dimsum",
+        "name": "Dim Sum",
+        "canonical": "dim sum"
+      },
+      {
+        "value": "diners",
+        "name": "Diners",
+        "canonical": "diners"
+      },
+      {
+        "value": "dinnertheater",
+        "name": "Dinner Theater",
+        "canonical": "dinner theater"
+      },
+      {
+        "value": "dominican",
+        "name": "Dominican",
+        "canonical": "dominican"
+      },
+      {
+        "value": "dumplings",
+        "name": "Dumplings",
+        "canonical": "dumplings"
+      },
+      {
+        "value": "eastern_european",
+        "name": "Eastern European",
+        "canonical": "eastern european"
+      },
+      {
+        "value": "eltern_cafes",
+        "name": "Parent Cafes",
+        "canonical": "parent cafes"
+      },
+      {
+        "value": "eritrean",
+        "name": "Eritrean",
+        "canonical": "eritrean"
+      },
+      {
+        "value": "ethiopian",
+        "name": "Ethiopian",
+        "canonical": "ethiopian"
+      },
+      {
+        "value": "filipino",
+        "name": "Filipino",
+        "canonical": "filipino"
+      },
+      {
+        "value": "fischbroetchen",
+        "name": "Fischbroetchen",
+        "canonical": "fischbroetchen"
+      },
+      {
+        "value": "fishnchips",
+        "name": "Fish & Chips",
+        "canonical": "fish & chips"
+      },
+      {
+        "value": "flatbread",
+        "name": "Flatbread",
+        "canonical": "flatbread"
+      },
+      {
+        "value": "flemish",
+        "name": "Flemish",
+        "canonical": "flemish"
+      },
+      {
+        "value": "fondue",
+        "name": "Fondue",
+        "canonical": "fondue"
+      },
+      {
+        "value": "food_court",
+        "name": "Food Court",
+        "canonical": "food court"
+      },
+      {
+        "value": "foodstands",
+        "name": "Food Stands",
+        "canonical": "food stands"
+      },
+      {
+        "value": "freiduria",
+        "name": "Freiduria",
+        "canonical": "freiduria"
+      },
+      {
+        "value": "french",
+        "name": "French",
+        "canonical": "french"
+      },
+      {
+        "value": "fuzhou",
+        "name": "Fuzhou",
+        "canonical": "fuzhou"
+      },
+      {
+        "value": "galician",
+        "name": "Galician",
+        "canonical": "galician"
+      },
+      {
+        "value": "gamemeat",
+        "name": "Game Meat",
+        "canonical": "game meat"
+      },
+      {
+        "value": "gastropubs",
+        "name": "Gastropubs",
+        "canonical": "gastropubs"
+      },
+      {
+        "value": "georgian",
+        "name": "Georgian",
+        "canonical": "georgian"
+      },
+      {
+        "value": "german",
+        "name": "German",
+        "canonical": "german"
+      },
+      {
+        "value": "giblets",
+        "name": "Giblets",
+        "canonical": "giblets"
+      },
+      {
+        "value": "gluten_free",
+        "name": "Gluten-Free",
+        "canonical": "gluten-free"
+      },
+      {
+        "value": "greek",
+        "name": "Greek",
+        "canonical": "greek"
+      },
+      {
+        "value": "guamanian",
+        "name": "Guamanian",
+        "canonical": "guamanian"
+      },
+      {
+        "value": "hainan",
+        "name": "Hainan",
+        "canonical": "hainan"
+      },
+      {
+        "value": "haitian",
+        "name": "Haitian",
+        "canonical": "haitian"
+      },
+      {
+        "value": "hakka",
+        "name": "Hakka",
+        "canonical": "hakka"
+      },
+      {
+        "value": "halal",
+        "name": "Halal",
+        "canonical": "halal"
+      },
+      {
+        "value": "hawaiian",
+        "name": "Hawaiian",
+        "canonical": "hawaiian"
+      },
+      {
+        "value": "henghwa",
+        "name": "Henghwa",
+        "canonical": "henghwa"
+      },
+      {
+        "value": "hessian",
+        "name": "Hessian",
+        "canonical": "hessian"
+      },
+      {
+        "value": "heuriger",
+        "name": "Heuriger",
+        "canonical": "heuriger"
+      },
+      {
+        "value": "himalayan",
+        "name": "Himalayan/Nepalese",
+        "canonical": "himalayan/nepalese"
+      },
+      {
+        "value": "hkcafe",
+        "name": "Hong Kong Style Cafe",
+        "canonical": "hong kong style cafe"
+      },
+      {
+        "value": "hokkien",
+        "name": "Hokkien",
+        "canonical": "hokkien"
+      },
+      {
+        "value": "honduran",
+        "name": "Honduran",
+        "canonical": "honduran"
+      },
+      {
+        "value": "hotdog",
+        "name": "Hot Dogs",
+        "canonical": "hot dogs"
+      },
+      {
+        "value": "hotdogs",
+        "name": "Fast",
+        "canonical": "fast"
+      },
+      {
+        "value": "hotpot",
+        "name": "Hot Pot",
+        "canonical": "hot pot"
+      },
+      {
+        "value": "hunan",
+        "name": "Hunan",
+        "canonical": "hunan"
+      },
+      {
+        "value": "hungarian",
+        "name": "Hungarian",
+        "canonical": "hungarian"
+      },
+      {
+        "value": "iberian",
+        "name": "Iberian",
+        "canonical": "iberian"
+      },
+      {
+        "value": "indonesian",
+        "name": "Indonesian",
+        "canonical": "indonesian"
+      },
+      {
+        "value": "indpak",
+        "name": "Indian",
+        "canonical": "indian"
+      },
+      {
+        "value": "international",
+        "name": "International",
+        "canonical": "international"
+      },
+      {
+        "value": "irish",
+        "name": "Irish",
+        "canonical": "irish"
+      },
+      {
+        "value": "island_pub",
+        "name": "Island Pub",
+        "canonical": "island pub"
+      },
+      {
+        "value": "israeli",
+        "name": "Israeli",
+        "canonical": "israeli"
+      },
+      {
+        "value": "italian",
+        "name": "Italian",
+        "canonical": "italian"
+      },
+      {
+        "value": "japanese",
+        "name": "Japanese",
+        "canonical": "japanese"
+      },
+      {
+        "value": "jewish",
+        "name": "Jewish",
+        "canonical": "jewish"
+      },
+      {
+        "value": "kaiseki",
+        "name": "Kaiseki",
+        "canonical": "kaiseki"
+      },
+      {
+        "value": "kebab",
+        "name": "Kebab",
+        "canonical": "kebab"
+      },
+      {
+        "value": "kopitiam",
+        "name": "Kopitiam",
+        "canonical": "kopitiam"
+      },
+      {
+        "value": "korean",
+        "name": "Korean",
+        "canonical": "korean"
+      },
+      {
+        "value": "kosher",
+        "name": "Kosher",
+        "canonical": "kosher"
+      },
+      {
+        "value": "kurdish",
+        "name": "Kurdish",
+        "canonical": "kurdish"
+      },
+      {
+        "value": "kushikatsu",
+        "name": "Kushikatsu",
+        "canonical": "kushikatsu"
+      },
+      {
+        "value": "laos",
+        "name": "Laos",
+        "canonical": "laos"
+      },
+      {
+        "value": "laotian",
+        "name": "Laotian",
+        "canonical": "laotian"
+      },
+      {
+        "value": "latin",
+        "name": "Latin American",
+        "canonical": "latin american"
+      },
+      {
+        "value": "ligurian",
+        "name": "Ligurian",
+        "canonical": "ligurian"
+      },
+      {
+        "value": "lumbard",
+        "name": "Lumbard",
+        "canonical": "lumbard"
+      },
+      {
+        "value": "lyonnais",
+        "name": "Lyonnais",
+        "canonical": "lyonnais"
+      },
+      {
+        "value": "malaysian",
+        "name": "Malaysian",
+        "canonical": "malaysian"
+      },
+      {
+        "value": "mamak",
+        "name": "Mamak",
+        "canonical": "mamak"
+      },
+      {
+        "value": "mauritius",
+        "name": "Mauritius",
+        "canonical": "mauritius"
+      },
+      {
+        "value": "meatballs",
+        "name": "Meatballs",
+        "canonical": "meatballs"
+      },
+      {
+        "value": "mediterranean",
+        "name": "Mediterranean",
+        "canonical": "mediterranean"
+      },
+      {
+        "value": "mexican",
+        "name": "Mexican",
+        "canonical": "mexican"
+      },
+      {
+        "value": "mideastern",
+        "name": "Middle Eastern",
+        "canonical": "middle eastern"
+      },
+      {
+        "value": "milkbars",
+        "name": "Milk Bars",
+        "canonical": "milk bars"
+      },
+      {
+        "value": "modern_australian",
+        "name": "Modern Australian",
+        "canonical": "modern australian"
+      },
+      {
+        "value": "modern_european",
+        "name": "Modern European",
+        "canonical": "modern european"
+      },
+      {
+        "value": "mongolian",
+        "name": "Mongolian",
+        "canonical": "mongolian"
+      },
+      {
+        "value": "moroccan",
+        "name": "Moroccan",
+        "canonical": "moroccan"
+      },
+      {
+        "value": "napoletana",
+        "name": "Napoletana",
+        "canonical": "napoletana"
+      },
+      {
+        "value": "newamerican",
+        "name": "New American",
+        "canonical": "new american"
+      },
+      {
+        "value": "newcanadian",
+        "name": "New Canadian",
+        "canonical": "new canadian"
+      },
+      {
+        "value": "newmexican",
+        "name": "New Mexican",
+        "canonical": "new mexican"
+      },
+      {
+        "value": "newzealand",
+        "name": "New Zealand",
+        "canonical": "new zealand"
+      },
+      {
+        "value": "nicaraguan",
+        "name": "Nicaraguan",
+        "canonical": "nicaraguan"
+      },
+      {
+        "value": "nicois",
+        "name": "Nicoise",
+        "canonical": "nicoise"
+      },
+      {
+        "value": "nightfood",
+        "name": "Night",
+        "canonical": "night"
+      },
+      {
+        "value": "nikkei",
+        "name": "Nikkei",
+        "canonical": "nikkei"
+      },
+      {
+        "value": "noodles",
+        "name": "Noodles",
+        "canonical": "noodles"
+      },
+      {
+        "value": "norcinerie",
+        "name": "Norcinerie",
+        "canonical": "norcinerie"
+      },
+      {
+        "value": "northeasternbrazilian",
+        "name": "Northeastern Brazilian",
+        "canonical": "northeastern brazilian"
+      },
+      {
+        "value": "northernbrazilian",
+        "name": "Northern Brazilian",
+        "canonical": "northern brazilian"
+      },
+      {
+        "value": "northerngerman",
+        "name": "Northern German",
+        "canonical": "northern german"
+      },
+      {
+        "value": "northernmexican",
+        "name": "Northern Mexican",
+        "canonical": "northern mexican"
+      },
+      {
+        "value": "norwegian",
+        "name": "Traditional Norwegian",
+        "canonical": "traditional norwegian"
+      },
+      {
+        "value": "nyonya",
+        "name": "Nyonya",
+        "canonical": "nyonya"
+      },
+      {
+        "value": "oaxacan",
+        "name": "Oaxacan",
+        "canonical": "oaxacan"
+      },
+      {
+        "value": "oden",
+        "name": "Oden",
+        "canonical": "oden"
+      },
+      {
+        "value": "okinawan",
+        "name": "Okinawan",
+        "canonical": "okinawan"
+      },
+      {
+        "value": "okonomiyaki",
+        "name": "Okonomiyaki",
+        "canonical": "okonomiyaki"
+      },
+      {
+        "value": "onigiri",
+        "name": "Onigiri",
+        "canonical": "onigiri"
+      },
+      {
+        "value": "opensandwiches",
+        "name": "Open Sandwiches",
+        "canonical": "open sandwiches"
+      },
+      {
+        "value": "oriental",
+        "name": "Oriental",
+        "canonical": "oriental"
+      },
+      {
+        "value": "pakistani",
+        "name": "Pakistani",
+        "canonical": "pakistani"
+      },
+      {
+        "value": "palatine",
+        "name": "Palatine",
+        "canonical": "palatine"
+      },
+      {
+        "value": "panasian",
+        "name": "Pan Asian",
+        "canonical": "pan asian"
+      },
+      {
+        "value": "pancakes",
+        "name": "Pancakes",
+        "canonical": "pancakes"
+      },
+      {
+        "value": "parma",
+        "name": "Parma",
+        "canonical": "parma"
+      },
+      {
+        "value": "pekinese",
+        "name": "Pekinese",
+        "canonical": "pekinese"
+      },
+      {
+        "value": "persian",
+        "name": "Persian/Iranian",
+        "canonical": "persian/iranian"
+      },
+      {
+        "value": "peruvian",
+        "name": "Peruvian",
+        "canonical": "peruvian"
+      },
+      {
+        "value": "pfcomercial",
+        "name": "PF/Comercial",
+        "canonical": "pf/comercial"
+      },
+      {
+        "value": "piemonte",
+        "name": "Piemonte",
+        "canonical": "piemonte"
+      },
+      {
+        "value": "pita",
+        "name": "Pita",
+        "canonical": "pita"
+      },
+      {
+        "value": "pizza",
+        "name": "Pizza",
+        "canonical": "pizza"
+      },
+      {
+        "value": "polish",
+        "name": "Polish",
+        "canonical": "polish"
+      },
+      {
+        "value": "polynesian",
+        "name": "Polynesian",
+        "canonical": "polynesian"
+      },
+      {
+        "value": "popuprestaurants",
+        "name": "Pop-Up Restaurants",
+        "canonical": "pop-up restaurants"
+      },
+      {
+        "value": "portuguese",
+        "name": "Portuguese",
+        "canonical": "portuguese"
+      },
+      {
+        "value": "potatoes",
+        "name": "Potatoes",
+        "canonical": "potatoes"
+      },
+      {
+        "value": "poutineries",
+        "name": "Poutineries",
+        "canonical": "poutineries"
+      },
+      {
+        "value": "provencal",
+        "name": "Provencal",
+        "canonical": "provencal"
+      },
+      {
+        "value": "pubfood",
+        "name": "Pub",
+        "canonical": "pub"
+      },
+      {
+        "value": "pueblan",
+        "name": "Pueblan",
+        "canonical": "pueblan"
+      },
+      {
+        "value": "puertorican",
+        "name": "Puerto Rican",
+        "canonical": "puerto rican"
+      },
+      {
+        "value": "ramen",
+        "name": "Ramen",
+        "canonical": "ramen"
+      },
+      {
+        "value": "raw_food",
+        "name": "Live/Raw",
+        "canonical": "live/raw"
+      },
+      {
+        "value": "reunion",
+        "name": "Reunion",
+        "canonical": "reunion"
+      },
+      {
+        "value": "rhinelandian",
+        "name": "Rhinelandian",
+        "canonical": "rhinelandian"
+      },
+      {
+        "value": "ribatejo",
+        "name": "Ribatejo",
+        "canonical": "ribatejo"
+      },
+      {
+        "value": "riceshop",
+        "name": "Rice",
+        "canonical": "rice"
+      },
+      {
+        "value": "robatayaki",
+        "name": "Robatayaki",
+        "canonical": "robatayaki"
+      },
+      {
+        "value": "rodizios",
+        "name": "Rodizios",
+        "canonical": "rodizios"
+      },
+      {
+        "value": "roman",
+        "name": "Roman",
+        "canonical": "roman"
+      },
+      {
+        "value": "romanian",
+        "name": "Romanian",
+        "canonical": "romanian"
+      },
+      {
+        "value": "rotisserie_chicken",
+        "name": "Rotisserie Chicken",
+        "canonical": "rotisserie chicken"
+      },
+      {
+        "value": "russian",
+        "name": "Russian",
+        "canonical": "russian"
+      },
+      {
+        "value": "salad",
+        "name": "Salad",
+        "canonical": "salad"
+      },
+      {
+        "value": "salvadoran",
+        "name": "Salvadoran",
+        "canonical": "salvadoran"
+      },
+      {
+        "value": "sandwiches",
+        "name": "Sandwiches",
+        "canonical": "sandwiches"
+      },
+      {
+        "value": "sardinian",
+        "name": "Sardinian",
+        "canonical": "sardinian"
+      },
+      {
+        "value": "scandinavian",
+        "name": "Scandinavian",
+        "canonical": "scandinavian"
+      },
+      {
+        "value": "schnitzel",
+        "name": "Schnitzel",
+        "canonical": "schnitzel"
+      },
+      {
+        "value": "scottish",
+        "name": "Scottish",
+        "canonical": "scottish"
+      },
+      {
+        "value": "seafood",
+        "name": "Seafood",
+        "canonical": "seafood"
+      },
+      {
+        "value": "senegalese",
+        "name": "Senegalese",
+        "canonical": "senegalese"
+      },
+      {
+        "value": "serbocroatian",
+        "name": "Serbo Croatian",
+        "canonical": "serbo croatian"
+      },
+      {
+        "value": "shanghainese",
+        "name": "Shanghainese",
+        "canonical": "shanghainese"
+      },
+      {
+        "value": "sicilian",
+        "name": "Sicilian",
+        "canonical": "sicilian"
+      },
+      {
+        "value": "signature_cuisine",
+        "name": "Signature",
+        "canonical": "signature"
+      },
+      {
+        "value": "singaporean",
+        "name": "Singaporean",
+        "canonical": "singaporean"
+      },
+      {
+        "value": "slovakian",
+        "name": "Slovakian",
+        "canonical": "slovakian"
+      },
+      {
+        "value": "soba",
+        "name": "Soba",
+        "canonical": "soba"
+      },
+      {
+        "value": "somali",
+        "name": "Somali",
+        "canonical": "somali"
+      },
+      {
+        "value": "soulfood",
+        "name": "Soul",
+        "canonical": "soul"
+      },
+      {
+        "value": "soup",
+        "name": "Soup",
+        "canonical": "soup"
+      },
+      {
+        "value": "southafrican",
+        "name": "South African",
+        "canonical": "south african"
+      },
+      {
+        "value": "southern",
+        "name": "Southern",
+        "canonical": "southern"
+      },
+      {
+        "value": "spanish",
+        "name": "Spanish",
+        "canonical": "spanish"
+      },
+      {
+        "value": "srilankan",
+        "name": "Sri Lankan",
+        "canonical": "sri lankan"
+      },
+      {
+        "value": "steak",
+        "name": "Steakhouses",
+        "canonical": "steakhouses"
+      },
+      {
+        "value": "sud_ouest",
+        "name": "French Southwest",
+        "canonical": "french southwest"
+      },
+      {
+        "value": "sukiyaki",
+        "name": "Sukiyaki",
+        "canonical": "sukiyaki"
+      },
+      {
+        "value": "supperclubs",
+        "name": "Supper Clubs",
+        "canonical": "supper clubs"
+      },
+      {
+        "value": "sushi",
+        "name": "Sushi Bars",
+        "canonical": "sushi bars"
+      },
+      {
+        "value": "swabian",
+        "name": "Swabian",
+        "canonical": "swabian"
+      },
+      {
+        "value": "swedish",
+        "name": "Swedish",
+        "canonical": "swedish"
+      },
+      {
+        "value": "swissfood",
+        "name": "Swiss",
+        "canonical": "swiss"
+      },
+      {
+        "value": "syrian",
+        "name": "Syrian",
+        "canonical": "syrian"
+      },
+      {
+        "value": "szechuan",
+        "name": "Szechuan",
+        "canonical": "szechuan"
+      },
+      {
+        "value": "tabernas",
+        "name": "Tabernas",
+        "canonical": "tabernas"
+      },
+      {
+        "value": "tacos",
+        "name": "Tacos",
+        "canonical": "tacos"
+      },
+      {
+        "value": "taiwanese",
+        "name": "Taiwanese",
+        "canonical": "taiwanese"
+      },
+      {
+        "value": "takoyaki",
+        "name": "Takoyaki",
+        "canonical": "takoyaki"
+      },
+      {
+        "value": "tamales",
+        "name": "Tamales",
+        "canonical": "tamales"
+      },
+      {
+        "value": "tapas",
+        "name": "Tapas Bars",
+        "canonical": "tapas bars"
+      },
+      {
+        "value": "tapasmallplates",
+        "name": "Tapas/Small Plates",
+        "canonical": "tapas/small plates"
+      },
+      {
+        "value": "tavolacalda",
+        "name": "Tavola Calda",
+        "canonical": "tavola calda"
+      },
+      {
+        "value": "tempura",
+        "name": "Tempura",
+        "canonical": "tempura"
+      },
+      {
+        "value": "teochew",
+        "name": "Teochew",
+        "canonical": "teochew"
+      },
+      {
+        "value": "teppanyaki",
+        "name": "Teppanyaki",
+        "canonical": "teppanyaki"
+      },
+      {
+        "value": "tex-mex",
+        "name": "Tex-Mex",
+        "canonical": "tex-mex"
+      },
+      {
+        "value": "thai",
+        "name": "Thai",
+        "canonical": "thai"
+      },
+      {
+        "value": "themedcafes",
+        "name": "Themed Cafes",
+        "canonical": "themed cafes"
+      },
+      {
+        "value": "tonkatsu",
+        "name": "Tonkatsu",
+        "canonical": "tonkatsu"
+      },
+      {
+        "value": "tradamerican",
+        "name": "American (Traditional)",
+        "canonical": "american -lrb- traditional -rrb-"
+      },
+      {
+        "value": "traditional_swedish",
+        "name": "Traditional Swedish",
+        "canonical": "traditional swedish"
+      },
+      {
+        "value": "tras_os_montes",
+        "name": "Tras-os-Montes",
+        "canonical": "tras-os-montes"
+      },
+      {
+        "value": "trattorie",
+        "name": "Trattorie",
+        "canonical": "trattorie"
+      },
+      {
+        "value": "trinidadian",
+        "name": "Trinidadian",
+        "canonical": "trinidadian"
+      },
+      {
+        "value": "turkish",
+        "name": "Turkish",
+        "canonical": "turkish"
+      },
+      {
+        "value": "turkishravioli",
+        "name": "Turkish Ravioli",
+        "canonical": "turkish ravioli"
+      },
+      {
+        "value": "tuscan",
+        "name": "Tuscan",
+        "canonical": "tuscan"
+      },
+      {
+        "value": "udon",
+        "name": "Udon",
+        "canonical": "udon"
+      },
+      {
+        "value": "ukrainian",
+        "name": "Ukrainian",
+        "canonical": "ukrainian"
+      },
+      {
+        "value": "unagi",
+        "name": "Unagi",
+        "canonical": "unagi"
+      },
+      {
+        "value": "uzbek",
+        "name": "Uzbek",
+        "canonical": "uzbek"
+      },
+      {
+        "value": "vegan",
+        "name": "Vegan",
+        "canonical": "vegan"
+      },
+      {
+        "value": "vegetarian",
+        "name": "Vegetarian",
+        "canonical": "vegetarian"
+      },
+      {
+        "value": "venetian",
+        "name": "Venetian",
+        "canonical": "venetian"
+      },
+      {
+        "value": "venezuelan",
+        "name": "Venezuelan",
+        "canonical": "venezuelan"
+      },
+      {
+        "value": "venison",
+        "name": "Venison",
+        "canonical": "venison"
+      },
+      {
+        "value": "vietnamese",
+        "name": "Vietnamese",
+        "canonical": "vietnamese"
+      },
+      {
+        "value": "waffles",
+        "name": "Waffles",
+        "canonical": "waffles"
+      },
+      {
+        "value": "westernjapanese",
+        "name": "Western Style Japanese",
+        "canonical": "western style japanese"
+      },
+      {
+        "value": "wok",
+        "name": "Wok",
+        "canonical": "wok"
+      },
+      {
+        "value": "wraps",
+        "name": "Wraps",
+        "canonical": "wraps"
+      },
+      {
+        "value": "yakiniku",
+        "name": "Yakiniku",
+        "canonical": "yakiniku"
+      },
+      {
+        "value": "yakitori",
+        "name": "Yakitori",
+        "canonical": "yakitori"
+      },
+      {
+        "value": "yucatan",
+        "name": "Yucatan",
+        "canonical": "yucatan"
+      },
+      {
+        "value": "yugoslav",
+        "name": "Yugoslav",
+        "canonical": "yugoslav"
+      },
+      {
+        "value": "abruzzese",
+        "name": "Abruzzese",
+        "canonical": "abruzzese"
+      },
+      {
+        "value": "alentejo",
+        "name": "Alentejo",
+        "canonical": "alentejo"
+      },
+      {
+        "value": "algarve",
+        "name": "Algarve",
+        "canonical": "algarve"
+      },
+      {
+        "value": "alsatian",
+        "name": "Alsatian",
+        "canonical": "alsatian"
+      },
+      {
+        "value": "altoatesine",
+        "name": "Altoatesine",
+        "canonical": "altoatesine"
+      },
+      {
+        "value": "apulian",
+        "name": "Apulian",
+        "canonical": "apulian"
+      },
+      {
+        "value": "arroceria_paella",
+        "name": "Arroceria / Paella",
+        "canonical": "arroceria / paella"
+      },
+      {
+        "value": "auvergnat",
+        "name": "Auvergnat",
+        "canonical": "auvergnat"
+      },
+      {
+        "value": "azores",
+        "name": "Azores",
+        "canonical": "azores"
+      },
+      {
+        "value": "baden",
+        "name": "Baden",
+        "canonical": "baden"
+      },
+      {
+        "value": "beira",
+        "name": "Beira",
+        "canonical": "beira"
+      },
+      {
+        "value": "berrichon",
+        "name": "Berrichon",
+        "canonical": "berrichon"
+      },
+      {
+        "value": "blowfish",
+        "name": "Blowfish",
+        "canonical": "blowfish"
+      },
+      {
+        "value": "bourguignon",
+        "name": "Bourguignon",
+        "canonical": "bourguignon"
+      },
+      {
+        "value": "calabrian",
+        "name": "Calabrian",
+        "canonical": "calabrian"
+      },
+      {
+        "value": "cantonese",
+        "name": "Cantonese",
+        "canonical": "cantonese"
+      },
+      {
+        "value": "cheekufta",
+        "name": "Chee Kufta",
+        "canonical": "chee kufta"
+      },
+      {
+        "value": "colombian",
+        "name": "Colombian",
+        "canonical": "colombian"
+      },
+      {
+        "value": "conveyorsushi",
+        "name": "Conveyor Belt Sushi",
+        "canonical": "conveyor belt sushi"
+      },
+      {
+        "value": "cucinacampana",
+        "name": "Cucina campana",
+        "canonical": "cucina campana"
+      },
+      {
+        "value": "donburi",
+        "name": "Donburi",
+        "canonical": "donburi"
+      },
+      {
+        "value": "easterngerman",
+        "name": "Eastern German",
+        "canonical": "eastern german"
+      },
+      {
+        "value": "easternmexican",
+        "name": "Eastern Mexican",
+        "canonical": "eastern mexican"
+      },
+      {
+        "value": "egyptian",
+        "name": "Egyptian",
+        "canonical": "egyptian"
+      },
+      {
+        "value": "emilian",
+        "name": "Emilian",
+        "canonical": "emilian"
+      },
+      {
+        "value": "fado_houses",
+        "name": "Fado Houses",
+        "canonical": "fado houses"
+      },
+      {
+        "value": "falafel",
+        "name": "Falafel",
+        "canonical": "falafel"
+      },
+      {
+        "value": "franconian",
+        "name": "Franconian",
+        "canonical": "franconian"
+      },
+      {
+        "value": "friulan",
+        "name": "Friulan",
+        "canonical": "friulan"
+      },
+      {
+        "value": "gozleme",
+        "name": "Gozleme",
+        "canonical": "gozleme"
+      },
+      {
+        "value": "gyudon",
+        "name": "Gyudon",
+        "canonical": "gyudon"
+      },
+      {
+        "value": "handrolls",
+        "name": "Hand Rolls",
+        "canonical": "hand rolls"
+      },
+      {
+        "value": "homemadefood",
+        "name": "Homemade",
+        "canonical": "homemade"
+      },
+      {
+        "value": "horumon",
+        "name": "Horumon",
+        "canonical": "horumon"
+      },
+      {
+        "value": "izakaya",
+        "name": "Izakaya",
+        "canonical": "izakaya"
+      },
+      {
+        "value": "jaliscan",
+        "name": "Jaliscan",
+        "canonical": "jaliscan"
+      },
+      {
+        "value": "japacurry",
+        "name": "Japanese Curry",
+        "canonical": "japanese curry"
+      },
+      {
+        "value": "lahmacun",
+        "name": "Lahmacun",
+        "canonical": "lahmacun"
+      },
+      {
+        "value": "lebanese",
+        "name": "Lebanese",
+        "canonical": "lebanese"
+      },
+      {
+        "value": "madeira",
+        "name": "Madeira",
+        "canonical": "madeira"
+      },
+      {
+        "value": "minho",
+        "name": "Minho",
+        "canonical": "minho"
+      },
+      {
+        "value": "ottomancuisine",
+        "name": "Ottoman",
+        "canonical": "ottoman"
+      },
+      {
+        "value": "oyakodon",
+        "name": "Oyakodon",
+        "canonical": "oyakodon"
+      },
+      {
+        "value": "pierogis",
+        "name": "Pierogis",
+        "canonical": "pierogis"
+      }
+    ]
+  }
