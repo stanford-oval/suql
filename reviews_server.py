@@ -11,7 +11,6 @@ from utils import linearize, chunk_text
 import json
 from tqdm import tqdm
 from schematization.tokenizer import num_tokens_from_string
-from free_text_support.overload_ops import in_any_no_cache, equal_no_cache
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -260,6 +259,9 @@ def answer():
 
 
 def _compute_embeddings(documents, question, chunking_param=15):
+    assert(type(documents) == list)
+    assert(type(question) == str)
+    
     # computes embedding of `documents`` for a specific `chunking_param``
     # then returns the similarity score between `question` and `documents`, sorted by desc order
     # this function caches the embedding of `documents` in a local mongodb, for a specific `chunking_param`
@@ -278,7 +280,7 @@ def _compute_embeddings(documents, question, chunking_param=15):
     result = cache_db.find_one({"input_list": documents, "chunking_param": chunking_param})
     if result:
         list_embeddings = result["embeddings"]
-        print(len(list_embeddings))
+        # print(len(list_embeddings))
         embeddings = torch.tensor(list_embeddings, device=device)
     else:
         chunked_doc = [chunk_text(document, chunking_param, use_spacy=True) for document in documents]  # this gives list of lists
@@ -296,16 +298,24 @@ def _compute_embeddings(documents, question, chunking_param=15):
         cache_entry = {"input_list": documents, "chunking_param": chunking_param, "embeddings": list_embeddings}
         cache_db.insert_one(cache_entry)
     
-    
+    # attempt to find embedding of question from cache_db
+    result = cache_db.find_one({"input_sentence": question})
+    if result:
+        first_list_embeddings = result["embeddings"]
+        first_embedding = torch.tensor(first_list_embeddings, device=device)
+    else:
+        question_tokenized = tokenizer([question], padding=True, truncation=True, return_tensors="pt").to(device)
+        first_embedding = model(**question_tokenized, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)
+        first_list_embeddings = first_embedding.tolist()
+        cache_entry = {"input_sentence": question, "embeddings": first_list_embeddings}
+        cache_db.insert_one(cache_entry)
+
+    # compute final embedding
     similarities = []
-    question_tokenized = tokenizer([question], padding=True, truncation=True, return_tensors="pt").to(device)
-    first_embedding = model(**question_tokenized, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)
-    
     for i in range(len(embeddings)):
         similarities.append((first_embedding[0] @ embeddings[i]).item())
 
     similarities.sort(reverse=True)
-    # print(similarities)
     torch.cuda.empty_cache()
 
     return similarities
@@ -354,8 +364,6 @@ def get_highest_embedding(reviews, question):
 @app.route('/booleanAnswer', methods=['POST'])
 def boolean_answer():
     data = request.get_json()
-    print("/booleanAnswer receieved request {}".format(data))
-        
     # input params in this `data`    
     # data["text"] : text to filter upon, either a string or a list
     # data["question"] : question to answer
@@ -364,14 +372,19 @@ def boolean_answer():
         return None
     
     if isinstance(data["text"], list):
-        result = boolean_retrieve_reviews(data["text"], data["question"])
-        res = {
-            "result" : result
-        }
-        print(res)
-        return res
+        input_text = data["text"]
+    elif isinstance(data["text"], str):
+        input_text = [data["text"]]
+    else:
+        return None
     
-    return None
+    result = boolean_retrieve_reviews(input_text, data["question"])
+    res = {
+        "result" : result
+    }
+    print(res)
+    return res
+
 
 @app.route('/booleanAnswerScore', methods=['POST'])
 def boolean_answer_score():
@@ -386,15 +399,22 @@ def boolean_answer_score():
         return None
     
     if isinstance(data["text"], list):
-        result = get_highest_embedding(data["text"], data["question"])
-        res = {
-            "result" : result
-        }
-        print(res)
-        return res
-
+        input_text = data["text"]
+    elif isinstance(data["text"], str):
+        input_text = [data["text"]]
+    else:
+        return None
     
-    return None
+    start_time = time.time()
+    result = get_highest_embedding(input_text, data["question"])
+    res = {
+        "result" : result
+    }
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(res, "; {} seconds".format(execution_time))
+    return res
+
 
 @app.route('/stringEquals', methods=['POST'])
 def string_equals():
@@ -408,38 +428,7 @@ def string_equals():
 
     if "comp_value" not in data or "field_value" not in data or "field_name" not in db:
         return None
-    
-@app.route('/inAny', methods=['POST'])
-def in_any():
-    data = request.get_json()
-    # input params in this `data`    
-    # data["comp_value"]  : text to compare against
-    # data["field_values"] : list of text in the db to compare
 
-    if "comp_value" not in data or "field_values" not in data:
-        return None
-    
-    res = {
-        "result" : in_any_no_cache(data["comp_value"], data["field_values"])
-    }
-    
-    return res
-
-@app.route('/equals', methods=['POST'])
-def equals():
-    data = request.get_json()
-    # input params in this `data`    
-    # data["comp_value"]  : text to compare against
-    # data["field_values"] : list of text in the db to compare
-
-    if "comp_value" not in data or "field_values" not in data:
-        return None
-    
-    res = {
-        "result" : equal_no_cache(data["comp_value"], data["field_values"])
-    }
-    
-    return res
 
 def get_all_processed():
     restaurants = list(schematized.find())

@@ -16,11 +16,30 @@ return parsed_result["result"]
 $$ LANGUAGE plpython3u;
 
 
-
 CREATE OR REPLACE FUNCTION boolean_answer (source TEXT[20], question TEXT)
   RETURNS BOOLEAN
 AS $$
 if source is None or len(source) == 0:
+  return False
+
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/booleanAnswer"
+
+response = requests.post(url=URL, data=json.dumps({
+    "text" : source,
+    "question": question
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+return parsed_result["result"]
+$$ LANGUAGE plpython3u;
+
+CREATE OR REPLACE FUNCTION boolean_answer (source TEXT, question TEXT)
+  RETURNS BOOLEAN
+AS $$
+if not source:
   return False
 
 import requests
@@ -59,6 +78,25 @@ parsed_result = response.json()  # Assuming the response is JSON, parse it into 
 return parsed_result["result"]
 $$ LANGUAGE plpython3u;
 
+CREATE OR REPLACE FUNCTION boolean_answer_score (source TEXT, question TEXT)
+  RETURNS NUMERIC(10, 6)
+AS $$
+if not source:
+  return 0
+
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/booleanAnswerScore"
+
+response = requests.post(url=URL, data=json.dumps({
+    "text" : source,
+    "question": question
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+return parsed_result["result"]
+$$ LANGUAGE plpython3u;
 
 
 CREATE OR REPLACE FUNCTION summary (source TEXT[20])
@@ -136,6 +174,27 @@ response = requests.post(url=URL, data=json.dumps({
 response.raise_for_status()  # Raise an exception if the request was not successful
 parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
 return parsed_result["result"]
+$$ LANGUAGE plpython3u;
+
+CREATE OR REPLACE FUNCTION verify (source TEXT[20], question TEXT)
+  RETURNS BOOLEAN
+AS $$
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/answer"
+
+response = requests.post(url=URL, data=json.dumps({
+    "text" : source,
+    "question": question + ", yes or no?"
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+
+if "yes" in parsed_result["result"].lower():
+  return True
+else:
+  return False
 $$ LANGUAGE plpython3u;
 
 

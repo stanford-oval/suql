@@ -1,16 +1,22 @@
-Rewrite a SQL query according to a specific pattern.
+Rewrite a SQL query according to a specific pattern. `boolean_answer` should no longer appear after WHERE.
 
 Input: SELECT * FROM foo WHERE boolean_answer(field_1, 'value1');
 Output: SELECT *, boolean_answer_score(field_1, 'value1') AS _score FROM foo ORDER BY _score DESC;
 
-Input: SELECT * FROM foo WHERE boolean_answer(field_1, "value1") AND field2 = 'value2';
-Output: SELECT *, boolean_answer_score(field_1, 'value1') AS _score FROM foo WHERE field2 = 'value2' ORDER BY _score DESC;
+Input: SELECT * FROM foo WHERE boolean_answer(field_1, "value1") AND field_2 = 'value_2';
+Output: SELECT *, boolean_answer_score(field_1, 'value1') AS _score FROM foo WHERE field_2 = 'value_2' ORDER BY _score DESC;
 
-Input: SELECT boolean_answer(field_1, 'value1'), field2 FROM foo WHERE field3 = 'value3';
-Output: SELECT boolean_answer(field_1, 'value1'), field2 FROM foo WHERE field3 = 'value3';
+Input: SELECT boolean_answer(field_1, 'value1'), field_2 FROM foo WHERE field_3 = 'value_3';
+Output: SELECT boolean_answer(field_1, 'value1'), field_2 FROM foo WHERE field_3 = 'value_3';
 
-Input: SELECT summary(field_1), field2 FROM foo WHERE field3 = 'value3' AND boolean_answer(field_2, 'value2');
-Output: SELECT summary(field_1), field2, boolean_answer_score(field_3, 'value3') AS _score FROM foo WHERE field3 = 'value3' ORDER BY _score DESC;
+Input: SELECT summary(field_1), * FROM foo WHERE field_3 = 'value_3' AND boolean_answer(field_2, 'value_2');
+Output: SELECT summary(field_1), *, boolean_answer_score(field_2, 'value_2') AS _score FROM foo WHERE field_3 = 'value_3' ORDER BY _score DESC;
+
+Input: SELECT summary(field_1), *, answer(field_2, value_2) FROM foo, bar WHERE field_3 = 'value_3' AND boolean_answer(field_4, 'value_4');
+Output: SELECT summary(field_1), *, answer(field_2, value_2), boolean_answer_score(field_4, 'value_4') AS _score FROM foo, bar WHERE field_3 = 'value_3' ORDER BY _score DESC;
+
+Input: SELECT summary(field_1), *, answer(field_2, value_2) FROM foo WHERE field_3 = 'value_3' AND boolean_answer(field_4, 'value_4');
+Output: SELECT summary(field_1), *, answer(field_2, value_2), boolean_answer_score(field_4, 'value_4') AS _score FROM foo WHERE field_3 = 'value_3' ORDER BY _score DESC;
 
 Input: {{ sql }}
 Output: 

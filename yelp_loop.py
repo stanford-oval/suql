@@ -31,10 +31,19 @@ from prompt_continuation import llm_generate, batch_llm_generate
 logger = logging.getLogger(__name__)
 
 def fetch_cuisine_list():
-    with open("cuisines.json", "r") as fd:
-        data = json.load(fd)
+    try:
+        with open("cuisines.json", "r") as fd:
+            data = json.load(fd)
     
-    res = list(map(lambda x : x["canonical"], data["data"]))
+        res = list(data)
+    except Exception as e:
+        print("regenerating cuisines list from sparql query")
+        res = execute_sql("SELECT DISTINCT unnest(cuisines) FROM restaurants;")
+        res = list(map(lambda x: x[0], res[0]))
+        
+        with open("cuisines.json", "w") as fd:
+            json.dump(res, fd)
+        
     return sorted(res)
 
 CUISINE_LIST = fetch_cuisine_list()
@@ -202,52 +211,102 @@ def get_field_information(name, operator, value, user_target):
     
     return res
 
-def sql_rewrites(in_sql : str, classification_fields = {}):
+def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_fields_single = {}):
     output_parser = CommaSeparatedListOutputParser()
 
     total_rewrite_time = 0
     temp = in_sql
     # the classification_fields is a dictionary.
     # each key is the field name, and each value is the list of available enum values
-    for field_name, field_values in classification_fields.items():
+    for field_name, field_values in classification_fields_list.items():
         macthes = re.finditer(r"'([^']*)' = ANY \({}\)".format(field_name), in_sql)
         for match in macthes:
             predicated_field_value = match.group(1)
             if not predicated_field_value in field_values:
-                # we need to do a classification here
-                classified_field_value_raw, rewrite_time = llm_generate(
-                    template_file='prompts/field_classification.prompt',
-                    engine='gpt-35-turbo',
-                    stop_tokens=["\n"],
-                    max_tokens=70,
-                    temperature=0,
-                    prompt_parameter_values={
-                        "field_value_choices": field_values,
-                        "predicated_field_value": predicated_field_value,
-                        "field_name": field_name
-                    },
-                    postprocess=False)
-                total_rewrite_time += rewrite_time
-                classified_field_values_list = output_parser.parse(classified_field_value_raw)
-                
+                # first, try to a lower case / contains softmatch
+                softmatch_res = [entry for entry in field_values if predicated_field_value.lower() in entry.lower()]
                 replacement_predicates = []
-                for classified_field_value in classified_field_values_list:
-                    print("1111 {}".format(classified_field_value))
-                    if classified_field_value in field_values:
-                        replacement_predicates.append("'{}' = ANY ({})".format(classified_field_value, field_name))
+                
+                if softmatch_res:
+                    replacement_predicates = ["'{}' = ANY ({})".format(i, field_name) for i in softmatch_res]
+                    print("softmatch matched to {}".format(replacement_predicates))
+                else:
+                    # we need to do a classification here
+                    classified_field_value_raw, rewrite_time = llm_generate(
+                        template_file='prompts/field_classification.prompt',
+                        engine='gpt-35-turbo',
+                        stop_tokens=["\n"],
+                        max_tokens=70,
+                        temperature=0,
+                        prompt_parameter_values={
+                            "field_value_choices": field_values,
+                            "predicated_field_value": predicated_field_value,
+                            "field_name": field_name
+                        },
+                        postprocess=False)
+                    total_rewrite_time += rewrite_time
+                    classified_field_values_list = output_parser.parse(classified_field_value_raw)
+                    
+                    for classified_field_value in classified_field_values_list:
+                        if classified_field_value in field_values:
+                            replacement_predicates.append("'{}' = ANY ({})".format(classified_field_value, field_name))
+                
                 if replacement_predicates:
                     replacement = " OR ".join(replacement_predicates)
                     replacement = "( " + replacement + " )"
                 else:
                     replacement = "TRUE"
                 
-                print("match, group 0: {}".format(match.group(0)))
                 temp = temp.replace(match.group(0), replacement)
-                print("temp, after replacement: {}".format(temp))
+                
+    for field_name, field_values in classification_fields_single.items():
+        macthes = re.finditer(r"{} = '([^']*)'".format(field_name), in_sql)
+        for match in macthes:
+            predicated_field_value = match.group(1)
+            if not predicated_field_value in field_values:
+                # first, try to a lower case / contains softmatch
+                softmatch_res = [entry for entry in field_values if predicated_field_value.lower() in entry.lower()]
+                replacement_predicates = []
+                
+                if softmatch_res:
+                    replacement_predicates = ["{} = '{}'".format(field_name, i) for i in softmatch_res]
+                    print("softmatch matched to {}".format(replacement_predicates))
+                else:
+                    # we need to do a classification here
+                    classified_field_value_raw, rewrite_time = llm_generate(
+                        template_file='prompts/field_classification.prompt',
+                        engine='gpt-35-turbo',
+                        stop_tokens=["\n"],
+                        max_tokens=70,
+                        temperature=0,
+                        prompt_parameter_values={
+                            "field_value_choices": field_values,
+                            "predicated_field_value": predicated_field_value,
+                            "field_name": field_name
+                        },
+                        postprocess=False)
+                    total_rewrite_time += rewrite_time
+                    classified_field_values_list = output_parser.parse(classified_field_value_raw)
+                    
+                    for classified_field_value in classified_field_values_list:
+                        if classified_field_value in field_values:
+                            replacement_predicates.append("{} = '{}'".format(field_name, classified_field_value))
+                
+                if replacement_predicates:
+                    replacement = " OR ".join(replacement_predicates)
+                    replacement = "( " + replacement + " )"
+                else:
+                    replacement = "TRUE"
+                
+                temp = temp.replace(match.group(0), replacement)
                 
     # do another rewrite if answer(field_name, value) = 'Yes' is in the prediction
     # TODO: handle other similar queries
     temp = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", temp)
+    
+    # escape `'` character
+    # TODO: it seems psycopg2 does not allow an easy escape maneuver. Investigate further
+    temp = temp.replace("\\'", "")
     return temp, total_rewrite_time
 
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
@@ -259,94 +318,108 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
                 prompt_parameter_values={'dlg': dlgHistory, 'query': user_query},
                 postprocess=False)
     
-    NOT_USABLE_FIELDS = [
-        "reviews",
-        "_id",
-        "id",
-        "opening_hours",
+    def if_usable(field : str):
+        NOT_USABLE_FIELDS = [
+            "reviews",
+            "_id",
+            "id",
+            "opening_hours",
 
-        # schematized fields        
-        "ambiance",
-        "specials",
-        "reservation_info",
-        "nutrition_info",
-        "signature_cocktails",
-        "has_private_event_spaces",
-        "promotions",
-        "parking_options",
-        "game_day_specials",
-        "live_sports_events",
-        "dress_code",
-        "happy_hour_info",
-        "highlights",
-        "service",
-        "has_outdoor_seating",
-        "drinks",
-        "dietary_restrictions",
-        "experience",
-        "nutritious_options",
-        "creative_menu",
-        "has_student_discount",
-        "has_senior_discount",
-        "local_cuisine",
-        "trendy",
-        "wheelchair_accessible",
-        "noise_level",
-        "kids_menu",
-        "childrens_activities",
-        "if_family_friendly",
-        "wait_time",
-        "has_live_music",
-        "serves_alcohol",
-        "michelin",
-        "accomodates_large_groups",
+            # schematized fields        
+            "ambiance",
+            "specials",
+            "reservation_info",
+            "nutrition_info",
+            "signature_cocktails",
+            "has_private_event_spaces",
+            "promotions",
+            "parking_options",
+            "game_day_specials",
+            "live_sports_events",
+            "dress_code",
+            "happy_hour_info",
+            "highlights",
+            "service",
+            "has_outdoor_seating",
+            "drinks",
+            "dietary_restrictions",
+            "experience",
+            "nutritious_options",
+            "creative_menu",
+            "has_student_discount",
+            "has_senior_discount",
+            "local_cuisine",
+            "trendy",
+            "wheelchair_accessible",
+            "noise_level",
+            "kids_menu",
+            "childrens_activities",
+            "if_family_friendly",
+            "wait_time",
+            "has_live_music",
+            "serves_alcohol",
+            "michelin",
+            "accomodates_large_groups",
+            
+            # the citation fields        
+            "ambiance_citation",
+            "specials_citation",
+            "reservation_info_citation",
+            "nutrition_info_citation",
+            "signature_cocktails_citation",
+            "has_private_event_spaces_citation",
+            "promotions_citation",
+            "parking_options_citation",
+            "game_day_specials_citation",
+            "live_sports_events_citation",
+            "dress_code_citation",
+            "happy_hour_info_citation",
+            "highlights_citation",
+            "service_citation",
+            "has_outdoor_seating_citation",
+            "drinks_citation",
+            "dietary_restrictions_citation",
+            "experience_citation",
+            "nutritious_options_citation",
+            "creative_menu_citation",
+            "has_student_discount_citation",
+            "has_senior_discount_citation",
+            "local_cuisine_citation",
+            "trendy_citation",
+            "wheelchair_accessible_citation",
+            "noise_level_citation",
+            "kids_menu_citation",
+            "childrens_activities_citation",
+            "if_family_friendly_citation",
+            "wait_time_citation",
+            "has_live_music_citation",
+            "serves_alcohol_citation",
+            "michelin_citation",
+            "accomodates_large_groups_citation",
+            
+            # special internal fields
+            "_score",
+            "_schematization_results"
+            ]
         
-        # the citation fields        
-        "ambiance_citation",
-        "specials_citation",
-        "reservation_info_citation",
-        "nutrition_info_citation",
-        "signature_cocktails_citation",
-        "has_private_event_spaces_citation",
-        "promotions_citation",
-        "parking_options_citation",
-        "game_day_specials_citation",
-        "live_sports_events_citation",
-        "dress_code_citation",
-        "happy_hour_info_citation",
-        "highlights_citation",
-        "service_citation",
-        "has_outdoor_seating_citation",
-        "drinks_citation",
-        "dietary_restrictions_citation",
-        "experience_citation",
-        "nutritious_options_citation",
-        "creative_menu_citation",
-        "has_student_discount_citation",
-        "has_senior_discount_citation",
-        "local_cuisine_citation",
-        "trendy_citation",
-        "wheelchair_accessible_citation",
-        "noise_level_citation",
-        "kids_menu_citation",
-        "childrens_activities_citation",
-        "if_family_friendly_citation",
-        "wait_time_citation",
-        "has_live_music_citation",
-        "serves_alcohol_citation",
-        "michelin_citation",
-        "accomodates_large_groups_citation",
+        if field in NOT_USABLE_FIELDS:
+            return False
         
-        # special internal fields
-        "_score",
-        "_schematization_results"
-        ]
-    
+        if field.startswith("_score"):
+            return False
+        
+        return True
+        
     print("generated SQL query before rewriting: {}".format(first_sql))
     
-    second_sql, second_sql_time = sql_rewrites(first_sql, classification_fields={
-        "cuisines": CUISINE_LIST
-    })
+    second_sql, second_sql_time = sql_rewrites(
+        first_sql,
+        classification_fields_list={
+            "cuisines": CUISINE_LIST
+        },
+        classification_fields_single={
+            "location": ["Palo Alto", "Sunnyvale", "San Francisco", "Cupertino"]
+        })
     # do another rewrite if "boolean_answer" is in the prediction
     if "boolean_answer" in second_sql:
         second_sql, second_sql_time_ = llm_generate(template_file="prompts/parser_rewrite_sql.prompt",
@@ -367,7 +440,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
 
     final_res = []
     for res in results:
-        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if column_name not in NOT_USABLE_FIELDS)
+        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
         if "rating" in temp:
             temp["rating"] = float(temp["rating"])
         
@@ -398,7 +471,7 @@ def compute_next_turn(
     dlgHistory[-1].sys_type = sys_type
     
     # determine whether to send to Genie
-    continuation, first_classification_time = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+    continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
@@ -433,8 +506,8 @@ def compute_next_turn(
             }
             return dlgHistory
             
-    response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
-                        max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
+    response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
+                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
     
     dlgHistory[-1].time_statement = {
@@ -452,7 +525,7 @@ def compute_next_turn(
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
-    parser.add_argument('--output_file', type=str, required=True,
+    parser.add_argument('--output_file', type=str, default='log.log',
                         help='Where to write the outputs.')
     parser.add_argument('--engine', type=str, default='text-davinci-003',
                         choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-35-turbo'],
@@ -499,6 +572,7 @@ if __name__ == '__main__':
                 sys_type=args.sys_type
             )
             print_chatbot('Chatbot: ' + dlgHistory[-1].agent_utterance)
+            print(dlgHistory[-1].time_statement)
 
     finally:
         with open(args.output_file, 'a') as output_file:

@@ -26,13 +26,13 @@ User: what are some japanese restaurants in Kansas City?
 Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'kansas City' LIMIT 1;
 --
 User: Show me a family-friendly restaurant
-Target: SELECT *, summary(reviews) FROM restaurants WHERE boolean_answer(reviews, 'do you find this restaurant to be family-friendly?') LIMIT 1;
+Target: SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE boolean_answer(reviews, 'do you find this restaurant to be family-friendly?') LIMIT 1;
 Agent: I found Wesley's steakhouse. Reviews mention kids love going there with their parents. It should be a great weekend dinner for you and your family.
 User: What do the reviews say about the atmosphere in the restaurant?
 Target: SELECT answer(reviews, 'What is the atmosphere?') FROM restaurants WHERE name ILIKE 'Wesley's steakhouse' LIMIT 1;
 --
 User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE 'chinese' = ANY (cuisines); AND boolean_answer(reviews, 'does this restaurant have short wait time?') LIMIT 1;
+Target: SELECT *, summary(reviews), answer(reviews, 'what is the wait time?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND boolean_answer(reviews, 'does this restaurant have short wait time?') LIMIT 1;
 --
 User: i'm hungry, what should i have for lunch?
 Target: SELECT *, summary(reviews) FROM restaurants LIMIT 1;
@@ -42,6 +42,12 @@ Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(name = 'Daigo') LI
 --
 User: I want a great restaurant in Napa, CA.
 Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' LIMIT 1;
+Agent: I found the 5.0 star Gui's vegan house. It has 2,654 reviews and reviews mention great atmosphere, quick and good service, and good food quality.
+User: Give me the review that talk about good food quality.
+Target: SELECT single_review FROM restaurants, unnest(reviews) as single_review WHERE name ILIKE 'Gui's vegan house' AND boolean_answer(single_review, 'does this review mention good food quality?') LIMIT 5;
+--
+User: Which restaurants have a happy hour in Bakersfield?
+Target: SELECT *, summary(reviews), answer(reviews, 'does this restaurant offer a happy hour') FROM restaurants WHERE location = 'Bakersfield' AND boolean_answer(reviews, 'does this restaurant have a happy hour?') LIMIT 1;
 --
 {% for dlg_turn in dlg[:-1] %}
 {% if dlg_turn.genie_utterance is not none %}
