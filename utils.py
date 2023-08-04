@@ -1,3 +1,14 @@
+import spacy
+nlp = spacy.load('en_core_web_sm')
+
+import tiktoken
+
+def num_tokens_from_string(string: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -22,7 +33,7 @@ def input_user() -> str:
     return user_utterance
 
 
-def chunk_text(text, k):
+def chunk_text(text, k, use_spacy=True):
     """
     Chunk a string of text into a list of k-token sized strings
 
@@ -30,6 +41,23 @@ def chunk_text(text, k):
     :param k: int representing size of each chunk
     :return: a list of k-token-sized chunks of the original text
     """
+    if use_spacy:
+        # in case of using spacy, k is the minimum number of words per chunk
+        chunks = [i.text for i in nlp(text).sents]
+        res = []
+        carryover = ""
+        for i in chunks:
+            if len((carryover + i).split()) < k:
+                # chunks stripped the spaces, so when we need to append
+                # we append a space for preparation
+                carryover = carryover + i + " "
+            else:
+                res.append(carryover + i)
+                carryover = ""
+        if carryover != "":
+            res.append(carryover.rstrip())
+        return res
+            
     all_chunks = []
     counter = 0
     chunk = []

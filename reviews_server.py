@@ -5,9 +5,12 @@ import os
 from flask import request, Flask
 import time
 import torch
+from torch.cuda import OutOfMemoryError
 from prompt_continuation import llm_generate
-from utils import linearize
+from utils import linearize, chunk_text
 import json
+from tqdm import tqdm
+from schematization.tokenizer import num_tokens_from_string
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -21,10 +24,12 @@ mongo = os.environ.get('COSMOS_CONNECTION_STRING')
 client = pymongo.MongoClient(mongo)
 db = client['yelpbot']
 collection = db['yelp_data']
+schematized = db['schematized']
+cache_db = client['free_text_cache']['list_docs_to_embeddings']
 
 # Set the server address
 host = "127.0.0.1"
-port = 8503
+port = 8500
 review_server_address = 'http://{}:{}'.format(host, port)
 app = Flask(__name__)
 
@@ -212,7 +217,7 @@ def getMenus():
 @app.route('/answer', methods=['POST'])
 def answer():
     data = request.get_json()
-    print("/answer receieved request {}".format(data))
+    # print("/answer receieved request {}".format(data))
         
     # input params in this `data`    
     # data["text"] : text to QA upon
@@ -221,12 +226,15 @@ def answer():
     if "text" not in data or "question" not in data:
         return None
     
+    if not data["text"]:
+        return {
+            "result": "no information"
+        }
+    
     text_res = []
     if isinstance(data["text"], list):
-        # TODO: to be precise one needs to use the openAI tokenzer. for now I am just using some
-        # ad-hoc hard-coded character count
         for i in data["text"]:
-            if len('\n'.join(text_res + [i])) < 14000:
+            if num_tokens_from_string('\n'.join(text_res + [i])) < 3800:
                 text_res.append(i)
             else:
                 break
@@ -236,7 +244,7 @@ def answer():
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': text_res, 'question': data["question"]},
-        engine="text-davinci-003",
+        engine='gpt-35-turbo',
         max_tokens=200,
         temperature=0.0,
         stop_tokens=['\n'],
@@ -250,6 +258,69 @@ def answer():
     return res
 
 
+def _compute_embeddings(documents, question, chunking_param=15):
+    assert(type(documents) == list)
+    assert(type(question) == str)
+    
+    # computes embedding of `documents`` for a specific `chunking_param``
+    # then returns the similarity score between `question` and `documents`, sorted by desc order
+    # this function caches the embedding of `documents` in a local mongodb, for a specific `chunking_param`
+    
+    def _compute_embeddings_for_chunk(chunked_documents):
+        inputs = tokenizer(chunked_documents, padding=True, truncation=True, return_tensors="pt").to(device)
+        try:
+            embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1]\
+            .squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
+            return embeddings.tolist()
+        except RuntimeError:
+            half_length = len(chunked_documents) // 2 
+            return _compute_embeddings_for_chunk(chunked_documents[:half_length]) +_compute_embeddings_for_chunk(chunked_documents[half_length:])
+    
+    # attempting to get embeddings from cached database
+    result = cache_db.find_one({"input_list": documents, "chunking_param": chunking_param})
+    if result:
+        list_embeddings = result["embeddings"]
+        # print(len(list_embeddings))
+        embeddings = torch.tensor(list_embeddings, device=device)
+    else:
+        chunked_doc = [chunk_text(document, chunking_param, use_spacy=True) for document in documents]  # this gives list of lists
+        chunked_doc = [item for review_list in chunked_doc for item in review_list]  # this gives them in a single list
+
+        inputs = tokenizer(chunked_doc, padding=True, truncation=True, return_tensors="pt").to(device)
+        # try:
+        embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1]\
+        .squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
+        list_embeddings = embeddings.tolist()
+        # except RuntimeError:
+        #     list_embeddings = _compute_embeddings_for_chunk(chunked_doc)
+        #     embeddings = torch.tensor(list_embeddings, device=device)
+            
+        cache_entry = {"input_list": documents, "chunking_param": chunking_param, "embeddings": list_embeddings}
+        cache_db.insert_one(cache_entry)
+    
+    # attempt to find embedding of question from cache_db
+    result = cache_db.find_one({"input_sentence": question})
+    if result:
+        first_list_embeddings = result["embeddings"]
+        first_embedding = torch.tensor(first_list_embeddings, device=device)
+    else:
+        question_tokenized = tokenizer([question], padding=True, truncation=True, return_tensors="pt").to(device)
+        first_embedding = model(**question_tokenized, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)
+        first_list_embeddings = first_embedding.tolist()
+        cache_entry = {"input_sentence": question, "embeddings": first_list_embeddings}
+        cache_db.insert_one(cache_entry)
+
+    # compute final embedding
+    similarities = []
+    for i in range(len(embeddings)):
+        similarities.append((first_embedding[0] @ embeddings[i]).item())
+
+    similarities.sort(reverse=True)
+    torch.cuda.empty_cache()
+
+    return similarities
+
+
 def boolean_retrieve_reviews(reviews, question):
     """Given a list of reviews, return whether any matches the question.
 
@@ -260,39 +331,65 @@ def boolean_retrieve_reviews(reviews, question):
     Returns:
         _type_: _description_
     """
-    similarities = []  # tuple of (sentence, similarity to the first one)
     
-    # the first element of reviews is the question itself
-    reviews = [question] + reviews
-
-    inputs = tokenizer(reviews, padding=True, truncation=True, return_tensors="pt")
-    if cuda_ok:
-        inputs = inputs.to(device)
-    embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1]\
-        .squeeze(1)  # the embedding of the [CLS] token after the final layer
-
-    if cuda_ok:
-        embeddings[0].to(device)
-    for i in range(1, len(embeddings)):
-        if cuda_ok:
-            embeddings[i].to(device)
-        similarities.append((reviews[i], (embeddings[0] @ embeddings[i]).item()))
-
-    similarities.sort(key=lambda x: x[1], reverse=True)
-    print(similarities)
+    similarities = _compute_embeddings(reviews, question)
     if (not similarities):
         return False
 
-    if (similarities[0][1] > 208.5):
+    if (similarities[0] > 208.5):
         return True
     else:
         return False
+
+def get_highest_embedding(reviews, question):
+    while True:
+        try:
+            similarities = _compute_embeddings(reviews, question)
+            break
+        except RuntimeError as e:
+            if 'out of memory' in str(e):
+                torch.cuda.empty_cache()
+                print("Out of memory error occurred. Try reducing the batch size or model size.")
+            else:
+                print("Runtime error occurred:", e)
+                break
+            
+    
+    if (not similarities):
+        return 0
+
+    return similarities[0]
 
 
 @app.route('/booleanAnswer', methods=['POST'])
 def boolean_answer():
     data = request.get_json()
-    print("/booleanAnswer receieved request {}".format(data))
+    # input params in this `data`    
+    # data["text"] : text to filter upon, either a string or a list
+    # data["question"] : question to answer
+
+    if "text" not in data or "question" not in data:
+        return None
+    
+    if isinstance(data["text"], list):
+        input_text = data["text"]
+    elif isinstance(data["text"], str):
+        input_text = [data["text"]]
+    else:
+        return None
+    
+    result = boolean_retrieve_reviews(input_text, data["question"])
+    res = {
+        "result" : result
+    }
+    print(res)
+    return res
+
+
+@app.route('/booleanAnswerScore', methods=['POST'])
+def boolean_answer_score():
+    data = request.get_json()
+    # print("/booleanAnswerScore receieved request {}".format(data))
         
     # input params in this `data`    
     # data["text"] : text to filter upon, either a string or a list
@@ -302,16 +399,45 @@ def boolean_answer():
         return None
     
     if isinstance(data["text"], list):
-        result = boolean_retrieve_reviews(data["text"], data["question"])
-        res = {
-            "result" : result
-        }
-        print(res)
-        return res
+        input_text = data["text"]
+    elif isinstance(data["text"], str):
+        input_text = [data["text"]]
+    else:
+        return None
     
-    return None
-    
+    start_time = time.time()
+    result = get_highest_embedding(input_text, data["question"])
+    res = {
+        "result" : result
+    }
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(res, "; {} seconds".format(execution_time))
+    return res
+
+
+@app.route('/stringEquals', methods=['POST'])
+def string_equals():
+    data = request.get_json()
+    print("/stringEquals receieved request {}".format(data))
+        
+    # input params in this `data`    
+    # data["comp_value"]  : text to compare against
+    # data["field_value"] : text in the db to compare
+    # data["field_name"]  : field name of this value
+
+    if "comp_value" not in data or "field_value" not in data or "field_name" not in db:
+        return None
+
+
+def get_all_processed():
+    restaurants = list(schematized.find())
+    for i in tqdm(restaurants):
+        print(i["name"])
+        if i["reviews"] != []:
+            _compute_embeddings(i["reviews"], "")
 
 if __name__ == "__main__":
     #print(baseline_filter("this is a good restaurant for large groups"))
     app.run(host=host, port=port)
+    # get_all_processed()

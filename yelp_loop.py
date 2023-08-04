@@ -7,6 +7,7 @@ GPT-3 + Yelp Genie skill
 
 import sys
 import os
+import re
 from typing import List
 import argparse
 import logging
@@ -14,14 +15,14 @@ import requests
 from datetime import datetime
 import html
 import json
-from utils import print_chatbot, input_user, linearize
+from utils import print_chatbot, input_user, num_tokens_from_string
 import readline  # enables keyboard arrows when typing in the terminal
-from pyGenieScript import geniescript as gs
 from parser_server import GPT_parser_address
 import time
 from postgresql_connection import execute_sql
 # from query_reviews import review_server_address
 from reviews_server import baseline_filter
+from langchain.output_parsers import CommaSeparatedListOutputParser
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -29,36 +30,51 @@ from prompt_continuation import llm_generate, batch_llm_generate
 
 logger = logging.getLogger(__name__)
 
+def fetch_cuisine_list():
+    try:
+        with open("cuisines.json", "r") as fd:
+            data = json.load(fd)
+    
+        res = list(data)
+    except Exception as e:
+        print("regenerating cuisines list from sparql query")
+        res = execute_sql("SELECT DISTINCT unnest(cuisines) FROM restaurants;")
+        res = list(map(lambda x: x[0], res[0]))
+        
+        with open("cuisines.json", "w") as fd:
+            json.dump(res, fd)
+        
+    return sorted(res)
+
+CUISINE_LIST = fetch_cuisine_list()
+
 
 class DialogueTurn:
     def __init__(
         self,
         agent_utterance: str = None,
         user_utterance: str = None,
-        genie_query: str = None,
         genie_utterance: str = None,
-        reviews_query: str = None,
-        genie_reviews : List[str] = [],
-        genie_reviews_answer : str = None,
+        temp_target : str = None,
         user_target : str = None,
+        sys_type : str = None,
+        time_statement : dict = None
     ):
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
-        self.genie_query = genie_query
         self.genie_utterance = genie_utterance
-        self.reviews_query = reviews_query
-        self.genie_reviews = genie_reviews
-        self.genie_reviews_answer = genie_reviews_answer
+        self.temp_target = temp_target
         self.user_target = user_target
+        self.sys_type = sys_type
+        time_statement = time_statement
         
     agent_utterance: str
     user_utterance: str
-    genie_query: str
     genie_utterance: str
-    reviews_query: str
-    genie_reviews: List[str]
-    genie_reviews_answer: str
     user_target: str
+    temp_target: str
+    sys_type: str
+    time_statement: dict
 
     def to_text(self, they='They', you='You'):
         """
@@ -79,9 +95,6 @@ class DialogueTurn:
         ret = ''
         
         ret += they + ': ' + self.user_utterance
-        if self.genie_query is not None:
-            ret += '\n' + '[You check the database for "' + \
-                self.genie_query + '"]'
         if self.genie_utterance is not None:
             # print(self.genie_utterance)
             ret += '\n' + '[Database returns "' + self.genie_utterance + '"]'
@@ -97,17 +110,6 @@ class DialogueTurn:
         if self.agent_utterance is not None:
             ret += '\n' + you + ': ' + self.agent_utterance
         return ret
-
-
-def summarize_reviews(reviews: str) -> str:
-    summaries = batch_llm_generate(template_file='prompts/yelp_review_summary.prompt',
-                           engine='text-davinci-003',
-                           stop_tokens=None,
-                           max_tokens=100,
-                           temperature=0.7,
-                           prompt_parameter_values=[{'review': r} for r in reviews],
-                           postprocess=False)
-    return summaries
 
 
 def dialogue_history_to_text(history: List[DialogueTurn], they='They', you='You') -> str:
@@ -150,88 +152,6 @@ def get_yelp_reviews(restaurant_id: str) -> List[str]:
     for r in reviews_response:
         reviews.append(html.unescape(' '.join(r['text'].split()))) # clean up the review text
     return reviews
-
-
-def wrapper_call_genie(
-    genie : gs,
-    dlgHistory : List[DialogueTurn],
-    query: str,
-    dialog_state = None,
-    aux = [],
-    update_parser_address = None,
-    use_full_state = False
-):
-    f"""A wrapper around the Genie semantic parser, to determine if info if present in the database
-    Args:
-        genie (gs): pyGenieScript.geniescript.Genie class
-        dlgHistory (List[DialogueTurn]): list of dlgHistory, to be modified in place
-        query (str): query to be sent to Genie, if info present in the database
-        dialog_state (_type_, optional): Genie state. Defaults to None.
-        aux (list, optional): Genie aux info. Defaults to [].
-        engine (str, optional): LLM engine. Defaults to "text-davinci-003".
-    Returns:
-        (dialog_state, aux, user_target, genie_results, reviews) from genie
-        
-        reviews : [a list of dictionary], each dictionary is of format:
-        
-            "name": "reviews",
-            "operator": operator (most likely gonna be ~=),
-            "value": value (e.g. "what is a dog friendly restaurant"),
-            "type": "filter" or "projection"
-            
-    """
-    start_time = time.time()
-    ds, aux, user_target, genie_results, reviews = call_genie_internal(
-        genie,
-        dlgHistory,
-        query,
-        dialog_state = dialog_state,
-        aux = aux,
-        update_parser_address=update_parser_address,
-        use_full_state = use_full_state
-    )
-    
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    
-    return ds, aux, user_target, genie_results, reviews, elapsed_time
-
-def call_genie_internal(
-    genie : gs,
-    dlgHistory : List[DialogueTurn],
-    query: str,
-    dialog_state = None,
-    aux = [],
-    update_parser_address = None,
-    use_full_state = False
-):
-    if (update_parser_address is not None):
-        requests.post(update_parser_address + '/set_dlg_turn', json={
-            "dlg_turn": list(map(lambda x: x.__dict__, dlgHistory))
-        })
-    
-    if dialog_state is not None:
-        genie_output = genie.query(query, dialog_state = dialog_state, aux=aux, neglect_projections=["reviews"], use_direct_sentence_state = use_full_state)
-    else:
-        genie_output = genie.query(query, aux=aux, neglect_projections=["reviews"], use_direct_sentence_state = use_full_state)
-
-    if len(genie_output['response']) > 0:
-        dlgHistory[-1].genie_utterance = genie_output['response'][0]
-    else:
-        # a semantic parser error
-        dlgHistory[-1].genie_utterance = "Error parsing your request"
-            
-    
-    filters = genie_output["filters"]
-    review_info = []
-    print("user target {}".format(genie_output["user_target"]))
-    for filter in filters:
-        if filter["name"] == "reviews":
-            review_info += get_field_information("reviews", filter["operator"], filter["value"], genie_output["user_target"])
-    
-    results = genie_output["results"]
-
-    return genie_output["ds"], genie_output["aux"], genie_output["user_target"], results, review_info
 
 def get_field_information(name, operator, value, user_target):
     # some heurstics to determine if the substring occurs inside `[` and `]`
@@ -291,203 +211,321 @@ def get_field_information(name, operator, value, user_target):
     
     return res
 
-def review_qa(reviews, question, engine):
-    review_res = []
-    # TODO: to be precise one needs to use the openAI tokenzer. for now I am just using some
-    # ad-hoc hard-coded character count
-    for i in reviews:
-        if len('\n'.join(review_res + [i])) < 14000:
-            review_res.append(i)
-        else:
-            break
+def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_fields_single = {}):
+    output_parser = CommaSeparatedListOutputParser()
+
+    total_rewrite_time = 0
+    temp = in_sql
+    # the classification_fields is a dictionary.
+    # each key is the field name, and each value is the list of available enum values
+    for field_name, field_values in classification_fields_list.items():
+        macthes = re.finditer(r"'([^']*)' = ANY \({}\)".format(field_name), in_sql)
+        for match in macthes:
+            predicated_field_value = match.group(1)
+            if not predicated_field_value in field_values:
+                # first, try to a lower case / contains softmatch
+                softmatch_res = [entry for entry in field_values if predicated_field_value.lower() in entry.lower()]
+                replacement_predicates = []
+                
+                if softmatch_res:
+                    replacement_predicates = ["'{}' = ANY ({})".format(i, field_name) for i in softmatch_res]
+                    print("softmatch matched to {}".format(replacement_predicates))
+                else:
+                    # we need to do a classification here
+                    classified_field_value_raw, rewrite_time = llm_generate(
+                        template_file='prompts/field_classification.prompt',
+                        engine='gpt-35-turbo',
+                        stop_tokens=["\n"],
+                        max_tokens=70,
+                        temperature=0,
+                        prompt_parameter_values={
+                            "field_value_choices": field_values,
+                            "predicated_field_value": predicated_field_value,
+                            "field_name": field_name
+                        },
+                        postprocess=False)
+                    total_rewrite_time += rewrite_time
+                    classified_field_values_list = output_parser.parse(classified_field_value_raw)
+                    
+                    for classified_field_value in classified_field_values_list:
+                        if classified_field_value in field_values:
+                            replacement_predicates.append("'{}' = ANY ({})".format(classified_field_value, field_name))
+                
+                if replacement_predicates:
+                    replacement = " OR ".join(replacement_predicates)
+                    replacement = "( " + replacement + " )"
+                else:
+                    replacement = "TRUE"
+                
+                temp = temp.replace(match.group(0), replacement)
+                
+    for field_name, field_values in classification_fields_single.items():
+        macthes = re.finditer(r"{} = '([^']*)'".format(field_name), in_sql)
+        for match in macthes:
+            predicated_field_value = match.group(1)
+            if not predicated_field_value in field_values:
+                # first, try to a lower case / contains softmatch
+                softmatch_res = [entry for entry in field_values if predicated_field_value.lower() in entry.lower()]
+                replacement_predicates = []
+                
+                if softmatch_res:
+                    replacement_predicates = ["{} = '{}'".format(field_name, i) for i in softmatch_res]
+                    print("softmatch matched to {}".format(replacement_predicates))
+                else:
+                    # we need to do a classification here
+                    classified_field_value_raw, rewrite_time = llm_generate(
+                        template_file='prompts/field_classification.prompt',
+                        engine='gpt-35-turbo',
+                        stop_tokens=["\n"],
+                        max_tokens=70,
+                        temperature=0,
+                        prompt_parameter_values={
+                            "field_value_choices": field_values,
+                            "predicated_field_value": predicated_field_value,
+                            "field_name": field_name
+                        },
+                        postprocess=False)
+                    total_rewrite_time += rewrite_time
+                    classified_field_values_list = output_parser.parse(classified_field_value_raw)
+                    
+                    for classified_field_value in classified_field_values_list:
+                        if classified_field_value in field_values:
+                            replacement_predicates.append("{} = '{}'".format(field_name, classified_field_value))
+                
+                if replacement_predicates:
+                    replacement = " OR ".join(replacement_predicates)
+                    replacement = "( " + replacement + " )"
+                else:
+                    replacement = "TRUE"
+                
+                temp = temp.replace(match.group(0), replacement)
+                
+    # do another rewrite if answer(field_name, value) = 'Yes' is in the prediction
+    # TODO: handle other similar queries
+    temp = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", temp)
     
-    if not review_res or (len(review_res) == 1 and not review_res[0]):
-        return ""
-    
-    continuation, elapsed_time = llm_generate(
-        'prompts/review_qa.prompt',
-        {'reviews': review_res, 'question': question},
-        engine=engine,
-        max_tokens=200,
-        temperature=0.0,
-        stop_tokens=['\n'],
-        postprocess=False
-    )
-    
-    return continuation, elapsed_time
+    # escape `'` character
+    # TODO: it seems psycopg2 does not allow an easy escape maneuver. Investigate further
+    temp = temp.replace("\\'", "")
+    return temp, total_rewrite_time
 
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
-    continuation, _ = llm_generate(template_file=prompt_file,
+    first_sql, first_sql_time = llm_generate(template_file=prompt_file,
                 engine='gpt-35-turbo',
                 stop_tokens=["Agent:"],
                 max_tokens=300,
                 temperature=0,
                 prompt_parameter_values={'dlg': dlgHistory, 'query': user_query},
                 postprocess=False)
+    
+    def if_usable(field : str):
+        NOT_USABLE_FIELDS = [
+            "reviews",
+            "_id",
+            "id",
+            "opening_hours",
+
+            # schematized fields        
+            "ambiance",
+            "specials",
+            "reservation_info",
+            "nutrition_info",
+            "signature_cocktails",
+            "has_private_event_spaces",
+            "promotions",
+            "parking_options",
+            "game_day_specials",
+            "live_sports_events",
+            "dress_code",
+            "happy_hour_info",
+            "highlights",
+            "service",
+            "has_outdoor_seating",
+            "drinks",
+            "dietary_restrictions",
+            "experience",
+            "nutritious_options",
+            "creative_menu",
+            "has_student_discount",
+            "has_senior_discount",
+            "local_cuisine",
+            "trendy",
+            "wheelchair_accessible",
+            "noise_level",
+            "kids_menu",
+            "childrens_activities",
+            "if_family_friendly",
+            "wait_time",
+            "has_live_music",
+            "serves_alcohol",
+            "michelin",
+            "accomodates_large_groups",
+            
+            # the citation fields        
+            "ambiance_citation",
+            "specials_citation",
+            "reservation_info_citation",
+            "nutrition_info_citation",
+            "signature_cocktails_citation",
+            "has_private_event_spaces_citation",
+            "promotions_citation",
+            "parking_options_citation",
+            "game_day_specials_citation",
+            "live_sports_events_citation",
+            "dress_code_citation",
+            "happy_hour_info_citation",
+            "highlights_citation",
+            "service_citation",
+            "has_outdoor_seating_citation",
+            "drinks_citation",
+            "dietary_restrictions_citation",
+            "experience_citation",
+            "nutritious_options_citation",
+            "creative_menu_citation",
+            "has_student_discount_citation",
+            "has_senior_discount_citation",
+            "local_cuisine_citation",
+            "trendy_citation",
+            "wheelchair_accessible_citation",
+            "noise_level_citation",
+            "kids_menu_citation",
+            "childrens_activities_citation",
+            "if_family_friendly_citation",
+            "wait_time_citation",
+            "has_live_music_citation",
+            "serves_alcohol_citation",
+            "michelin_citation",
+            "accomodates_large_groups_citation",
+            
+            # special internal fields
+            "_score",
+            "_schematization_results"
+            ]
         
-    continuation = continuation.rstrip("Agent:")
-    # print("generated SQL query {}".format(continuation))
-    results, column_names = execute_sql(continuation)
+        if field in NOT_USABLE_FIELDS:
+            return False
+        
+        if field.startswith("_score"):
+            return False
+        
+        return True
+        
+    print("generated SQL query before rewriting: {}".format(first_sql))
+    
+    second_sql, second_sql_time = sql_rewrites(
+        first_sql,
+        classification_fields_list={
+            "cuisines": CUISINE_LIST
+        },
+        classification_fields_single={
+            "location": ["Palo Alto", "Sunnyvale", "San Francisco", "Cupertino"]
+        })
+    # do another rewrite if "boolean_answer" is in the prediction
+    if "boolean_answer" in second_sql:
+        second_sql, second_sql_time_ = llm_generate(template_file="prompts/parser_rewrite_sql.prompt",
+            engine='gpt-35-turbo',
+            stop_tokens=[";"],
+            max_tokens=300,
+            temperature=0,
+            prompt_parameter_values={'sql': second_sql},
+            postprocess=False)
+        second_sql_time += second_sql_time_
+        
+    if not ("LIMIT" in second_sql):
+        second_sql = re.sub(r';$', ' LIMIT 5;', second_sql, flags=re.MULTILINE)
+    
+    print("generated SQL query after rewriting: {}".format(second_sql))
+    
+    results, column_names, sql_execution_time = execute_sql(second_sql)
 
     final_res = []
     for res in results:
-        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if column_name not in ["reviews", "_id", "id", "opening_hours"])
+        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
         if "rating" in temp:
             temp["rating"] = float(temp["rating"])
+        
+        if num_tokens_from_string(json.dumps(final_res + [temp], indent=4)) > 3500:
+            break
+        
         final_res.append(temp)
     
     print(final_res)
-    return final_res, continuation
-    
+    return final_res, first_sql, second_sql, first_sql_time, second_sql_time, sql_execution_time
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
     user_utterance: str,
-    genie : gs,
-    genieDS : str = None,
-    genie_aux = [],
     engine = "text-davinci-003",
-    update_parser_address = None,
-    use_full_state = False,
-    sys_type = 'baseline_w_textfcns'):
+    sys_type = "sql_textfcns_v0801"):
     
     print(sys_type)
-    assert(sys_type in ["semantic_index", "baseline_w_textfcns", "baseline_linearization", "v0614baseline_thingtalk"])
-    
-    # assign default values
-    genie_new_ds = None
-    genie_new_aux = []
-    genie_user_target = ""
-    genie_results = []
+    assert(sys_type in ["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
     
     first_classification_time = 0
-    review_time = 0
+    first_sql_gen_time = 0
+    second_sql_gen_time = 0
+    sql_execution = 0
     final_response_time = 0
-    genie_time = 0
 
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
-    dlgHistory[-1].reviews_query = None
+    dlgHistory[-1].sys_type = sys_type
     
     # determine whether to send to Genie
-    continuation, first_classification_time = llm_generate(template_file='prompts/yelp_genie.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
+    continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
-        dlgHistory[-1].genie_query = user_utterance
-        if sys_type == "baseline_w_textfcns":
-            results, sql = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
+        if sys_type == "sql_textfcns_v0801":
+            results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = sql
-            genie_user_target = sql
-            if not results:
-                response = "Sorry, I don't have that information."
-                dlgHistory[-1].agent_utterance = response
-                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
+            dlgHistory[-1].temp_target = first_sql
+            dlgHistory[-1].user_target = second_sql
         
-        elif sys_type == 'semantic_index':
-            results, sql = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
+        elif sys_type == "semantic_index_w_textfncs":
+            results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
+            dlgHistory[-1].temp_target = first_sql
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = sql
-            genie_user_target = sql
-            if not results:
-                response = "Sorry, I don't have that information."
-                dlgHistory[-1].agent_utterance = response
-                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
+            dlgHistory[-1].user_target = second_sql
             
-        elif sys_type == 'baseline_linearization':
+        elif sys_type == "baseline_linearization":
             results = baseline_filter(user_utterance)
-            sql = None
+            dlgHistory[-1].temp_target = None
+            dlgHistory[-1].user_target = None
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = sql
-            genie_user_target = sql
 
-            if not results:
-                response = "Sorry, I don't have that information."
-                dlgHistory[-1].agent_utterance = response
-                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, ""
-
-        else:
-            genie_new_ds, genie_new_aux, genie_user_target, genie_results, review_info, genie_time = wrapper_call_genie(
-                genie, dlgHistory, user_utterance, dialog_state=genieDS, aux=genie_aux, update_parser_address=update_parser_address, use_full_state=use_full_state)
-
-            if len(genie_results) == 0 and genie_new_ds is not None and dlgHistory[-1].genie_utterance != "Where are you searching for?":
-                response = "Sorry, I don't have that information."
-                dlgHistory[-1].agent_utterance = response
-                dlgHistory[-1].user_target = genie_user_target
-                time_stmt = [
-                    "Initial classifier: {:.2f}s".format(first_classification_time), 
-                    "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
-                    "response cut off"
-                ]
-                
-                return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
-
-            try:
-                projection_info = None
-                for r in review_info:
-                    if 'type' in r and r['type'] == 'projection':
-                        projection_info = r
-
-                # ad-hoc projection implementation
-                # should be done in Genie
-                if projection_info is not None and len(genie_results) > 0:
-                    
-                    # QA system
-                    response, review_time = review_qa(genie_results[0]['reviews'], projection_info['value'], engine)
-                    
-                    dlgHistory[-1].genie_utterance = response
-                    dlgHistory[-1].genie_reviews = genie_results[0]['reviews']
-
-                # always do a QA on reviews
-                elif len(genie_results) > 0:
-
-                    if ("reviews" in genie_results[0] and len(genie_results[0]["reviews"]) > 0):
-                        dlgHistory[-1].genie_reviews = genie_results[0]["reviews"]
-                    else:
-                        dlgHistory[-1].genie_reviews = get_yelp_reviews(genie_results[0]['id']['value'])
-
-                    filter_info = None
-                    for r in review_info:
-                        if 'type' in r and r['type'] == 'filter':
-                            filter_info = r
-
-
-                    if 'reviews' in genie_results[0]:
-                        # if there was a filter on reviews, then use the keyword to query reviews
-                        if filter_info is not None:
-                            dlgHistory[-1].reviews_query = filter_info["value"]
-                        # if there is no filter on reviews, just summarize:
-                        else:
-                            dlgHistory[-1].reviews_query = "general information about the restaurant"
-
-                        dlgHistory[-1].genie_reviews_answer, review_time = review_qa(genie_results[0]['reviews'], dlgHistory[-1].reviews_query, engine)
-                        
-                        dlgHistory[-1].genie_utterance += ' ' + dlgHistory[-1].genie_reviews_answer
-                
-            except ValueError as e:
-                logger.error('%s', str(e))
+        # for all systems, cut it out if no response returned
+        if not results:
+            response = "Sorry, I don't have that information."
+            dlgHistory[-1].agent_utterance = response
+            dlgHistory[-1].time_statement = {
+                "first_classification": first_classification_time,
+                "first_sql_gen": first_sql_gen_time,
+                "second_sql_gen": second_sql_gen_time,
+                "sql_execution": sql_execution,
+                "final_response": final_response_time
+            }
+            return dlgHistory
             
-    response, final_response_time = llm_generate(template_file='prompts/yelp_response.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine=engine,
-                        max_tokens=150, temperature=0.0, stop_tokens=['\n'], top_p=0.5, postprocess=False)
+    response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
+                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
-    dlgHistory[-1].user_target = genie_user_target
     
-    time_stmt = [
-        "Initial classifier: {:.2f}s".format(first_classification_time), 
-        "Genie (w. semantic parser + review model): {:.2f}s".format(genie_time),
-        "Review QA: {:.2f}s".format(review_time),
-        "Final response: {:.2f}s".format(final_response_time)
-    ]
+    dlgHistory[-1].time_statement = {
+        "first_classification": first_classification_time,
+        "first_sql_gen": first_sql_gen_time,
+        "second_sql_gen": second_sql_gen_time,
+        "sql_execution": sql_execution,
+        "final_response": final_response_time
+    }
     
-    
-    return dlgHistory, response, genie_new_ds, genie_new_aux, genie_user_target, time_stmt
+    return dlgHistory
 
         
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
-    parser.add_argument('--output_file', type=str, required=True,
+    parser.add_argument('--output_file', type=str, default='log.log',
                         help='Where to write the outputs.')
     parser.add_argument('--engine', type=str, default='text-davinci-003',
                         choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-35-turbo'],
@@ -500,8 +538,8 @@ if __name__ == '__main__':
                         help='Use GPT parser as opposed to Genie parser')
     parser.add_argument('--use_direct_sentence_state', action='store_true',
                         help='Directly use GPT parser output as full state')
-    parser.add_argument('--sys_type', type=str, default='generate_sql',
-                        choices=["semantic_index", "baseline_w_textfcns", "baseline_linearization", "v0614baseline_thingtalk"])
+    parser.add_argument('--sys_type', type=str, default='sql_textfcns_v0801',
+                        choices=["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
     # parser.add_argument('--use_sql', action='store_true',
     #                     help='Uses sql generation')
     # parser.add_argument('--use_baseline', action=)
@@ -515,42 +553,28 @@ if __name__ == '__main__':
 
     # The dialogue loop
     # the agent starts the dialogue
-    genie = gs.Genie()
     dlgHistory = []
     genieDS, genie_aux = None, []
 
     print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))
 
     try:
-        genie.initialize(GPT_parser_address, 'yelp')
-
         while True:
             user_utterance = input_user()
             if user_utterance in args.quit_commands:
                 break
             
             # this is single-user, so feeding in genieDS and genie_aux is unnecessary, but we do it to be consistent with backend_connection.py
-            dlgHistory, response, gds, gaux, _, _ = compute_next_turn(
+            dlgHistory = compute_next_turn(
                 dlgHistory,
                 user_utterance,
-                genie,
-                genieDS=genieDS,
-                genie_aux=genie_aux,
                 engine=args.engine,
-                update_parser_address=GPT_parser_address if args.use_GPT_parser else None,
-                use_full_state=args.use_direct_sentence_state if args.use_direct_sentence_state else False,
                 sys_type=args.sys_type
             )
-            if genieDS != None:
-                # update the genie state only when it is called. This means that if genie is not called in one turn, in the next turn we still provide genie with its state from two turns ago
-                genieDS = gds
-                genie_aux = gaux
-            print_chatbot('Chatbot: ' + response)
+            print_chatbot('Chatbot: ' + dlgHistory[-1].agent_utterance)
+            print(dlgHistory[-1].time_statement)
 
     finally:
-        # not necessary to close genie, but is good practice
-        genie.quit()
-
         with open(args.output_file, 'a') as output_file:
             output_file.write('=====\n' + datetime.now().strftime("%d/%m/%Y %H:%M:%S") +
                             '\n' + dialogue_history_to_text(dlgHistory, they='User', you='Chatbot') + '\n')
