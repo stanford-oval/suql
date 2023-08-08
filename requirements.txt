@@ -1,5 +1,5 @@
 openai
-Jinja2
+Jinja2>=3.1.2
 tenacity
 Flask
 flask_restful
@@ -7,3 +7,9 @@ flask-cors
 pymongo==4.3.3
 transformers==4.29.2
 torch==2.0.1
+Requests
+spacy
+tiktoken
+torch
+psycopg2-binary # you can also install from source if it works
+langchain
