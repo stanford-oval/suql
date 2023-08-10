@@ -316,7 +316,8 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
                 max_tokens=300,
                 temperature=0,
                 prompt_parameter_values={'dlg': dlgHistory, 'query': user_query},
-                postprocess=False)
+                postprocess=False,
+                max_wait_time=3)
     
     def if_usable(field : str):
         NOT_USABLE_FIELDS = [
@@ -428,7 +429,8 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
             max_tokens=300,
             temperature=0,
             prompt_parameter_values={'sql': second_sql},
-            postprocess=False)
+            postprocess=False,
+            max_wait_time=3)
         second_sql_time += second_sql_time_
         
     if not ("LIMIT" in second_sql):
@@ -472,7 +474,7 @@ def compute_next_turn(
     
     # determine whether to send to Genie
     continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False, max_wait_time=3)
 
     if continuation.startswith("Yes"):
         if sys_type == "sql_textfcns_v0801":
@@ -507,7 +509,7 @@ def compute_next_turn(
             return dlgHistory
             
     response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
-                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
+                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=4)
     dlgHistory[-1].agent_utterance = response
     
     dlgHistory[-1].time_statement = {
