@@ -509,7 +509,7 @@ def compute_next_turn(
             return dlgHistory
             
     response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
-                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=4)
+                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=5)
     dlgHistory[-1].agent_utterance = response
     
     dlgHistory[-1].time_statement = {
