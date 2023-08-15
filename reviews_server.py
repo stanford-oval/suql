@@ -11,6 +11,9 @@ from utils import linearize, chunk_text
 import json
 from tqdm import tqdm
 from schematization.tokenizer import num_tokens_from_string
+import hashlib
+from functools import reduce
+import operator
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -25,13 +28,17 @@ client = pymongo.MongoClient(mongo)
 db = client['yelpbot']
 collection = db['yelp_data']
 schematized = db['schematized']
-cache_db = client['free_text_cache']['list_docs_to_embeddings']
+cache_db = client['free_text_cache']['hash_to_embeddings']
 
 # Set the server address
 host = "127.0.0.1"
 port = 8500
 review_server_address = 'http://{}:{}'.format(host, port)
 app = Flask(__name__)
+
+
+def compute_sha256(text):
+    return hashlib.sha256(text.encode()).hexdigest()
 
 def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
     """
@@ -257,68 +264,67 @@ def answer():
     print(res)
     return res
 
+def _compute_single_embedding(documents, chunking_param=15, safe_assume_exists = False):
+    documents_hashes = list(map(compute_sha256, documents))
+    # start_time = time.time()
+    cache_results = list(cache_db.find({"_id": {"$in": documents_hashes}}))
+    # end_time = time.time()
+    # print("actual retrieving time {}".format(end_time - start_time))
+    
+    # start_time = time.time()
+    existing_embeddings = reduce(operator.add, map(lambda x: x["embeddings"], cache_results)) if cache_results else []
+    existing_embeddings = torch.tensor(existing_embeddings, device=device)
+    # end_time = time.time()
+    # print("tensor initialization time {}".format(end_time - start_time))
+    
+    if safe_assume_exists:
+        return existing_embeddings
+    
+    index_dict = {hash: index for index, hash in enumerate(documents_hashes)}
+
+    for doc in cache_results:
+        index_dict.pop(doc["_id"], None)
+    
+    missing_hashes_with_indices = list(index_dict.items())
+    for missing_hash, missing_index in missing_hashes_with_indices:
+        chunked_documents = chunk_text(documents[missing_index], k=chunking_param, use_spacy=True)
+        inputs = tokenizer(chunked_documents, padding=True, truncation=True, return_tensors="pt").to(device)
+        embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
+        existing_embeddings = torch.cat((existing_embeddings, embeddings), dim=0)
+        cache_db.insert_one({
+            "_id": missing_hash,
+            "embeddings": embeddings.tolist()
+        })
+    
+    return existing_embeddings
+
 
 def _compute_embeddings(documents, question, chunking_param=15):
     assert(type(documents) == list)
     assert(type(question) == str)
     
-    # computes embedding of `documents`` for a specific `chunking_param``
-    # then returns the similarity score between `question` and `documents`, sorted by desc order
-    # this function caches the embedding of `documents` in a local mongodb, for a specific `chunking_param`
+    if not documents:
+        return 0
     
-    def _compute_embeddings_for_chunk(chunked_documents):
-        inputs = tokenizer(chunked_documents, padding=True, truncation=True, return_tensors="pt").to(device)
-        try:
-            embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1]\
-            .squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
-            return embeddings.tolist()
-        except RuntimeError:
-            half_length = len(chunked_documents) // 2 
-            return _compute_embeddings_for_chunk(chunked_documents[:half_length]) +_compute_embeddings_for_chunk(chunked_documents[half_length:])
+    # start_time = time.time()
+    documents_embeddings = _compute_single_embedding(documents, chunking_param=chunking_param, safe_assume_exists=True)
+    question_embedding = _compute_single_embedding([question], chunking_param=chunking_param)[0]
     
-    # attempting to get embeddings from cached database
-    result = cache_db.find_one({"input_list": documents, "chunking_param": chunking_param})
-    if result:
-        list_embeddings = result["embeddings"]
-        # print(len(list_embeddings))
-        embeddings = torch.tensor(list_embeddings, device=device)
-    else:
-        chunked_doc = [chunk_text(document, chunking_param, use_spacy=True) for document in documents]  # this gives list of lists
-        chunked_doc = [item for review_list in chunked_doc for item in review_list]  # this gives them in a single list
-
-        inputs = tokenizer(chunked_doc, padding=True, truncation=True, return_tensors="pt").to(device)
-        # try:
-        embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1]\
-        .squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
-        list_embeddings = embeddings.tolist()
-        # except RuntimeError:
-        #     list_embeddings = _compute_embeddings_for_chunk(chunked_doc)
-        #     embeddings = torch.tensor(list_embeddings, device=device)
-            
-        cache_entry = {"input_list": documents, "chunking_param": chunking_param, "embeddings": list_embeddings}
-        cache_db.insert_one(cache_entry)
+    # mid_time = time.time()
+    # print("time for retrieving documents {}".format(mid_time - start_time))
     
-    # attempt to find embedding of question from cache_db
-    result = cache_db.find_one({"input_sentence": question})
-    if result:
-        first_list_embeddings = result["embeddings"]
-        first_embedding = torch.tensor(first_list_embeddings, device=device)
-    else:
-        question_tokenized = tokenizer([question], padding=True, truncation=True, return_tensors="pt").to(device)
-        first_embedding = model(**question_tokenized, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)
-        first_list_embeddings = first_embedding.tolist()
-        cache_entry = {"input_sentence": question, "embeddings": first_list_embeddings}
-        cache_db.insert_one(cache_entry)
-
     # compute final embedding
-    similarities = []
-    for i in range(len(embeddings)):
-        similarities.append((first_embedding[0] @ embeddings[i]).item())
-
-    similarities.sort(reverse=True)
+    dot_products = torch.mv(documents_embeddings, question_embedding)
+    index_max = torch.argmax(dot_products).item()
+    max_dot_product = dot_products[index_max].item()
+    
     torch.cuda.empty_cache()
+    # end_time = time.time()
+    # print("time for computing dot product {}".format(end_time - mid_time))
+    # print("total time {}".format(end_time - start_time))
 
-    return similarities
+    return max_dot_product
+
 
 
 def boolean_retrieve_reviews(reviews, question):
@@ -332,11 +338,9 @@ def boolean_retrieve_reviews(reviews, question):
         _type_: _description_
     """
     
-    similarities = _compute_embeddings(reviews, question)
-    if (not similarities):
-        return False
+    highest_similarity = _compute_embeddings(reviews, question)
 
-    if (similarities[0] > 208.5):
+    if (highest_similarity > 208.5):
         return True
     else:
         return False
@@ -344,7 +348,7 @@ def boolean_retrieve_reviews(reviews, question):
 def get_highest_embedding(reviews, question):
     while True:
         try:
-            similarities = _compute_embeddings(reviews, question)
+            highest_similarity = _compute_embeddings(reviews, question)
             break
         except RuntimeError as e:
             if 'out of memory' in str(e):
@@ -354,11 +358,7 @@ def get_highest_embedding(reviews, question):
                 print("Runtime error occurred:", e)
                 break
             
-    
-    if (not similarities):
-        return 0
-
-    return similarities[0]
+    return highest_similarity
 
 
 @app.route('/booleanAnswer', methods=['POST'])

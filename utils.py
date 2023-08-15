@@ -42,6 +42,8 @@ def chunk_text(text, k, use_spacy=True):
     :return: a list of k-token-sized chunks of the original text
     """
     if use_spacy:
+        if text == "":
+            return [""]
         # in case of using spacy, k is the minimum number of words per chunk
         chunks = [i.text for i in nlp(text).sents]
         res = []
@@ -185,3 +187,7 @@ def linearize(document, k):
 
     return linearized
     
+
+if __name__ == "__main__":
+    print(chunk_text("The text provides general information about the restaurant, including its location in Town and Country shopping center in Palo Alto, its menu offerings such as sushi, rolls, bentos, and sashimi, and its friendly staff. The restaurant has both indoor and outdoor seating, but the indoor seating area is small. The prices are reasonable for the area, and the food is generally fresh and well-prepared. Some reviewers mention that the parking situation can be difficult on weekends.", k=15))
+    print(chunk_text(" ", k=15))
