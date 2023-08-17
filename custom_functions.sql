@@ -105,11 +105,10 @@ AS $$
 import requests
 import json
 
-URL = "http://127.0.0.1:8500/answer"
+URL = "http://127.0.0.1:8500/summary"
 
 response = requests.post(url=URL, data=json.dumps({
     "text" : source,
-    "question": "general information about the restaurant"
 }), headers={'Content-Type': 'application/json'})
 response.raise_for_status()  # Raise an exception if the request was not successful
 parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object

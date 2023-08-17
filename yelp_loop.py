@@ -23,6 +23,9 @@ from postgresql_connection import execute_sql
 # from query_reviews import review_server_address
 from reviews_server import baseline_filter
 from langchain.output_parsers import CommaSeparatedListOutputParser
+from sql_free_text_support.execute_free_text_sql import SelectVisitor
+from pglast import parse_sql
+from pglast.stream import RawStream
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -300,10 +303,6 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                 
                 temp = temp.replace(match.group(0), replacement)
                 
-    # do another rewrite if answer(field_name, value) = 'Yes' is in the prediction
-    # TODO: handle other similar queries
-    temp = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", temp)
-    
     # escape `'` character
     # TODO: it seems psycopg2 does not allow an easy escape maneuver. Investigate further
     temp = temp.replace("\\'", "")
@@ -421,37 +420,37 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         classification_fields_single={
             "location": ["Palo Alto", "Sunnyvale", "San Francisco", "Cupertino"]
         })
-    # do another rewrite if "boolean_answer" is in the prediction
-    if "boolean_answer" in second_sql:
-        second_sql, second_sql_time_ = llm_generate(template_file="prompts/parser_rewrite_sql.prompt",
-            engine='gpt-35-turbo',
-            stop_tokens=[";"],
-            max_tokens=300,
-            temperature=0,
-            prompt_parameter_values={'sql': second_sql},
-            postprocess=False,
-            max_wait_time=3)
-        second_sql_time += second_sql_time_
-        
+
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 5;', second_sql, flags=re.MULTILINE)
     
+    visitor = SelectVisitor()
+    root = parse_sql(second_sql)
+    visitor(root)
+    second_sql = RawStream()(root)
+    
     print("generated SQL query after rewriting: {}".format(second_sql))
     
-    results, column_names, sql_execution_time = execute_sql(second_sql)
+    try:
+        results, column_names, sql_execution_time = execute_sql(second_sql)
 
-    final_res = []
-    for res in results:
-        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
-        if "rating" in temp:
-            temp["rating"] = float(temp["rating"])
+        final_res = []
+        for res in results:
+            temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
+            if "rating" in temp:
+                temp["rating"] = float(temp["rating"])
+            
+            if num_tokens_from_string(json.dumps(final_res + [temp], indent=4)) > 3500:
+                break
+            
+            final_res.append(temp)
         
-        if num_tokens_from_string(json.dumps(final_res + [temp], indent=4)) > 3500:
-            break
-        
-        final_res.append(temp)
+        print(final_res)
+    except Exception:
+        visitor.drop_tmp_tables()
+    finally:
+        visitor.drop_tmp_tables()
     
-    print(final_res)
     return final_res, first_sql, second_sql, first_sql_time, second_sql_time, sql_execution_time
 
 def compute_next_turn(

@@ -74,7 +74,7 @@ def _generate(filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p
     if max_tries > 1 and temperature == 0:
         max_tries = 1
 
-    logger.debug('LLM input = %s', filled_prompt)
+    logger.info('LLM input = %s', filled_prompt)
 
     # ChatGPT has specific input tokens. The following is a naive implementation of few-shot prompting, which may be improved.
     if engine == "gpt-35-turbo":
