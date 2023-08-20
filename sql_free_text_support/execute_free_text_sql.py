@@ -197,56 +197,53 @@ def verify(document, field, query, operator, value):
         return False
 
 
-def retrieve_and_verify(query, field, operator, value, existing_results, column_info, limit):
-    # query: query for retrieval model
-    # field: field to do retrieval on
-    # operator: operator to compare against
-    # value: value to compare against
+def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit):
+    # field_query_list is a list of tuples, each entry of the tuple are:    
+    # 0st: field: field to do retrieval on
+    # 1st: query: query for retrieval model
+    # 2nd: operator: operator to compare against
+    # 3rd: value: value to compare against
+    # 
     # existing_results: existing results to run retrieval on, this is a list of tuples
     # column_info: this is a list of tuples, first element is column name and second is type
     # limit: max number of returned results
     
-    # print(query)
-    # print(field)
-    # print(operator)
-    # print(value)
-    # print(limit)
+    id_index = list(map(lambda x: x[0], column_info)).index('_id') # TODO: this is hard-coded for restaurants. Automate fetching this
     
-    # first, let's reconstruct the documents to retrieve upon
-    column_index = list(map(lambda x: x[0], column_info)).index(field)
-    id_index = list(map(lambda x: x[0], column_info)).index('_id')
-    
-    if column_info[column_index][1] == 'text[]':
-        
-        # get _id list from `existing_results`
-        start_time = time.time()
-        data = {
-            "id_list": list(map(lambda x: x[id_index], existing_results)),
-            "query": query,
-            "top": limit * 10  # return 4 times the ordered amount, for GPT filtering purposes, TODO: this needs to be better planned
-        }
+    # get _id list from `existing_results`
+    start_time = time.time()
+    data = {
+        "table_name": node.fromClause[0].relname, # TODO: implement support for JOIN statements
+        "id_list": list(map(lambda x: x[id_index], existing_results)),
+        "field_query_list": list(map(lambda x: (x[0], x[1]), field_query_list)),
+        "top": limit * 10  # return 4 times the ordered amount, for GPT filtering purposes, TODO: this needs to be better planned
+    }
 
-        # Send a POST request
-        response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
-        response.raise_for_status()
-        parsed_result = response.json()["result"]
-        
-        id_res = set()
-        for id, review in parsed_result:
+    # Send a POST request
+    response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
+    response.raise_for_status()
+    parsed_result = response.json()["result"]
+    
+    id_res = set()
+    for id, review in parsed_result:
+        # verify for each stmt, if any stmt fails to verify, exclude it
+        all_found = True
+        for i, entry in enumerate(field_query_list):
+            field, query, operator, value = entry
             # TODO parallelize this:
-            if verify(review, field, query, operator, value):
-                id_res.add(id)
+            if not verify(review[i], field, query, operator, value):
+                all_found = False
+        
+        if all_found:
+            id_res.add(id)
             if len(id_res) >= limit:
-                break
-            
-        end_time = time.time()
-        print("retrieve + verification time {}s".format(end_time - start_time))
+                    break
         
-        return list(filter(lambda x: x[id_index] in id_res, existing_results))
+    end_time = time.time()
+    print("retrieve + verification time {}s".format(end_time - start_time))
+    
+    return list(filter(lambda x: x[id_index] in id_res, existing_results))
         
-    else:
-        # TODO handle simpler cases where field is a string as opposed to a list of string
-        raise ValueError()
     
     
 
@@ -266,16 +263,11 @@ def execute_structural_sql(node : SelectStmt, predicate : BoolExpr):
     return execute_sql_with_column_info(sql)
     
 
-def execute_free_text_queries(predicate : BoolExpr, existing_results, column_info, limit):
+def execute_free_text_queries(node, predicate : BoolExpr, existing_results, column_info, limit):
     # the predicate should only contain an atomic unstructural query
-    # or an AND of multiple unstructural query
+    # or an AND of multiple unstructural query (NOT of an unstructural query is considered to be atmoic)
     
-    # TODO: handle cases with NOT
-    
-    if predicate is None:
-        return existing_results
-    
-    if isinstance(predicate, A_Expr):
+    def breakdown_unstructural_query(predicate : A_Expr):
         assert(if_contains_free_text_fcn(predicate.lexpr) or if_contains_free_text_fcn(predicate.rexpr))
         if if_contains_free_text_fcn(predicate.lexpr) and if_contains_free_text_fcn(predicate.rexpr):
             raise ValueError("cannot optimize for predicate containing free text functions on both side of expression: {}".format(RawStream()(predicate)))
@@ -293,7 +285,7 @@ def execute_free_text_queries(predicate : BoolExpr, existing_results, column_inf
         assert(len(field_lst) == 1)
         field = field_lst[0].fields[0].sval
         
-        opeartor = predicate.name[0].sval
+        operator = predicate.name[0].sval
         if isinstance(value_clause.val, String):
             value = value_clause.val.sval
         elif isinstance(value_clause.val, Integer):
@@ -301,10 +293,23 @@ def execute_free_text_queries(predicate : BoolExpr, existing_results, column_inf
         else:
             raise ValueError()
         
-        return retrieve_and_verify(query, field, opeartor, value, existing_results, column_info, limit), column_info
+        return field, query, operator, value
+        
+    # TODO: handle cases with NOT
+    
+    if predicate is None:
+        return existing_results
+    
+    if isinstance(predicate, A_Expr):
+        field, query, operator, value = breakdown_unstructural_query(predicate)
+        return retrieve_and_verify(node, [(field, query, operator, value)], existing_results, column_info, limit), column_info
 
     elif isinstance(predicate, BoolExpr) and predicate.boolop == BoolExprType.AND_EXPR:
-        pass
+        field_query_list = []
+        for a_pred in predicate.args:
+            field_query_list.append(breakdown_unstructural_query(a_pred))
+        
+        return retrieve_and_verify(node, field_query_list, existing_results, column_info, limit), column_info
     
     else:
         raise ValueError("expects predicate to only contain automatic unstructural query or AND of them, but predicate is not: {}".format(RawStream()(predicate)))
@@ -327,7 +332,7 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit):
         else:
             free_text_predicates = BoolExpr(boolop=BoolExprType.AND_EXPR, args = free_text_predicates)
         
-        return execute_free_text_queries(free_text_predicates, structural_res , column_info, limit)
+        return execute_free_text_queries(node, free_text_predicates, structural_res , column_info, limit)
 
 
 def analyze_SelectStmt(node : SelectStmt):
@@ -361,7 +366,7 @@ def analyze_SelectStmt(node : SelectStmt):
             return execute_structural_sql(node, sql_dnf_predicates)
         else:
             all_results, column_info = execute_structural_sql(node, None)
-            return execute_free_text_queries(sql_dnf_predicates, all_results, column_info, node.limitCount.val.ival)
+            return execute_free_text_queries(node, sql_dnf_predicates, all_results, column_info, node.limitCount.val.ival)
         
     else:
         raise ValueError("Expects sql to be in DNF, but is not: {}".format(RawStream()(sql_dnf_predicates)))
@@ -369,8 +374,9 @@ def analyze_SelectStmt(node : SelectStmt):
 
 if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'is this a pet-friendly restaurant') = 'Yes' LIMIT 4")
-    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' LIMIT 4")
+    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'what is the price range') <= 20 LIMIT 4")
+    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' AND answer(reviews, 'does this restaurant have good ambiance') = 'Yes' LIMIT 4")
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))

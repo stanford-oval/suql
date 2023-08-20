@@ -35,7 +35,7 @@ class EmbeddingStore():
         self.embeddings = None
 
         # stores a table for bidirectional mapping (for each PSQL table and free text field) between
-        # PSQL row ID <-> corresponding indexs for strings <-> corresponding inembeddings stored on GPU
+        # PSQL row ID <-> corresponding indexs for strings <-> corresponding embeddings stored on GPU
         self.document2embedding = {}
         self.embedding2document = {}
         self.id2document = {}
@@ -112,18 +112,89 @@ class EmbeddingStore():
         dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device='cuda')] * query_embedding, dim=1)
         _, indices_max = torch.topk(dot_products, top)
         embeddings_indices_max = [embedding_indices[index] for index in indices_max.tolist()]
-        return [(self.document2id[self.embedding2document[index]], self.all_free_text[self.embedding2document[index]])  for index in embeddings_indices_max]
+        return [(self.document2id[self.embedding2document[index]], self.all_free_text[self.embedding2document[index]]) for index in embeddings_indices_max]
 
+    def dot_product_with_value(self, id_list, query):
+        document_indices = [item for sublist in map(lambda x: self.id2document[x], id_list) for item in sublist]
+        embedding_indices = [item for sublist in map(lambda x: self.document2embedding[x], document_indices) for item in sublist]
+    
+        # chunking param = 0 makes sure that we don't chunk the query
+        query_embedding = _compute_single_embedding([query], chunking_param=0)[0]
+        dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device='cuda')] * query_embedding, dim=1)
+        
+        # for each id, we would do a sorting based on each retrieval score
+        # to determine the top similarity score for each id, and based on which document
+        counter = 0
+        res = []
+        for id in id_list:
+            # this records the embedding indices for a given id
+            id_embedding_indices = [item for sublist in map(lambda x: self.document2embedding[x], self.id2document[id]) for item in sublist]
+            # this gets the top value and index of similarity score based on the big `dot_products` matrix
+            # remember, index here is with respect to the id_embedding_indices above
+            if not id_embedding_indices:
+                top_value = -1
+                top_document = ""
+            else:
+                top_value, top_index = torch.topk(dot_products[torch.tensor(list(range(counter, counter + len(id_embedding_indices))))], 1)
+                # getting the actual document requires going from top_index to actual embedding index to document index
+                top_document = self.all_free_text[self.embedding2document[id_embedding_indices[top_index]]]
+                counter += len(id_embedding_indices)
+            res.append((id, top_value, top_document))
+        
+        return res     
+        
 
+class MultipleEmbeddingStore():
+    def __init__(self) -> None:
+        # table name -> free text field name -> EmbeddingStore
+        self.mapping = {}
+    
+    def add(self, table_name, primary_key_field_name, free_text_field_name):
+        if table_name in self.mapping and free_text_field_name in self.mapping[table_name]:
+            print("Table {} for free text field {} already in storage. Negelecting...".format(table_name, free_text_field_name))
+            return
+        if table_name not in self.mapping:
+            self.mapping[table_name] = {}
+        self.mapping[table_name][free_text_field_name] = EmbeddingStore(table_name, primary_key_field_name, free_text_field_name)
+    
+    def retrieve(self, table_name, free_text_field_name):
+        return self.mapping[table_name][free_text_field_name]
+    
+    def dot_product(self, table_name, id_list, field_query_list, top):
+        # table_name and id_list must be the same
+        # field_query_list stores a list of (free text field, query)
+        assert(type(field_query_list) == list)
+        
+        if len(field_query_list) == 1:
+            free_text_field = field_query_list[0][0]
+            query = field_query_list[0][1]
+            
+            return self.retrieve(table_name, free_text_field).dot_product(id_list, query, top)
+        
+        res = {}
+        for free_text_field, query in field_query_list:
+            for id, top_value, top_document in self.retrieve(table_name, free_text_field).dot_product_with_value(id_list, query):
+                if id not in res:
+                    res[id] = [top_value, [top_document]]
+                else:
+                    res[id][0] += top_value
+                    res[id][1].append(top_document)
+        
+        sorted_res = sorted(res.items(), key=lambda x: x[1][0], reverse=True)[:top]
+        print(sorted_res[:10])
+        return list(map(lambda x: (x[0], x[1][1]), sorted_res))
+
+    
 @app.route('/search', methods=['POST'])
 def search():
     data = request.get_json()
     res = {
-        "result" : embedding_store.dot_product(data["id_list"], data["query"], data["top"])
+        "result" : embedding_store.dot_product(data["table_name"], data["id_list"], data["field_query_list"], data["top"])
     }
     
     return res
 
 if __name__ == "__main__":
-    embedding_store = EmbeddingStore("restaurants", "_id", "reviews")
+    embedding_store = MultipleEmbeddingStore()
+    embedding_store.add("restaurants", "_id", "reviews")
     app.run(host=host, port=port)
