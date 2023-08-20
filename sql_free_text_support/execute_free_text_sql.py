@@ -318,7 +318,9 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit):
     if isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
         # find the structural part
         structural_predicates = tuple(filter(lambda x: if_all_structural(x), sql_dnf_predicates.args))
-        if len(structural_predicates) == 1:
+        if len(structural_predicates) == 0:
+            structural_predicates =  None
+        elif len(structural_predicates) == 1:
             structural_predicates =  structural_predicates[0]
         else:
             structural_predicates = BoolExpr(boolop=BoolExprType.AND_EXPR, args = structural_predicates)
@@ -376,7 +378,8 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'is this a pet-friendly restaurant') = 'Yes' LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'what is the price range') <= 20 LIMIT 4")
-    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' AND answer(reviews, 'does this restaurant have good ambiance') = 'Yes' LIMIT 4")
+    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' AND answer(reviews, 'does this restaurant have good ambiance') = 'Yes' LIMIT 4")
+    root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?'), answer(reviews, 'what is the atmosphere?') FROM restaurants WHERE answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' AND answer(reviews, 'what is the atmosphere?') = 'Good' LIMIT 1;")
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))

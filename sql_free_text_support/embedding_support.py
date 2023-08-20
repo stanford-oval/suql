@@ -112,7 +112,7 @@ class EmbeddingStore():
         dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device='cuda')] * query_embedding, dim=1)
         _, indices_max = torch.topk(dot_products, top)
         embeddings_indices_max = [embedding_indices[index] for index in indices_max.tolist()]
-        return [(self.document2id[self.embedding2document[index]], self.all_free_text[self.embedding2document[index]]) for index in embeddings_indices_max]
+        return [(self.document2id[self.embedding2document[index]], [self.all_free_text[self.embedding2document[index]]]) for index in embeddings_indices_max]
 
     def dot_product_with_value(self, id_list, query):
         document_indices = [item for sublist in map(lambda x: self.id2document[x], id_list) for item in sublist]
@@ -181,7 +181,6 @@ class MultipleEmbeddingStore():
                     res[id][1].append(top_document)
         
         sorted_res = sorted(res.items(), key=lambda x: x[1][0], reverse=True)[:top]
-        print(sorted_res[:10])
         return list(map(lambda x: (x[0], x[1][1]), sorted_res))
 
     
