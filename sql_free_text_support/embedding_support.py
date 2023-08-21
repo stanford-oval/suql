@@ -164,6 +164,8 @@ class MultipleEmbeddingStore():
         # table_name and id_list must be the same
         # field_query_list stores a list of (free text field, query)
         assert(type(field_query_list) == list)
+        if len(id_list) == 0:
+            return []
         
         if len(field_query_list) == 1:
             free_text_field = field_query_list[0][0]
