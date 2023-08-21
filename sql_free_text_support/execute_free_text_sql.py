@@ -315,6 +315,8 @@ def execute_free_text_queries(node, predicate : BoolExpr, existing_results, colu
         raise ValueError("expects predicate to only contain automatic unstructural query or AND of them, but predicate is not: {}".format(RawStream()(predicate)))
 
 def execute_and(sql_dnf_predicates, node : SelectStmt, limit):
+    # there should not exist any OR expression inside sql_dnf_predicates
+    
     if isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
         # find the structural part
         structural_predicates = tuple(filter(lambda x: if_all_structural(x), sql_dnf_predicates.args))
@@ -335,6 +337,13 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit):
             free_text_predicates = BoolExpr(boolop=BoolExprType.AND_EXPR, args = free_text_predicates)
         
         return execute_free_text_queries(node, free_text_predicates, structural_res , column_info, limit)
+    
+    elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
+        if if_all_structural(sql_dnf_predicates):
+            return execute_structural_sql(node, sql_dnf_predicates)
+        else:
+            all_results, column_info = execute_structural_sql(node, None)
+            return execute_free_text_queries(node, sql_dnf_predicates, all_results, column_info, limit)
 
 
 def analyze_SelectStmt(node : SelectStmt):
@@ -346,17 +355,13 @@ def analyze_SelectStmt(node : SelectStmt):
     if isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.OR_EXPR:
         choices = sorted(sql_dnf_predicates.args, key = lambda x: if_all_structural(x), reverse=True)
         res = []
-        all_results = None
         for choice in choices:
-            if if_all_structural(choice):
-                choice_res, column_info = execute_structural_sql(node, choice)
-            else:
-                choice_res = execute_and(choice, node, node.limitCount.val.ival - len(res))
+            choice_res, column_info = execute_and(choice, node, node.limitCount.val.ival - len(res))
             res.extend(choice_res)
             
             # at any time, if there is enough results, return that 
-            if len(res) >= node.limitCount:
-                return res, column_info
+            if len(res) >= node.limitCount.val.ival:
+                break
         
         return res, column_info
     
@@ -364,11 +369,7 @@ def analyze_SelectStmt(node : SelectStmt):
         return execute_and(sql_dnf_predicates, node, node.limitCount.val.ival)
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
-        if if_all_structural(sql_dnf_predicates):
-            return execute_structural_sql(node, sql_dnf_predicates)
-        else:
-            all_results, column_info = execute_structural_sql(node, None)
-            return execute_free_text_queries(node, sql_dnf_predicates, all_results, column_info, node.limitCount.val.ival)
+        return execute_and(sql_dnf_predicates, node, node.limitCount.val.ival)
         
     else:
         raise ValueError("Expects sql to be in DNF, but is not: {}".format(RawStream()(sql_dnf_predicates)))
@@ -379,7 +380,9 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'what is the price range') <= 20 LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' AND answer(reviews, 'does this restaurant have good ambiance') = 'Yes' LIMIT 4")
-    root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?'), answer(reviews, 'what is the atmosphere?') FROM restaurants WHERE answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' AND answer(reviews, 'what is the atmosphere?') = 'Good' LIMIT 1;")
+    # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?'), answer(reviews, 'what is the atmosphere?') FROM restaurants WHERE answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' AND answer(reviews, 'what is the atmosphere?') = 'Good' LIMIT 1;")
+    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes' AND location = 'Palo Alto' LIMIT 1;")
+    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE (answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes') AND location = 'Palo Alto' LIMIT 1;")
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))
