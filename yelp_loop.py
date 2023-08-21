@@ -479,14 +479,14 @@ def compute_next_turn(
         if sys_type == "sql_textfcns_v0801":
             results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].temp_target = first_sql
-            dlgHistory[-1].user_target = second_sql
+            dlgHistory[-1].user_target = first_sql
+            dlgHistory[-1].temp_target = second_sql
         
         elif sys_type == "semantic_index_w_textfncs":
             results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
-            dlgHistory[-1].temp_target = first_sql
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = second_sql
+            dlgHistory[-1].user_target = first_sql
+            dlgHistory[-1].temp_target = second_sql
             
         elif sys_type == "baseline_linearization":
             results = baseline_filter(user_utterance)
@@ -508,7 +508,7 @@ def compute_next_turn(
             return dlgHistory
             
     response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
-                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=5)
+                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=7)
     dlgHistory[-1].agent_utterance = response
     
     dlgHistory[-1].time_statement = {
