@@ -19,6 +19,7 @@ import requests
 import json
 import random
 import string
+import concurrent.futures
 
 SET_FREE_TEXT_FCNS = ["answer"]
 
@@ -191,11 +192,47 @@ def verify(document, field, query, operator, value):
         postprocess=False)[0]
     
     if "the output is correct" in res.lower():
-        print("VERIFIED: {}".format(document))
         return True
     else:
         return False
 
+def verify_single_res(doc, field_query_list):
+    # verify for each stmt, if any stmt fails to verify, exclude it
+    all_found = True
+    found_stmt = []
+    for i, entry in enumerate(field_query_list):
+        field, query, operator, value = entry
+        # TODO parallelize this:
+        if not verify(doc[i], field, query, operator, value):
+            all_found = False
+            break
+        else:
+            found_stmt.append("Verified answer({}, '{}') {} {} based on document: {}".format(field, query, operator, value, doc[i]))
+    if all_found:
+        print('\n'.join(found_stmt))
+    
+    return all_found
+
+def parallel_filtering(fcn, source, limit):
+    true_count = 0
+    true_items = set()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = {executor.submit(fcn, item): item for item in source}
+        
+        for future in concurrent.futures.as_completed(futures):
+            item = futures[future]
+            result = future.result()
+            if result:
+                true_count += 1
+                true_items.add(item[0])
+
+            if true_count >= limit:
+                # Cancel remaining futures
+                for f in futures:
+                    f.cancel()
+                break
+
+    return true_items
 
 def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit):
     # field_query_list is a list of tuples, each entry of the tuple are:    
@@ -224,27 +261,12 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     response.raise_for_status()
     parsed_result = response.json()["result"]
     
-    id_res = set()
-    for id, review in parsed_result:
-        # verify for each stmt, if any stmt fails to verify, exclude it
-        all_found = True
-        for i, entry in enumerate(field_query_list):
-            field, query, operator, value = entry
-            # TODO parallelize this:
-            if not verify(review[i], field, query, operator, value):
-                all_found = False
-        
-        if all_found:
-            id_res.add(id)
-            if len(id_res) >= limit:
-                    break
+    id_res = parallel_filtering(lambda x: verify_single_res(x[1], field_query_list), parsed_result, limit)
         
     end_time = time.time()
     print("retrieve + verification time {}s".format(end_time - start_time))
     
     return list(filter(lambda x: x[id_index] in id_res, existing_results))
-        
-    
     
 
 def execute_structural_sql(node : SelectStmt, predicate : BoolExpr):
