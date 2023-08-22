@@ -44,7 +44,7 @@ User: I want a great restaurant in Napa, CA.
 Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' LIMIT 1;
 Agent: I found the 5.0 star Gui's vegan house. It has 2,654 reviews and reviews mention great atmosphere, quick and good service, and good food quality.
 User: Give me the review that talk about good food quality.
-Target: SELECT single_review FROM restaurants, unnest(reviews) as single_review WHERE name ILIKE 'Gui's vegan house' AND answer(single_review, 'does this review mention good food quality?') = 'Yes' LIMIT 5;
+Target: SELECT single_review FROM restaurants, unnest(reviews) as single_review WHERE name ILIKE 'Gui''s vegan house' AND answer(single_review, 'does this review mention good food quality?') = 'Yes' LIMIT 5;
 --
 User: Which restaurants have a happy hour in Bakersfield?
 Target: SELECT *, summary(reviews), answer(reviews, 'what is the happy hour here?') FROM restaurants WHERE location = 'Bakersfield' AND answer(reviews, 'does this restaurant have a happy hour?') = 'Yes' LIMIT 1;
