@@ -416,25 +416,22 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         first_sql,
         classification_fields_list={
             "cuisines": CUISINE_LIST
-        },
-        classification_fields_single={
-            "location": ["Palo Alto", "Sunnyvale", "San Francisco", "Cupertino"]
         })
 
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 5;', second_sql, flags=re.MULTILINE)
     
-    visitor = SelectVisitor()
-    root = parse_sql(second_sql)
-    visitor(root)
-    second_sql = RawStream()(root)
-    
-    print("generated SQL query after rewriting: {}".format(second_sql))
-    
     try:
+        final_res = []
+        visitor = SelectVisitor()
+        root = parse_sql(second_sql)
+        visitor(root)
+        second_sql = RawStream()(root)
+        
+        print("generated SQL query after rewriting: {}".format(second_sql))
+    
         results, column_names, sql_execution_time = execute_sql(second_sql)
 
-        final_res = []
         for res in results:
             temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
             if "rating" in temp:
@@ -448,6 +445,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         print(final_res)
     except Exception:
         visitor.drop_tmp_tables()
+        sql_execution_time = 30
     finally:
         visitor.drop_tmp_tables()
     
@@ -496,7 +494,8 @@ def compute_next_turn(
 
         # for all systems, cut it out if no response returned
         if not results:
-            response = "Sorry, I don't have that information."
+            response, final_response_time = llm_generate(template_file='prompts/yelp_response_no_results.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
+                                max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=7)
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].time_statement = {
                 "first_classification": first_classification_time,

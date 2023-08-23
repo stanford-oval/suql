@@ -12,13 +12,13 @@ def execute_sql(sql_query, user = "yelpbot_user", password = "yelpbot_user", dat
         password=password,
         host="127.0.0.1",
         port="5432",
-        options='-c statement_timeout=60000 -c client_encoding=UTF8'
+        options='-c statement_timeout=30000 -c client_encoding=UTF8'
     )
 
     # Create a cursor object to execute SQL queries
     cursor = conn.cursor()
     
-    cursor.execute("SET statement_timeout = 60000")  # Set timeout to 60 seconds
+    cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
     conn.commit()
 
     try:
@@ -59,13 +59,13 @@ def execute_sql_with_column_info(sql_query):
         password="yelpbot_user",
         host="127.0.0.1",
         port="5432",
-        options='-c statement_timeout=60000 -c client_encoding=UTF8'
+        options='-c statement_timeout=30000 -c client_encoding=UTF8'
     )
 
     # Create a cursor object to execute SQL queries
     cursor = conn.cursor()
     
-    cursor.execute("SET statement_timeout = 60000")  # Set timeout to 60 seconds
+    cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
     conn.commit()
 
     try:
