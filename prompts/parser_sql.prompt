@@ -16,9 +16,6 @@ CREATE TABLE restaurants (
 
 Do not generate fields beyond the given fields.
 
-User: show me nearby mcdonalds
-Target: SELECT *, summary(reviews) FROM restaurants WHERE name ILIKE '%mcdonalds%' LIMIT 1;
---
 User: Where is Burguer King?
 Target: SELECT address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
 --
@@ -34,17 +31,17 @@ Target: SELECT answer(reviews, 'What is the atmosphere?') FROM restaurants WHERE
 User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
 Target: SELECT *, summary(reviews), answer(reviews, 'what is the wait time?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND answer(reviews, 'does this restaurant have short wait time?') = 'Yes' LIMIT 1;
 --
-User: i'm hungry, what should i have for lunch?
-Target: SELECT *, summary(reviews) FROM restaurants LIMIT 1;
+User: i'm hungry, what should i have for lunch? I am looking for salmon.
+Target: SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does this restaurant serve salmon?') LIMIT 1;
 Agent: I found the 4.5 star Daigo. It is a family-owned business that serves traditional Japanese cuisine.
 User: Show me something else.
 Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(name = 'Daigo') LIMIT 1;
 --
-User: I want a great restaurant in Napa, CA.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' LIMIT 1;
+User: I want a popular restaurant in Napa, CA.
+Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' ORDER BY num_reviews DESC LIMIT 1;
 Agent: I found the 5.0 star Gui's vegan house. It has 2,654 reviews and reviews mention great atmosphere, quick and good service, and good food quality.
 User: Give me the review that talk about good food quality.
-Target: SELECT single_review FROM restaurants, unnest(reviews) as single_review WHERE name ILIKE 'Gui''s vegan house' AND answer(single_review, 'does this review mention good food quality?') = 'Yes' LIMIT 5;
+Target: SELECT single_review FROM restaurants, unnest(reviews) as single_review WHERE name ILIKE 'Gui''s vegan house' AND answer(single_review, 'does this review mention good food quality?') = 'Yes' LIMIT 3;
 --
 User: Which restaurants have a happy hour in Bakersfield?
 Target: SELECT *, summary(reviews), answer(reviews, 'what is the happy hour here?') FROM restaurants WHERE location = 'Bakersfield' AND answer(reviews, 'does this restaurant have a happy hour?') = 'Yes' LIMIT 1;

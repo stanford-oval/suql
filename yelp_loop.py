@@ -217,7 +217,6 @@ def get_field_information(name, operator, value, user_target):
 def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_fields_single = {}):
     output_parser = CommaSeparatedListOutputParser()
 
-    total_rewrite_time = 0
     temp = in_sql
     # the classification_fields is a dictionary.
     # each key is the field name, and each value is the list of available enum values
@@ -235,7 +234,7 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                     print("softmatch matched to {}".format(replacement_predicates))
                 else:
                     # we need to do a classification here
-                    classified_field_value_raw, rewrite_time = llm_generate(
+                    classified_field_value_raw, _ = llm_generate(
                         template_file='prompts/field_classification.prompt',
                         engine='gpt-35-turbo',
                         stop_tokens=["\n"],
@@ -247,7 +246,6 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                             "field_name": field_name
                         },
                         postprocess=False)
-                    total_rewrite_time += rewrite_time
                     classified_field_values_list = output_parser.parse(classified_field_value_raw)
                     
                     for classified_field_value in classified_field_values_list:
@@ -276,7 +274,7 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                     print("softmatch matched to {}".format(replacement_predicates))
                 else:
                     # we need to do a classification here
-                    classified_field_value_raw, rewrite_time = llm_generate(
+                    classified_field_value_raw, _ = llm_generate(
                         template_file='prompts/field_classification.prompt',
                         engine='gpt-35-turbo',
                         stop_tokens=["\n"],
@@ -288,7 +286,6 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                             "field_name": field_name
                         },
                         postprocess=False)
-                    total_rewrite_time += rewrite_time
                     classified_field_values_list = output_parser.parse(classified_field_value_raw)
                     
                     for classified_field_value in classified_field_values_list:
@@ -306,7 +303,7 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
     # escape `'` character
     # TODO: it seems psycopg2 does not allow an easy escape maneuver. Investigate further
     temp = temp.replace("\\'", "")
-    return temp, total_rewrite_time
+    return temp
 
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
     first_sql, first_sql_time = llm_generate(template_file=prompt_file,
@@ -412,14 +409,15 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         
     print("generated SQL query before rewriting: {}".format(first_sql))
     
-    second_sql, second_sql_time = sql_rewrites(
+    second_sql_start_time = time.time()
+    second_sql = sql_rewrites(
         first_sql,
         classification_fields_list={
             "cuisines": CUISINE_LIST
         })
 
     if not ("LIMIT" in second_sql):
-        second_sql = re.sub(r';$', ' LIMIT 5;', second_sql, flags=re.MULTILINE)
+        second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
     
     try:
         final_res = []
@@ -430,7 +428,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         
         print("generated SQL query after rewriting: {}".format(second_sql))
     
-        results, column_names, sql_execution_time = execute_sql(second_sql)
+        results, column_names, _ = execute_sql(second_sql)
 
         for res in results:
             temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
@@ -448,8 +446,9 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         sql_execution_time = 30
     finally:
         visitor.drop_tmp_tables()
+    second_sql_end_time = time.time()
     
-    return final_res, first_sql, second_sql, first_sql_time, second_sql_time, sql_execution_time
+    return final_res, first_sql, second_sql, first_sql_time, second_sql_end_time - second_sql_start_time
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
@@ -461,9 +460,8 @@ def compute_next_turn(
     assert(sys_type in ["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
     
     first_classification_time = 0
-    first_sql_gen_time = 0
-    second_sql_gen_time = 0
-    sql_execution = 0
+    semantic_parser_time = 0
+    suql_execution_time = 0
     final_response_time = 0
 
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
@@ -475,13 +473,13 @@ def compute_next_turn(
 
     if continuation.startswith("Yes"):
         if sys_type == "sql_textfcns_v0801":
-            results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
+            results, first_sql, second_sql, semantic_parser_time, suql_execution_time = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
             dlgHistory[-1].user_target = first_sql
             dlgHistory[-1].temp_target = second_sql
         
         elif sys_type == "semantic_index_w_textfncs":
-            results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
+            results, first_sql, second_sql, semantic_parser_time, suql_execution_time = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
             dlgHistory[-1].user_target = first_sql
             dlgHistory[-1].temp_target = second_sql
@@ -499,9 +497,8 @@ def compute_next_turn(
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].time_statement = {
                 "first_classification": first_classification_time,
-                "first_sql_gen": first_sql_gen_time,
-                "second_sql_gen": second_sql_gen_time,
-                "sql_execution": sql_execution,
+                "semantic_parser": semantic_parser_time,
+                "suql_execution": suql_execution_time,
                 "final_response": final_response_time
             }
             return dlgHistory
@@ -512,9 +509,8 @@ def compute_next_turn(
     
     dlgHistory[-1].time_statement = {
         "first_classification": first_classification_time,
-        "first_sql_gen": first_sql_gen_time,
-        "second_sql_gen": second_sql_gen_time,
-        "sql_execution": sql_execution,
+        "semantic_parser": semantic_parser_time,
+        "suql_execution": suql_execution_time,
         "final_response": final_response_time
     }
     

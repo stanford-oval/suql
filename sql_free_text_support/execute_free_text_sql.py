@@ -99,7 +99,7 @@ class SelectVisitor(Visitor):
             column_create_stmt = ",\n".join(list(map(lambda x: " ".join(x), column_info)))
             create_stmt = f"CREATE TABLE {tmp_table_name} (\n{column_create_stmt}\n); GRANT SELECT ON {tmp_table_name} TO yelpbot_user;"
             print("created table {}".format(tmp_table_name))
-            execute_sql(create_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True)
+            execute_sql(create_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, no_print=True)
             
             if results:
                 # some special processing is needed for python dict types - they need to be converted to json
@@ -202,7 +202,6 @@ def verify_single_res(doc, field_query_list):
     found_stmt = []
     for i, entry in enumerate(field_query_list):
         field, query, operator, value = entry
-        # TODO parallelize this:
         if not verify(doc[i], field, query, operator, value):
             all_found = False
             break
@@ -210,6 +209,9 @@ def verify_single_res(doc, field_query_list):
             found_stmt.append("Verified answer({}, '{}') {} {} based on document: {}".format(field, query, operator, value, doc[i]))
     if all_found:
         print('\n'.join(found_stmt))
+    elif found_stmt:
+        print("partially verified: " + '\n'.join(found_stmt))
+        
     
     return all_found
 
@@ -234,7 +236,7 @@ def parallel_filtering(fcn, source, limit):
 
     return true_items
 
-def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit):
+def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit, parallel = True):
     # field_query_list is a list of tuples, each entry of the tuple are:    
     # 0st: field: field to do retrieval on
     # 1st: query: query for retrieval model
@@ -261,7 +263,15 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     response.raise_for_status()
     parsed_result = response.json()["result"]
     
-    id_res = parallel_filtering(lambda x: verify_single_res(x[1], field_query_list), parsed_result, limit)
+    if parallel:
+        # parallelize verification calls
+        id_res = parallel_filtering(lambda x: verify_single_res(x[1], field_query_list), parsed_result, limit)
+    else:
+        id_res = []
+        for each_res in parsed_result:
+            if verify_single_res(each_res[1], field_query_list):
+                id_res.append(each_res[0])
+            
         
     end_time = time.time()
     print("retrieve + verification time {}s".format(end_time - start_time))
@@ -398,13 +408,16 @@ def analyze_SelectStmt(node : SelectStmt):
             
 
 if __name__ == "__main__":
+    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'brunch' = ANY (cuisines) AND location = 'San Francisco' ORDER BY num_reviews DESC LIMIT 3;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'is this a pet-friendly restaurant') = 'Yes' LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'what is the price range') <= 20 LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' AND answer(reviews, 'does this restaurant have good ambiance') = 'Yes' LIMIT 4")
     # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?'), answer(reviews, 'what is the atmosphere?') FROM restaurants WHERE answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' AND answer(reviews, 'what is the atmosphere?') = 'Good' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes' AND location = 'Palo Alto' LIMIT 1;")
-    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE (answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes') AND location = 'Palo Alto' LIMIT 1;")
+    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE (answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes') AND location = 'Palo Alto' LIMIT 1;")
+    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does it contain grilled cheese?') = 'Yes' AND answer(reviews, 'is this restaurant family-friendly') = 'Yes' LIMIT 1;")
+    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does the restuarant serve grilled cheese?') = 'Yes' LIMIT 1;")
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))

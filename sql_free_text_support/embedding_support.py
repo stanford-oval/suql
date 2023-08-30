@@ -69,8 +69,13 @@ class EmbeddingStore():
         
         print("initializing embeddings for all documents")
         for i, document in tqdm(list(enumerate(self.all_free_text))):
-            document_embeddings = cache_db.find_one({"_id": compute_sha256(document)})["embeddings"]
-            document_embeddings = torch.tensor(document_embeddings, device=device)
+            found_res = cache_db.find_one({"_id": compute_sha256(document)})
+            if found_res:
+                document_embeddings = found_res["embeddings"]
+                document_embeddings = torch.tensor(document_embeddings, device=device)
+            else:
+                document_embeddings = _compute_single_embedding([document])
+            
             # initialize the first `existing_documents`
             if current_counter == 0:
                 existing_embeddings = document_embeddings
@@ -197,5 +202,6 @@ def search():
 
 if __name__ == "__main__":
     embedding_store = MultipleEmbeddingStore()
+    embedding_store.add("restaurants", "_id", "popular_dishes")
     embedding_store.add("restaurants", "_id", "reviews")
     app.run(host=host, port=port)
