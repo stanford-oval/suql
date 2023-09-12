@@ -255,7 +255,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
         "table_name": node.fromClause[0].relname, # TODO: implement support for JOIN statements
         "id_list": list(map(lambda x: x[id_index], existing_results)),
         "field_query_list": list(map(lambda x: (x[0], x[1]), field_query_list)),
-        "top": limit * 10  # return 4 times the ordered amount, for GPT filtering purposes, TODO: this needs to be better planned
+        "top": limit * 20  # return 20 times the ordered amount, for GPT filtering purposes, TODO: this needs to be better planned
     }
 
     # Send a POST request

@@ -1,9 +1,9 @@
-`answer(document, query)` takes in a document and a query. It asks `query` on `document` and outputs the answer.             
-            
-Now, let's look at this use case. Your task is to determine whether the output is correct.            
-        
-{{ field }} = "{{ document }}"
-        
+`answer(document, query)` takes in a document and a query. It asks `query` on `document` and outputs the answer.
+
+Now, let's look at this use case. Your task is to determine whether the output is correct.
+
+{{ field }} = ["{{ document }}"]
+
 answer({{ field }}, "{{ query }}") {{ operator }} {{ value }}
 
 Choose from one of the following choices:

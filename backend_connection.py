@@ -143,8 +143,8 @@ def chat():
     dlgItem = connection.compute_next(dialog_id, user_utterance, turn_id, system_name)
 
     log = {}
-    log["1st_sql"] = dlgItem.temp_target
-    log["2nd_sql"] = dlgItem.user_target
+    log["1st_sql"] = dlgItem.user_target
+    log["2nd_sql"] = dlgItem.temp_target
     log["db_results"] = json.loads(dlgItem.genie_utterance) if dlgItem.genie_utterance is not None else None
 
     def pp_time(time_statement):
