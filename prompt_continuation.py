@@ -74,7 +74,7 @@ def _generate(filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p
     if max_tries > 1 and temperature == 0:
         max_tries = 1
 
-    logger.debug('LLM input = %s', filled_prompt)
+    logger.info('LLM input = %s', filled_prompt)
 
     # ChatGPT has specific input tokens. The following is a naive implementation of few-shot prompting, which may be improved.
     if engine == "gpt-35-turbo":
@@ -185,7 +185,7 @@ def call_with_timeout(func, timeout_sec, *args, **kwargs):
 def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
             max_tokens, temperature, stop_tokens, top_p=0.9, frequency_penalty=0, presence_penalty=0,
             postprocess=True, max_tries=1, ban_line_break_start=False, filled_prompt=None,
-            attempts=3, max_wait_time=5):
+            attempts=0, max_wait_time=5):
     """
     filled_prompt gives direct access to the underlying model, without having to load a prompt template from a .prompt file. Used for testing.
     ban_line_break_start can potentially double the cost, though in practice (and especially with good prompts) this only happens for a fraction of inputs

@@ -143,16 +143,15 @@ def chat():
     dlgItem = connection.compute_next(dialog_id, user_utterance, turn_id, system_name)
 
     log = {}
-    log["1st_sql"] = dlgItem.temp_target
-    log["2nd_sql"] = dlgItem.user_target
+    log["1st_sql"] = dlgItem.user_target
+    log["2nd_sql"] = dlgItem.temp_target
     log["db_results"] = json.loads(dlgItem.genie_utterance) if dlgItem.genie_utterance is not None else None
 
     def pp_time(time_statement):
         return [
-            "Initial classifier: {:.2f}s".format(time_statement["first_classification"]), 
-            "1st SQL gen: {:.2f}s".format(time_statement["first_sql_gen"]),
-            "2nd SQL gen (rewrite): {:.2f}s".format(time_statement["second_sql_gen"]),
-            "SQL execution: {:.2f}s".format(time_statement["sql_execution"]),
+            "First classifier: {:.2f}s".format(time_statement["first_classification"]), 
+            "Semantic parser: {:.2f}s".format(time_statement["semantic_parser"]),
+            "SUQL execution: {:.2f}s".format(time_statement["suql_execution"]),
             "Final response: {:.2f}s".format(time_statement["final_response"])
         ]
 

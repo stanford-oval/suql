@@ -21,8 +21,10 @@ from parser_server import GPT_parser_address
 import time
 from postgresql_connection import execute_sql
 # from query_reviews import review_server_address
-from reviews_server import baseline_filter
 from langchain.output_parsers import CommaSeparatedListOutputParser
+from sql_free_text_support.execute_free_text_sql import SelectVisitor
+from pglast import parse_sql
+from pglast.stream import RawStream
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -58,7 +60,8 @@ class DialogueTurn:
         temp_target : str = None,
         user_target : str = None,
         sys_type : str = None,
-        time_statement : dict = None
+        time_statement : dict = None,
+        db_results : list = []
     ):
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
@@ -66,6 +69,7 @@ class DialogueTurn:
         self.temp_target = temp_target
         self.user_target = user_target
         self.sys_type = sys_type
+        self.db_results = db_results
         time_statement = time_statement
         
     agent_utterance: str
@@ -75,6 +79,7 @@ class DialogueTurn:
     temp_target: str
     sys_type: str
     time_statement: dict
+    db_results: list
 
     def to_text(self, they='They', you='You'):
         """
@@ -214,7 +219,6 @@ def get_field_information(name, operator, value, user_target):
 def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_fields_single = {}):
     output_parser = CommaSeparatedListOutputParser()
 
-    total_rewrite_time = 0
     temp = in_sql
     # the classification_fields is a dictionary.
     # each key is the field name, and each value is the list of available enum values
@@ -232,7 +236,7 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                     print("softmatch matched to {}".format(replacement_predicates))
                 else:
                     # we need to do a classification here
-                    classified_field_value_raw, rewrite_time = llm_generate(
+                    classified_field_value_raw, _ = llm_generate(
                         template_file='prompts/field_classification.prompt',
                         engine='gpt-35-turbo',
                         stop_tokens=["\n"],
@@ -244,7 +248,6 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                             "field_name": field_name
                         },
                         postprocess=False)
-                    total_rewrite_time += rewrite_time
                     classified_field_values_list = output_parser.parse(classified_field_value_raw)
                     
                     for classified_field_value in classified_field_values_list:
@@ -273,7 +276,7 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                     print("softmatch matched to {}".format(replacement_predicates))
                 else:
                     # we need to do a classification here
-                    classified_field_value_raw, rewrite_time = llm_generate(
+                    classified_field_value_raw, _ = llm_generate(
                         template_file='prompts/field_classification.prompt',
                         engine='gpt-35-turbo',
                         stop_tokens=["\n"],
@@ -285,7 +288,6 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                             "field_name": field_name
                         },
                         postprocess=False)
-                    total_rewrite_time += rewrite_time
                     classified_field_values_list = output_parser.parse(classified_field_value_raw)
                     
                     for classified_field_value in classified_field_values_list:
@@ -300,14 +302,10 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
                 
                 temp = temp.replace(match.group(0), replacement)
                 
-    # do another rewrite if answer(field_name, value) = 'Yes' is in the prediction
-    # TODO: handle other similar queries
-    temp = re.sub(r"answer\(reviews, '(.*?)'\) = 'Yes'", r"boolean_answer\(reviews, '\1'\)", temp)
-    
     # escape `'` character
     # TODO: it seems psycopg2 does not allow an easy escape maneuver. Investigate further
     temp = temp.replace("\\'", "")
-    return temp, total_rewrite_time
+    return temp
 
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
     first_sql, first_sql_time = llm_generate(template_file=prompt_file,
@@ -413,46 +411,53 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         
     print("generated SQL query before rewriting: {}".format(first_sql))
     
-    second_sql, second_sql_time = sql_rewrites(
+    second_sql_start_time = time.time()
+    second_sql = sql_rewrites(
         first_sql,
         classification_fields_list={
             "cuisines": CUISINE_LIST
-        },
-        classification_fields_single={
-            "location": ["Palo Alto", "Sunnyvale", "San Francisco", "Cupertino"]
         })
-    # do another rewrite if "boolean_answer" is in the prediction
-    if "boolean_answer" in second_sql:
-        second_sql, second_sql_time_ = llm_generate(template_file="prompts/parser_rewrite_sql.prompt",
-            engine='gpt-35-turbo',
-            stop_tokens=[";"],
-            max_tokens=300,
-            temperature=0,
-            prompt_parameter_values={'sql': second_sql},
-            postprocess=False,
-            max_wait_time=3)
-        second_sql_time += second_sql_time_
-        
-    if not ("LIMIT" in second_sql):
-        second_sql = re.sub(r';$', ' LIMIT 5;', second_sql, flags=re.MULTILINE)
-    
-    print("generated SQL query after rewriting: {}".format(second_sql))
-    
-    results, column_names, sql_execution_time = execute_sql(second_sql)
 
-    final_res = []
-    for res in results:
-        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
-        if "rating" in temp:
-            temp["rating"] = float(temp["rating"])
-        
-        if num_tokens_from_string(json.dumps(final_res + [temp], indent=4)) > 3500:
-            break
-        
-        final_res.append(temp)
+    if not ("LIMIT" in second_sql):
+        second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
     
-    print(final_res)
-    return final_res, first_sql, second_sql, first_sql_time, second_sql_time, sql_execution_time
+    try:
+        final_res = []
+        visitor = SelectVisitor()
+        root = parse_sql(second_sql)
+        visitor(root)
+        second_sql = RawStream()(root)
+        
+        print("generated SQL query after rewriting: {}".format(second_sql))
+    
+        results, column_names, _ = execute_sql(second_sql)
+
+        for res in results:
+            temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
+            if "rating" in temp:
+                temp["rating"] = float(temp["rating"])
+            
+            if num_tokens_from_string(json.dumps(final_res + [temp], indent=4)) > 3500:
+                break
+            
+            final_res.append(temp)
+        
+        print(final_res)
+    except Exception:
+        visitor.drop_tmp_tables()
+        sql_execution_time = 30
+    finally:
+        visitor.drop_tmp_tables()
+    second_sql_end_time = time.time()
+    
+    return final_res, first_sql, second_sql, first_sql_time, second_sql_end_time - second_sql_start_time
+
+def turn_db_results2name(db_results):
+    res = []
+    for i in db_results:
+        if "name" in i:
+            res.append(i["name"])
+    return res
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
@@ -464,9 +469,8 @@ def compute_next_turn(
     assert(sys_type in ["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
     
     first_classification_time = 0
-    first_sql_gen_time = 0
-    second_sql_gen_time = 0
-    sql_execution = 0
+    semantic_parser_time = 0
+    suql_execution_time = 0
     final_response_time = 0
 
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
@@ -478,18 +482,22 @@ def compute_next_turn(
 
     if continuation.startswith("Yes"):
         if sys_type == "sql_textfcns_v0801":
-            results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
+            results, first_sql, second_sql, semantic_parser_time, suql_execution_time = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].temp_target = first_sql
-            dlgHistory[-1].user_target = second_sql
+            dlgHistory[-1].user_target = first_sql
+            dlgHistory[-1].temp_target = second_sql
+            dlgHistory[-1].db_results = turn_db_results2name(results)
         
         elif sys_type == "semantic_index_w_textfncs":
-            results, first_sql, second_sql, first_sql_gen_time, second_sql_gen_time, sql_execution = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
-            dlgHistory[-1].temp_target = first_sql
+            results, first_sql, second_sql, semantic_parser_time, suql_execution_time = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = second_sql
+            dlgHistory[-1].user_target = first_sql
+            dlgHistory[-1].temp_target = second_sql
+            dlgHistory[-1].db_results = turn_db_results2name(results)
             
         elif sys_type == "baseline_linearization":
+            from reviews_server import baseline_filter
+            
             results = baseline_filter(user_utterance)
             dlgHistory[-1].temp_target = None
             dlgHistory[-1].user_target = None
@@ -497,26 +505,25 @@ def compute_next_turn(
 
         # for all systems, cut it out if no response returned
         if not results:
-            response = "Sorry, I don't have that information."
+            response, final_response_time = llm_generate(template_file='prompts/yelp_response_no_results.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
+                                max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=7)
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].time_statement = {
                 "first_classification": first_classification_time,
-                "first_sql_gen": first_sql_gen_time,
-                "second_sql_gen": second_sql_gen_time,
-                "sql_execution": sql_execution,
+                "semantic_parser": semantic_parser_time,
+                "suql_execution": suql_execution_time,
                 "final_response": final_response_time
             }
             return dlgHistory
             
     response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
-                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=5)
+                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=7)
     dlgHistory[-1].agent_utterance = response
     
     dlgHistory[-1].time_statement = {
         "first_classification": first_classification_time,
-        "first_sql_gen": first_sql_gen_time,
-        "second_sql_gen": second_sql_gen_time,
-        "sql_execution": sql_execution,
+        "semantic_parser": semantic_parser_time,
+        "suql_execution": suql_execution_time,
         "final_response": final_response_time
     }
     
@@ -542,9 +549,8 @@ if __name__ == '__main__':
                         help='Directly use GPT parser output as full state')
     parser.add_argument('--sys_type', type=str, default='sql_textfcns_v0801',
                         choices=["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
-    # parser.add_argument('--use_sql', action='store_true',
-    #                     help='Uses sql generation')
-    # parser.add_argument('--use_baseline', action=)
+    parser.add_argument('--record_result', type=str, default=None, help='Write results in TSV format to file')
+    parser.add_argument('--batch_process', type=str, default=None, help='A list of QA inputs to run')
 
     args = parser.parse_args()
 
@@ -552,6 +558,27 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.CRITICAL, format=' %(name)s : %(levelname)-8s : %(message)s')
     else:
         logging.basicConfig(level=logging.INFO, format=' %(name)s : %(levelname)-8s : %(message)s')
+
+
+    if args.batch_process:
+        assert(args.record_result)
+        
+        with open(args.batch_process, "r") as fd:
+            inputs = fd.readlines()
+        for each_input in inputs:
+            id, utterance = each_input.split('\t')
+            utterance = utterance.strip()
+            
+            dlgHistory = []
+            genieDS, genie_aux = None, []
+            dlgHistory = compute_next_turn(
+                dlgHistory,
+                utterance,
+                engine=args.engine,
+                sys_type=args.sys_type
+            )
+            with open(args.record_result, 'a+') as fd:
+                fd.write("{}\t{}\t{}\t{}\t{}\n".format(id, dlgHistory[-1].user_utterance, dlgHistory[-1].user_target, dlgHistory[-1].agent_utterance, '\t'.join(dlgHistory[-1].db_results)))
 
     # The dialogue loop
     # the agent starts the dialogue

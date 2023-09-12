@@ -7,47 +7,55 @@ CREATE TABLE restaurants (
     rating NUMERIC(2,1),
     num_reviews NUMBER,
     address TEXT,
-    popular_dishes TEXT[],
+    popular_dishes FREE_TEXT,
     phone_number TEXT,
-    reviews TEXT,
+    reviews FREE_TEXT,
     opening_hours TEXT,
     location TEXT
 );
 
-Do not generate fields beyond the given fields.
+Do not generate fields beyond the given fields. The `answer` function can be used on FREE_TEXT fields.
 
-User: show me nearby mcdonalds
-Target: SELECT *, summary(reviews) FROM restaurants WHERE name ILIKE '%mcdonalds%' LIMIT 1;
---
+{# Basic example #}
 User: Where is Burguer King?
 Target: SELECT address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
 --
+{# Basic example for cuisine #}
 User: what are some japanese restaurants in Kansas City?
-Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'kansas City' LIMIT 1;
+Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'kansas City' LIMIT 3;
 --
-User: Show me a family-friendly restaurant
-Target: SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE boolean_answer(reviews, 'do you find this restaurant to be family-friendly?') LIMIT 1;
+{# Usage of `answer` function on FREE TEXT field in both projection and filter #}
+User: Show me a family-friendly restaurant that has burgers
+Target: SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' AND answer(popular_dishes, 'does this restaurant serve burgers') = 'Yes' LIMIT 1;
 Agent: I found Wesley's steakhouse. Reviews mention kids love going there with their parents. It should be a great weekend dinner for you and your family.
 User: What do the reviews say about the atmosphere in the restaurant?
 Target: SELECT answer(reviews, 'What is the atmosphere?') FROM restaurants WHERE name ILIKE 'Wesley's steakhouse' LIMIT 1;
 --
-User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
-Target: SELECT *, summary(reviews), answer(reviews, 'what is the wait time?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND boolean_answer(reviews, 'does this restaurant have short wait time?') LIMIT 1;
+{# Usage of `answer` function on popular_dishes #}
+User: Find me a place with pasta.
+Target: SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does this restaurant serve pasta') = 'Yes' LIMIT 1;
 --
-User: i'm hungry, what should i have for lunch?
-Target: SELECT *, summary(reviews) FROM restaurants LIMIT 1;
+{# Usage of `answer` function on reviews #}
+User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
+Target: SELECT *, summary(reviews), answer(reviews, 'what is the wait time?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND answer(reviews, 'does this restaurant have short wait time?') = 'Yes' LIMIT 1;
+--
+{# Meaning of the word "popular", and follow up on fetching reviews #}
+User: I want a popular restaurant in Napa, CA.
+Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' ORDER BY num_reviews DESC LIMIT 1;
+Agent: I found the 5.0 star Gui's vegan house. It has 2,654 reviews and reviews mention great atmosphere, quick and good service, and good food quality.
+User: Give me the review that talk about good food quality.
+Target: SELECT single_review FROM restaurants, unnest(reviews) as single_review WHERE name ILIKE 'Gui''s vegan house' AND answer(single_review, 'does this review mention good food quality?') = 'Yes' LIMIT 3;
+--
+{# Usage of `answer` function on reviews #}
+User: Which restaurants have a happy hour in Bakersfield?
+Target: SELECT *, summary(reviews), answer(reviews, 'what is the happy hour here?') FROM restaurants WHERE location = 'Bakersfield' AND answer(reviews, 'does this restaurant have a happy hour?') = 'Yes' LIMIT 1;
+--
+{# Usage of `answer` function on reviews #}
+User: i'm hungry, what should i have for lunch? I am looking for salmon.
+Target: SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does this restaurant serve salmon?') = 'Yes' LIMIT 1;
 Agent: I found the 4.5 star Daigo. It is a family-owned business that serves traditional Japanese cuisine.
 User: Show me something else.
 Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(name = 'Daigo') LIMIT 1;
---
-User: I want a great restaurant in Napa, CA.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' LIMIT 1;
-Agent: I found the 5.0 star Gui's vegan house. It has 2,654 reviews and reviews mention great atmosphere, quick and good service, and good food quality.
-User: Give me the review that talk about good food quality.
-Target: SELECT single_review FROM restaurants, unnest(reviews) as single_review WHERE name ILIKE 'Gui's vegan house' AND boolean_answer(single_review, 'does this review mention good food quality?') LIMIT 5;
---
-User: Which restaurants have a happy hour in Bakersfield?
-Target: SELECT *, summary(reviews), answer(reviews, 'does this restaurant offer a happy hour') FROM restaurants WHERE location = 'Bakersfield' AND boolean_answer(reviews, 'does this restaurant have a happy hour?') LIMIT 1;
 --
 {% for dlg_turn in dlg[:-1] %}
 {% if dlg_turn.genie_utterance is not none %}
