@@ -411,12 +411,13 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         
     print("generated SQL query before rewriting: {}".format(first_sql))
     
+    second_sql = first_sql.replace("\\'", "''")
     second_sql_start_time = time.time()
-    second_sql = sql_rewrites(
-        first_sql,
-        classification_fields_list={
-            "cuisines": CUISINE_LIST
-        })
+    # second_sql = sql_rewrites(
+    #     first_sql,
+    #     classification_fields_list={
+    #         "cuisines": CUISINE_LIST
+    #     })
 
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)

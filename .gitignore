@@ -1,3 +1,11 @@
+.vscode/
+hybrid_qa/*cred.txt
+hybrid_qa/cuisines.json
+hybrid_qa/*.json
+hybrid_qa/hybrid_qa_dataset
+hybrid_qa/*.ipynb
+!hybrid_qa/all_table_mapping.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -131,3 +139,5 @@ dmypy.json
 # custom
 API_KEYS
 *.log
+
+experiments/*

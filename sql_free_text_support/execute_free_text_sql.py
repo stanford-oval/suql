@@ -1,5 +1,5 @@
 
-from pglast.visitors import Visitor
+from pglast.visitors import Visitor, Ancestor
 import pglast
 from pglast.ast import *
 from pglast.enums.primnodes import BoolExprType
@@ -20,6 +20,7 @@ import json
 import random
 import string
 import concurrent.futures
+from collections import defaultdict
 
 SET_FREE_TEXT_FCNS = ["answer"]
 
@@ -78,6 +79,7 @@ class SelectVisitor(Visitor):
     def __init__(self) -> None:
         super().__init__()
         self.tmp_tables = []
+        self.cache = defaultdict(dict)
     
     def __call__(self, node):
         super().__call__(node)
@@ -86,6 +88,9 @@ class SelectVisitor(Visitor):
         if not node.whereClause:
             return
 
+        if isinstance(node.whereClause, SubLink):
+            self.visit_SelectStmt(None, node.whereClause.subselect)
+
         freeTextFcnVisitor = FreeTextFcnVisitor()
         freeTextFcnVisitor(node.whereClause)
         
@@ -93,13 +98,14 @@ class SelectVisitor(Visitor):
             tmp_table_name = "temp_table_{}".format(generate_random_string())
             self.tmp_tables.append(tmp_table_name)
 
-            results, column_info = analyze_SelectStmt(node)
+            # main entry point for SUQL compiler optimization
+            results, column_info = analyze_SelectStmt(node, self.cache)
             
             # based on results and column_info, insert a temporary table
-            column_create_stmt = ",\n".join(list(map(lambda x: " ".join(x), column_info)))
+            column_create_stmt = ",\n".join(list(map(lambda x: f'"{x[0]}" {x[1]}', column_info)))
             create_stmt = f"CREATE TABLE {tmp_table_name} (\n{column_create_stmt}\n); GRANT SELECT ON {tmp_table_name} TO yelpbot_user;"
             print("created table {}".format(tmp_table_name))
-            execute_sql(create_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, no_print=True)
+            execute_sql(create_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, no_print=True, database='hybridqa')
             
             if results:
                 # some special processing is needed for python dict types - they need to be converted to json
@@ -107,7 +113,7 @@ class SelectVisitor(Visitor):
                 placeholder_str = ', '.join(['%s'] * len(results[0]))
                 for result in results:
                     updated_results = tuple([json.dumps(element) if index in json_indices else element for index, element in enumerate(result)])
-                    execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True)
+                    execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, database='hybridqa')
             
             # finally, modify the existing sql with tmp_table_name
             # print(RawStream()(node))
@@ -115,11 +121,13 @@ class SelectVisitor(Visitor):
             node.fromClause = (RangeVar(relname=tmp_table_name, inh=True, relpersistence='p'),)
             # print(node.fromClause)
             node.whereClause = None
+        else:
+            classify_db_fields(node, self.cache)
 
     def drop_tmp_tables(self):
         for tmp_table_name in self.tmp_tables:
             drop_stmt = f"DROP TABLE {tmp_table_name}"
-            execute_sql(drop_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True)
+            execute_sql(drop_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, database='hybridqa')
     
 
 class PredicateMapping():
@@ -191,7 +199,7 @@ def verify(document, field, query, operator, value):
         max_tokens=30,
         postprocess=False)[0]
     
-    if "the output is correct" in res.lower():
+    if res.lower().startswith('yes'):
         return True
     else:
         return False
@@ -228,7 +236,7 @@ def parallel_filtering(fcn, source, limit):
                 true_count += 1
                 true_items.add(item[0])
 
-            if true_count >= limit:
+            if true_count >= limit and limit != -1:
                 # Cancel remaining futures
                 for f in futures:
                     f.cancel()
@@ -236,7 +244,7 @@ def parallel_filtering(fcn, source, limit):
 
     return true_items
 
-def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit, parallel = True):
+def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit, parallel = False):
     # field_query_list is a list of tuples, each entry of the tuple are:    
     # 0st: field: field to do retrieval on
     # 1st: query: query for retrieval model
@@ -247,7 +255,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     # column_info: this is a list of tuples, first element is column name and second is type
     # limit: max number of returned results
     
-    id_index = list(map(lambda x: x[0], column_info)).index('_id') # TODO: this is hard-coded for restaurants. Automate fetching this
+    id_index = list(map(lambda x: x[0], column_info)).index('id') # TODO: this is hard-coded for restaurants. Automate fetching this
     
     # get _id list from `existing_results`
     start_time = time.time()
@@ -259,9 +267,15 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     }
 
     # Send a POST request
-    response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
+    response = requests.post('http://127.0.0.1:8518/search', json=data, headers={'Content-Type': 'application/json'})
     response.raise_for_status()
     parsed_result = response.json()["result"]
+    
+    filtered_parsed_result = []
+    for res in parsed_result:
+        if res not in filtered_parsed_result:
+            filtered_parsed_result.append(res)
+    parsed_result = filtered_parsed_result
     
     if parallel:
         # parallelize verification calls
@@ -277,11 +291,166 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     print("retrieve + verification time {}s".format(end_time - start_time))
     
     return list(filter(lambda x: x[id_index] in id_res, existing_results))
-    
 
-def execute_structural_sql(node : SelectStmt, predicate : BoolExpr):
+def get_a_expr_field_value(node : A_Expr):
+    if isinstance(node.lexpr, ColumnRef):
+        column = node.lexpr
+        value = node.rexpr
+    elif isinstance(node.rexpr, ColumnRef) or isinstance(node.rexpr, ColumnRef):
+        column = node.rexpr
+        value = node.lexpr
+        
+    assert(isinstance(column, ColumnRef))
+    assert(isinstance(value, A_Const))
+    column_name = column.fields[0].sval
+    value_res = value.val
+    return column_name, value_res
+
+def replace_a_expr_field(node : A_Expr, ancestors : Ancestor, new_value):
+    def find_value_column(node : A_Expr):
+        if isinstance(node.lexpr, ColumnRef):
+            column = node.lexpr
+            value = node.rexpr
+        else:
+            column = node.rexpr
+            value = node.lexpr
+            
+        assert(isinstance(column, ColumnRef))
+        assert(isinstance(value, A_Const))
+        return column, value
+    
+    if (isinstance(new_value, tuple)):
+        res = []
+        for i in new_value:
+            new_atomic_value = deepcopy(node)
+            _, value = find_value_column(new_atomic_value)
+            value.val = i
+            res.append(new_atomic_value)
+        new_node = BoolExpr(BoolExprType.OR_EXPR, args = tuple(res))
+        if isinstance(ancestors.parent.node, BoolExpr):
+            new_args = list(ancestors.parent.node.args)
+            new_args[ancestors.member] = new_node
+            ancestors.parent.node.args = tuple(new_args)
+    else:
+        _, value = find_value_column(node)
+        value.val = new_value
+
+def greedy_search_comma(input_string, predefined_list):
+    chunks = input_string.split(',')
+    results = []
+    buffer = ""
+    
+    for chunk in chunks:
+        buffer = buffer + chunk if buffer else chunk
+        
+        if buffer.strip() in predefined_list:
+            results.append(buffer.strip())
+            buffer = ""
+        elif buffer in predefined_list:
+            results.append(buffer.strip())
+            buffer = ""
+        else:
+            buffer += ","
+    
+    # After iterating through all chunks, check if there's any remaining buffer
+    if buffer and buffer.strip() in predefined_list:
+        results.append(buffer.strip())
+
+    return results
+
+class StructuralClassification(Visitor):
+    def __init__(self, node : SelectStmt, cache) -> None:
+        super().__init__()
+        self.node = node
+        self.cache = cache
+    
+    def __call__(self, node):
+        super().__call__(node)
+        
+    def visit_A_Expr(self, ancestors : Ancestor, node : A_Expr):
+        assert(if_all_structural(node))        
+        
+        to_execute_node = deepcopy(self.node)
+        
+        # change projection to include everything
+        to_execute_node.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(), ))), )
+        # reset all limits
+        to_execute_node.limitCount = None
+        # change predicates
+        to_execute_node.whereClause = node
+        res, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator", database='hybridqa')
+        
+        if not res:
+            print("determined the above predicate returns no result")
+            # try to classify into one the known values
+            # first, we need to find out what is the value here - some heuristics here to find out
+            column_name, value_res = get_a_expr_field_value(node)
+            
+            # TODO handle none-text cases
+            assert(isinstance(value_res, String))
+            value_res_clear = value_res.sval
+            
+            print("determined column name: {}; value: {}".format(column_name, value_res_clear))
+            
+            # first check if this is already in the cache
+            # TODO: for best performance move this before the execution above
+            if column_name in self.cache and value_res_clear in self.cache[column_name]:
+                replace_a_expr_field(node, ancestors, self.cache[column_name][value_res_clear])
+            else:
+                to_execute_node.targetList = (ResTarget(val=ColumnRef(fields=(column_name, ))), )
+                to_execute_node.distinctClause = (ResTarget(val=ColumnRef(fields=(column_name, ))), )
+                to_execute_node.whereClause = None
+                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator", database='hybridqa')
+                # TODO deal with list problems?
+                field_value_choices = list(map(lambda x:x[0], field_value_choices))
+                res = llm_generate(
+                    'prompts/field_classification.prompt',
+                    {
+                        "predicted_field_value": value_res_clear,
+                        "field_value_choices": field_value_choices
+                    },
+                    engine='gpt-35-turbo',
+                    temperature=0,
+                    stop_tokens=["\n"],
+                    max_tokens=100,
+                    postprocess=False)[0]
+                if res in field_value_choices:
+                    replace_a_expr_field(node, ancestors, String(sval=(res)))
+                    self.cache[column_name][value_res_clear] = String(sval=(res))
+                # tries to parse it as a list
+                else:
+                    parsed_res = greedy_search_comma(res, field_value_choices)
+                    if parsed_res:
+                        parsed_res = tuple(map(lambda x: String(sval=(x)), parsed_res))
+                        replace_a_expr_field(node, ancestors, parsed_res)
+                        self.cache[column_name][value_res_clear] = parsed_res
+                    
+
+
+def classify_db_fields(node : SelectStmt, cache):
+    # we expect all atomic predicates under `predicate` to only involve stru fields
+    # (no `answer` function)
+    # the goal of this function is to determine which predicate leads to no results
+    # for a field without results, try to classify into one of the existing fields
+    visitor = StructuralClassification(node, cache)
+    visitor(node)
+
+            
+# class ColumnRefVisitor(Visitor):
+#     def __init__(self) -> None:
+#         super().__init__()
+#         self.res = []
+    
+#     def __call__(self, node):
+#         super().__call__(node)
+        
+#     def visit_ColumnRef(self, ancestors, node : ColumnRef):
+#         self.res.extend(list(node.fields))
+            
+
+def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict):
     node = deepcopy(node)
-    # change projection to include everythign
+    # change projection to include everything
     node.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(), ))), )
     # reset all limits
     node.limitCount = None
@@ -290,15 +459,18 @@ def execute_structural_sql(node : SelectStmt, predicate : BoolExpr):
     
     # only queries that involve only structural parts can be executed
     assert(if_all_structural(node))
+    
+    # deal with sturctural field classification
+    classify_db_fields(node, cache)
+    
     sql = RawStream()(node)
     print("execute_structural_sql executing sql: {}".format(sql))
-    return execute_sql_with_column_info(sql)
+    return execute_sql_with_column_info(sql, user = "yelpbot_creator", password = "yelpbot_creator", database='hybridqa')
     
 
 def execute_free_text_queries(node, predicate : BoolExpr, existing_results, column_info, limit):
     # the predicate should only contain an atomic unstructural query
     # or an AND of multiple unstructural query (NOT of an unstructural query is considered to be atmoic)
-    
     def breakdown_unstructural_query(predicate : A_Expr):
         assert(if_contains_free_text_fcn(predicate.lexpr) or if_contains_free_text_fcn(predicate.rexpr))
         if if_contains_free_text_fcn(predicate.lexpr) and if_contains_free_text_fcn(predicate.rexpr):
@@ -331,7 +503,6 @@ def execute_free_text_queries(node, predicate : BoolExpr, existing_results, colu
     
     if predicate is None:
         return existing_results
-    
     if isinstance(predicate, A_Expr):
         field, query, operator, value = breakdown_unstructural_query(predicate)
         return retrieve_and_verify(node, [(field, query, operator, value)], existing_results, column_info, limit), column_info
@@ -346,7 +517,7 @@ def execute_free_text_queries(node, predicate : BoolExpr, existing_results, colu
     else:
         raise ValueError("expects predicate to only contain automatic unstructural query or AND of them, but predicate is not: {}".format(RawStream()(predicate)))
 
-def execute_and(sql_dnf_predicates, node : SelectStmt, limit):
+def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict):
     # there should not exist any OR expression inside sql_dnf_predicates
     
     if isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
@@ -360,7 +531,7 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit):
             structural_predicates = BoolExpr(boolop=BoolExprType.AND_EXPR, args = structural_predicates)
         
         # execute structural part
-        structural_res, column_info = execute_structural_sql(node, structural_predicates)
+        structural_res, column_info = execute_structural_sql(node, structural_predicates, cache)
         
         free_text_predicates = tuple(filter(lambda x: not if_all_structural(x), sql_dnf_predicates.args))
         if len(free_text_predicates) == 1:
@@ -372,14 +543,14 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit):
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
         if if_all_structural(sql_dnf_predicates):
-            return execute_structural_sql(node, sql_dnf_predicates)
+            return execute_structural_sql(node, sql_dnf_predicates, cache)
         else:
-            all_results, column_info = execute_structural_sql(node, None)
+            all_results, column_info = execute_structural_sql(node, None, cache)
             return execute_free_text_queries(node, sql_dnf_predicates, all_results, column_info, limit)
 
 
-def analyze_SelectStmt(node : SelectStmt):
-    
+def analyze_SelectStmt(node : SelectStmt, cache : dict):
+    limit = node.limitCount.val.ival if node.limitCount else -1
     sql_dnf_predicates = convert2dnf(node.whereClause)
 
     # if it is an OR, then order the predicates in structural -> unstructual
@@ -388,20 +559,20 @@ def analyze_SelectStmt(node : SelectStmt):
         choices = sorted(sql_dnf_predicates.args, key = lambda x: if_all_structural(x), reverse=True)
         res = []
         for choice in choices:
-            choice_res, column_info = execute_and(choice, node, node.limitCount.val.ival - len(res))
+            choice_res, column_info = execute_and(choice, node, limit - len(res), cache)
             res.extend(choice_res)
             
             # at any time, if there is enough results, return that 
-            if len(res) >= node.limitCount.val.ival:
+            if len(res) >= limit and limit != -1:
                 break
         
         return res, column_info
     
     elif isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
-        return execute_and(sql_dnf_predicates, node, node.limitCount.val.ival)
+        return execute_and(sql_dnf_predicates, node, limit, cache)
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
-        return execute_and(sql_dnf_predicates, node, node.limitCount.val.ival)
+        return execute_and(sql_dnf_predicates, node, limit, cache)
         
     else:
         raise ValueError("Expects sql to be in DNF, but is not: {}".format(RawStream()(sql_dnf_predicates)))
@@ -417,7 +588,14 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes' AND location = 'Palo Alto' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE (answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes') AND location = 'Palo Alto' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does it contain grilled cheese?') = 'Yes' AND answer(reviews, 'is this restaurant family-friendly') = 'Yes' LIMIT 1;")
-    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does the restuarant serve grilled cheese?') = 'Yes' LIMIT 1;")
+    # root = parse_sql("""SELECT answer("School_Info", 'What kind of enrollment courses are offered by this school?') FROM "List_of_Seventh-day_Adventist_secondary_schools_0" WHERE "State" IN (SELECT "State" FROM "List_of_Seventh-day_Adventist_secondary_schools_0" WHERE 'Yes' = answer("City_Info", 'is this city the county seat of Adams County?') AND "Grades" = 'K-9');""")
+    root = parse_sql("""SELECT answer(\"Location_Info\", 'What is the surface area of the district containing this site in square kilometers?') FROM \"validation_table_36\" WHERE \"Name\" = 'Zakimi Castle';""")
+    # root = parse_sql("""SELECT answer("Name_Info", 'What is her husband?') FROM "validation_table_14" WHERE 'suleiman i' = "Son ( s )";""")
+    root = parse_sql("""SELECT answer(\"Film title used in nomination_Info\", 'What party inflicted the White Terror in this film?') FROM \"validation_table_25\" WHERE \"Year ( Ceremony )\" = '1989';""")
+    root = parse_sql("""SELECT answer(\"School_Info\", 'What kind of enrollment courses are offered?') FROM \"validation_table_35\" WHERE \"State\" IN (SELECT \"State\" FROM \"validation_table_35\" WHERE \"City\" IN (SELECT \"City\" FROM \"validation_table_35\" WHERE answer(\"City_Info\", 'is this city the county seat of Adams County?') = 'Yes') AND \"Grades\" = 'K-9');""")
+    root = parse_sql("""SELECT \"Actor\" FROM \"validation_table_34\" WHERE answer(\"Actor_Info\", 'is this person born 1951, in Bombay, India?') = 'Yes' LIMIT 3;""")
+    # root = parse_sql("""SELECT answer(\"Stadium_Info\", 'What suburb is this stadium located in?') FROM \"validation_table_76\" WHERE \"Home team\" LIKE '%bulls%' AND "Province" = 'gauteng' LIMIT 1;""")
+    root = parse_sql("""SELECT answer(\"Country_Info\", 'What is the official name of this country?') FROM \"validation_table_107\" WHERE \"Name\" LIKE '%silenced Soviet 30mm grenade launcher%' AND "Manufacturer" = 'tsNIITochmash' LIMIT 1;""")
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))

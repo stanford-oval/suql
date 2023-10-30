@@ -1,8 +1,10 @@
 Answer a question based on the following text
 
+Question: {{ question }}
+
+Documents:
 {% for review in reviews %}
 {{ review }}
 {% endfor %}
 
-Question: {{ question }}
-Answer:
+Your Answer:

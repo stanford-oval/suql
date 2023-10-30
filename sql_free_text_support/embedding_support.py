@@ -52,6 +52,12 @@ class EmbeddingStore():
         document_counter = 0
         for id, free_texts in res:
             self.psql_row_ids.append(id)
+            if free_texts is None:
+                free_texts = ""
+
+            if type(free_texts) == str:
+                free_texts = [free_texts]
+
             if type(free_texts) == list:
                 self.all_free_text.extend(free_texts)
                 self.id2document[id] = [num for num in range(document_counter, document_counter + len(free_texts))]
@@ -115,7 +121,12 @@ class EmbeddingStore():
         query_embedding = _compute_single_embedding([query], chunking_param=0)[0]
         
         dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device='cuda')] * query_embedding, dim=1)
-        _, indices_max = torch.topk(dot_products, top)
+
+        if top > 0:
+            _, indices_max = torch.topk(dot_products, top)
+        else:
+            indices_max = torch.argsort(dot_products, descending=True)
+
         embeddings_indices_max = [embedding_indices[index] for index in indices_max.tolist()]
         return [(self.document2id[self.embedding2document[index]], [self.all_free_text[self.embedding2document[index]]]) for index in embeddings_indices_max]
 
