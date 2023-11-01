@@ -71,7 +71,9 @@ Here is a rough breakdown of what you need to do to set up SUQL on your domain:
 
 4. Set up the backend server for the `answer`, `summary` functions. As you probably noticed, the code in `custom_functions.sql` is just making queries to a server. This server can be instantiated by running `python reviews_server.py`.
 
-5. Test with `python yelp_loop.py`.
+5. There is a classifier to determine whether a user utterance requires database access, at [this line](https://github.com/stanford-oval/genie-llm/blob/main/yelp_loop.py#L481). This may or may not be applicable to your domain, and if it is, please modify the [corresponding prompt](https://github.com/stanford-oval/genie-llm/blob/main/prompts/if_db_classification.prompt).
+
+6. Test with `python yelp_loop.py`.
 
 # Known issues
 
