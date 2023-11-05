@@ -2,9 +2,9 @@
 
 Now, let's look at this use case. Your task is to determine whether the output is correct.
 
-{{ field }} = ["{{ document }}"]
-
 answer({{ field }}, "{{ query }}") {{ operator }} {{ value }}
+
+{{ field }} = ["{{ document }}"]
 
 Choose from one of the following choices:
 - the output is correct.

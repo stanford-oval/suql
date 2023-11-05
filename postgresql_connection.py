@@ -29,9 +29,6 @@ def execute_sql(sql_query, user = "yelpbot_user", password = "yelpbot_user", dat
     cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
     conn.commit()
 
-    cursor.execute("SET ROLE plpython3u_creater;")
-    conn.commit()
-
     try:
         if not no_print:
             print("executing SQL {}".format(sql_query))

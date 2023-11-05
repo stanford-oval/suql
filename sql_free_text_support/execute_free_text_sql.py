@@ -2,7 +2,7 @@
 from pglast.visitors import Visitor, Ancestor
 import pglast
 from pglast.ast import *
-from pglast.enums.primnodes import BoolExprType
+from pglast.enums.primnodes import BoolExprType, CoercionForm
 from pglast.stream import RawStream
 from pglast import parse_sql
 from sympy import symbols, Symbol
@@ -105,7 +105,7 @@ class SelectVisitor(Visitor):
             column_create_stmt = ",\n".join(list(map(lambda x: f'"{x[0]}" {x[1]}', column_info)))
             create_stmt = f"CREATE TABLE {tmp_table_name} (\n{column_create_stmt}\n); GRANT SELECT ON {tmp_table_name} TO yelpbot_user;"
             print("created table {}".format(tmp_table_name))
-            execute_sql(create_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, no_print=True, database='hybridqa')
+            execute_sql(create_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, no_print=True)
             
             if results:
                 # some special processing is needed for python dict types - they need to be converted to json
@@ -113,7 +113,7 @@ class SelectVisitor(Visitor):
                 placeholder_str = ', '.join(['%s'] * len(results[0]))
                 for result in results:
                     updated_results = tuple([json.dumps(element) if index in json_indices else element for index, element in enumerate(result)])
-                    execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, database='hybridqa')
+                    execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True)
             
             # finally, modify the existing sql with tmp_table_name
             # print(RawStream()(node))
@@ -127,7 +127,7 @@ class SelectVisitor(Visitor):
     def drop_tmp_tables(self):
         for tmp_table_name in self.tmp_tables:
             drop_stmt = f"DROP TABLE {tmp_table_name}"
-            execute_sql(drop_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, database='hybridqa')
+            execute_sql(drop_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True)
     
 
 class PredicateMapping():
@@ -199,7 +199,7 @@ def verify(document, field, query, operator, value):
         max_tokens=30,
         postprocess=False)[0]
     
-    if res.lower().startswith('yes'):
+    if "the output is correct" in res.lower():
         return True
     else:
         return False
@@ -244,7 +244,7 @@ def parallel_filtering(fcn, source, limit):
 
     return true_items
 
-def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit, parallel = False):
+def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit, parallel = True):
     # field_query_list is a list of tuples, each entry of the tuple are:    
     # 0st: field: field to do retrieval on
     # 1st: query: query for retrieval model
@@ -255,7 +255,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     # column_info: this is a list of tuples, first element is column name and second is type
     # limit: max number of returned results
     
-    id_index = list(map(lambda x: x[0], column_info)).index('id') # TODO: this is hard-coded for restaurants. Automate fetching this
+    id_index = list(map(lambda x: x[0], column_info)).index('_id') # TODO: this is hard-coded for restaurants. Automate fetching this
     
     # get _id list from `existing_results`
     start_time = time.time()
@@ -267,7 +267,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     }
 
     # Send a POST request
-    response = requests.post('http://127.0.0.1:8518/search', json=data, headers={'Content-Type': 'application/json'})
+    response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
     response.raise_for_status()
     parsed_result = response.json()["result"]
     
@@ -378,7 +378,7 @@ class StructuralClassification(Visitor):
         to_execute_node.limitCount = None
         # change predicates
         to_execute_node.whereClause = node
-        res, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator", database='hybridqa')
+        res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator")
         
         if not res:
             print("determined the above predicate returns no result")
@@ -397,12 +397,38 @@ class StructuralClassification(Visitor):
             if column_name in self.cache and value_res_clear in self.cache[column_name]:
                 replace_a_expr_field(node, ancestors, self.cache[column_name][value_res_clear])
             else:
-                to_execute_node.targetList = (ResTarget(val=ColumnRef(fields=(column_name, ))), )
-                to_execute_node.distinctClause = (ResTarget(val=ColumnRef(fields=(column_name, ))), )
+                # first understand whether this field is of type TEXT or TEXT[]
+                column_type = None
+                for column_info in column_infos:
+                    if column_info[0] == column_name:
+                        column_type = column_info[1]
+                        break
+                
+                assert(column_type is not None)
+                if column_type.lower() == 'text[]':
+                    # the SQL for getting results from TEXT[] is a bit complicated
+                    # suppose the field is called cuisines, then this is the desired SQL
+                    # SELECT DISTINCT unnest(cuisines) FROM restaurants;
+                    to_execute_node.targetList = (ResTarget(val=FuncCall(
+                        agg_distinct=False,
+                        agg_star=False,
+                        agg_within_group=False,
+                        func_variadic=False,
+                        funcformat=CoercionForm.COERCE_EXPLICIT_CALL,
+                        args=(ColumnRef(fields=(column_name, ),),),
+                        funcname=(String(sval=("unnest")),)
+                    )), )
+                    to_execute_node.distinctClause = (None, )
+                else:
+                    to_execute_node.targetList = (ResTarget(val=ColumnRef(fields=(column_name, ))), )
+                    # TODO: maybe None would also work
+                    to_execute_node.distinctClause = (ResTarget(val=ColumnRef(fields=(column_name, ))), )
+                
                 to_execute_node.whereClause = None
-                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator", database='hybridqa')
+                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator")
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x:x[0], field_value_choices))
+                field_value_choices.sort()
                 res = llm_generate(
                     'prompts/field_classification.prompt',
                     {
@@ -465,7 +491,7 @@ def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict
     
     sql = RawStream()(node)
     print("execute_structural_sql executing sql: {}".format(sql))
-    return execute_sql_with_column_info(sql, user = "yelpbot_creator", password = "yelpbot_creator", database='hybridqa')
+    return execute_sql_with_column_info(sql, user = "yelpbot_creator", password = "yelpbot_creator")
     
 
 def execute_free_text_queries(node, predicate : BoolExpr, existing_results, column_info, limit):
@@ -588,14 +614,7 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes' AND location = 'Palo Alto' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE (answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes') AND location = 'Palo Alto' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does it contain grilled cheese?') = 'Yes' AND answer(reviews, 'is this restaurant family-friendly') = 'Yes' LIMIT 1;")
-    # root = parse_sql("""SELECT answer("School_Info", 'What kind of enrollment courses are offered by this school?') FROM "List_of_Seventh-day_Adventist_secondary_schools_0" WHERE "State" IN (SELECT "State" FROM "List_of_Seventh-day_Adventist_secondary_schools_0" WHERE 'Yes' = answer("City_Info", 'is this city the county seat of Adams County?') AND "Grades" = 'K-9');""")
-    root = parse_sql("""SELECT answer(\"Location_Info\", 'What is the surface area of the district containing this site in square kilometers?') FROM \"validation_table_36\" WHERE \"Name\" = 'Zakimi Castle';""")
-    # root = parse_sql("""SELECT answer("Name_Info", 'What is her husband?') FROM "validation_table_14" WHERE 'suleiman i' = "Son ( s )";""")
-    root = parse_sql("""SELECT answer(\"Film title used in nomination_Info\", 'What party inflicted the White Terror in this film?') FROM \"validation_table_25\" WHERE \"Year ( Ceremony )\" = '1989';""")
-    root = parse_sql("""SELECT answer(\"School_Info\", 'What kind of enrollment courses are offered?') FROM \"validation_table_35\" WHERE \"State\" IN (SELECT \"State\" FROM \"validation_table_35\" WHERE \"City\" IN (SELECT \"City\" FROM \"validation_table_35\" WHERE answer(\"City_Info\", 'is this city the county seat of Adams County?') = 'Yes') AND \"Grades\" = 'K-9');""")
-    root = parse_sql("""SELECT \"Actor\" FROM \"validation_table_34\" WHERE answer(\"Actor_Info\", 'is this person born 1951, in Bombay, India?') = 'Yes' LIMIT 3;""")
-    # root = parse_sql("""SELECT answer(\"Stadium_Info\", 'What suburb is this stadium located in?') FROM \"validation_table_76\" WHERE \"Home team\" LIKE '%bulls%' AND "Province" = 'gauteng' LIMIT 1;""")
-    root = parse_sql("""SELECT answer(\"Country_Info\", 'What is the official name of this country?') FROM \"validation_table_107\" WHERE \"Name\" LIKE '%silenced Soviet 30mm grenade launcher%' AND "Manufacturer" = 'tsNIITochmash' LIMIT 1;""")
+    root = parse_sql("SELECT * FROM restaurants WHERE 'coffee' = ANY (cuisines) LIMIT 1;")
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))
