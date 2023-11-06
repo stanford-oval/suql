@@ -424,6 +424,7 @@ class StructuralClassification(Visitor):
                     # TODO: maybe None would also work
                     to_execute_node.distinctClause = (ResTarget(val=ColumnRef(fields=(column_name, ))), )
                 
+                to_execute_node.sortClause = None
                 to_execute_node.whereClause = None
                 field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator")
                 # TODO deal with list problems?
@@ -480,6 +481,7 @@ def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict
     node.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(), ))), )
     # reset all limits
     node.limitCount = None
+    node.limitOffset = None
     # change predicates
     node.whereClause = predicate
     
@@ -615,6 +617,7 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE (answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes') AND location = 'Palo Alto' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does it contain grilled cheese?') = 'Yes' AND answer(reviews, 'is this restaurant family-friendly') = 'Yes' LIMIT 1;")
     root = parse_sql("SELECT * FROM restaurants WHERE 'coffee' = ANY (cuisines) LIMIT 1;")
+    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'downtown SF' ORDER BY rating DESC, num_reviews DESC LIMIT 1;")
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))
