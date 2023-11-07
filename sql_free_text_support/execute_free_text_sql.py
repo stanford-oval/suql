@@ -13,6 +13,7 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from postgresql_connection import execute_sql_with_column_info, execute_sql
 from prompt_continuation import llm_generate
+from utils import num_tokens_from_string
 from copy import deepcopy
 import time
 import requests
@@ -438,28 +439,32 @@ class StructuralClassification(Visitor):
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x:x[0], field_value_choices))
                 field_value_choices.sort()
-                res = llm_generate(
-                    'prompts/field_classification.prompt',
-                    {
-                        "predicted_field_value": value_res_clear,
-                        "field_value_choices": field_value_choices
-                    },
-                    engine='gpt-35-turbo',
-                    temperature=0,
-                    stop_tokens=["\n"],
-                    max_tokens=100,
-                    postprocess=False)[0]
-                if res in field_value_choices:
-                    replace_a_expr_field(node, ancestors, String(sval=(res)))
-                    self.cache[column_name][value_res_clear] = String(sval=(res))
-                # tries to parse it as a list
-                else:
-                    parsed_res = greedy_search_comma(res, field_value_choices)
-                    if parsed_res:
-                        parsed_res = tuple(map(lambda x: String(sval=(x)), parsed_res))
-                        replace_a_expr_field(node, ancestors, parsed_res)
-                        self.cache[column_name][value_res_clear] = parsed_res
-                    
+                
+                # if a field has too many values (judged by tokens),
+                # then it is not a enum field.
+                # we give up on these (i.e., just use the existing predicate)
+                if num_tokens_from_string('\n'.join(field_value_choices)) <= 3000:
+                    res = llm_generate(
+                        'prompts/field_classification.prompt',
+                        {
+                            "predicted_field_value": value_res_clear,
+                            "field_value_choices": field_value_choices
+                        },
+                        engine='gpt-35-turbo',
+                        temperature=0,
+                        stop_tokens=["\n"],
+                        max_tokens=100,
+                        postprocess=False)[0]
+                    if res in field_value_choices:
+                        replace_a_expr_field(node, ancestors, String(sval=(res)))
+                        self.cache[column_name][value_res_clear] = String(sval=(res))
+                    # tries to parse it as a list
+                    else:
+                        parsed_res = greedy_search_comma(res, field_value_choices)
+                        if parsed_res:
+                            parsed_res = tuple(map(lambda x: String(sval=(x)), parsed_res))
+                            replace_a_expr_field(node, ancestors, parsed_res)
+                            self.cache[column_name][value_res_clear] = parsed_res
 
 
 def classify_db_fields(node : SelectStmt, cache):
