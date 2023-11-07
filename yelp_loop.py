@@ -32,25 +32,6 @@ from prompt_continuation import llm_generate, batch_llm_generate
 
 logger = logging.getLogger(__name__)
 
-def fetch_cuisine_list():
-    try:
-        with open("cuisines.json", "r") as fd:
-            data = json.load(fd)
-    
-        res = list(data)
-    except Exception as e:
-        print("regenerating cuisines list from sparql query")
-        res = execute_sql("SELECT DISTINCT unnest(cuisines) FROM restaurants;")
-        res = list(map(lambda x: x[0], res[0]))
-        
-        with open("cuisines.json", "w") as fd:
-            json.dump(res, fd)
-        
-    return sorted(res)
-
-CUISINE_LIST = fetch_cuisine_list()
-
-
 class DialogueTurn:
     def __init__(
         self,
@@ -133,90 +114,6 @@ def dialogue_history_to_text(history: List[DialogueTurn], they='They', you='You'
 
     return ret
 
-
-def extract_quotation(s: str) -> str:
-    start = s.find('"')
-    end = s.find('"', start+1)
-    if start < 0 or end <= start:
-        # try some heuristics for the case where LLM doesn't generate the quotation marks
-        # TODO add more heuristics if needed
-        if s.startswith('Yes. You check the database for '):
-            return s[len('Yes. You check the database for '): ]
-
-        # if everything fails, raise an error
-        raise ValueError('Quotation error while parsing string %s' % s)
-    return s[start+1: end]
-
-def get_yelp_reviews(restaurant_id: str) -> List[str]:
-
-    url = 'https://api.yelp.com/v3/businesses/%s/reviews?sort_by=yelp_sort' % restaurant_id
-    logger.info('url for reviews: %s', url)
-    
-    reviews_response = requests.get(url=url, headers={'accept': 'application/json', 'Authorization': 'Bearer ' + os.getenv('YELP_API_KEY')})
-    reviews_response = reviews_response.json()['reviews']
-    reviews = []
-    for r in reviews_response:
-        reviews.append(html.unescape(' '.join(r['text'].split()))) # clean up the review text
-    return reviews
-
-def get_field_information(name, operator, value, user_target):
-    # some heurstics to determine if the substring occurs inside `[` and `]`
-    def determine_in_brakets(index):
-        index_copy = index
-        found = False
-        while (index >= 0):
-            if user_target[index] == "[":
-                found = True
-                break
-            elif user_target[index] == "]":
-                return False
-            index -= 1
-        
-        if not found:
-            return False
-        
-        found = False
-        index = index_copy
-        while (index < len(user_target)):
-            if user_target[index] == "]":
-                found = True
-                break
-            elif user_target[index] == "[":
-                return False
-            index += 1
-            
-        if not found:
-            return False
-        
-        return True
-    
-    res = []
-    target_substring = "{} {} {}".format(name, operator, value)
-    
-    start_index = 0
-    index = user_target.find(target_substring, start_index)
-    while index >= 0:
-        
-        to_append = {
-            "name": name,
-            "operator": operator,
-            "value": value
-            }
-
-        if_projection = determine_in_brakets(index)
-        if if_projection:
-            to_append["type"] = "projection"
-        else:
-            to_append["type"] = "filter"
-        
-        if (to_append not in res):
-            res.append(to_append)
-        
-        start_index = index + 1
-        index = user_target.find(target_substring, start_index)
-    
-    return res
-
 # a custom function to define what to include in the final response prompt
 # this function is used for the restuarants domain, with some processing code
 # to deal with `rating` (a float issue)
@@ -258,6 +155,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
     
     cache = {}
+    final_res = []
     try:
         visitor = SelectVisitor()
         root = parse_sql(second_sql)
