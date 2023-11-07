@@ -190,6 +190,114 @@ def linearize(document, k):
 def compute_sha256(text):
     return hashlib.sha256(text.encode()).hexdigest()
 
+# this is a restaurants database specific function, which excludes a bunch of fields from
+# the final response
+def if_usable_restaurants(field : str):
+    NOT_USABLE_FIELDS = [
+        "reviews",
+        "_id",
+        "id",
+
+        # schematized fields        
+        "ambiance",
+        "specials",
+        "reservation_info",
+        "nutrition_info",
+        "signature_cocktails",
+        "has_private_event_spaces",
+        "promotions",
+        "parking_options",
+        "game_day_specials",
+        "live_sports_events",
+        "dress_code",
+        "happy_hour_info",
+        "highlights",
+        "service",
+        "has_outdoor_seating",
+        "drinks",
+        "dietary_restrictions",
+        "experience",
+        "nutritious_options",
+        "creative_menu",
+        "has_student_discount",
+        "has_senior_discount",
+        "local_cuisine",
+        "trendy",
+        "wheelchair_accessible",
+        "noise_level",
+        "kids_menu",
+        "childrens_activities",
+        "if_family_friendly",
+        "wait_time",
+        "has_live_music",
+        "serves_alcohol",
+        "michelin",
+        "accomodates_large_groups",
+        
+        # the citation fields        
+        "ambiance_citation",
+        "specials_citation",
+        "reservation_info_citation",
+        "nutrition_info_citation",
+        "signature_cocktails_citation",
+        "has_private_event_spaces_citation",
+        "promotions_citation",
+        "parking_options_citation",
+        "game_day_specials_citation",
+        "live_sports_events_citation",
+        "dress_code_citation",
+        "happy_hour_info_citation",
+        "highlights_citation",
+        "service_citation",
+        "has_outdoor_seating_citation",
+        "drinks_citation",
+        "dietary_restrictions_citation",
+        "experience_citation",
+        "nutritious_options_citation",
+        "creative_menu_citation",
+        "has_student_discount_citation",
+        "has_senior_discount_citation",
+        "local_cuisine_citation",
+        "trendy_citation",
+        "wheelchair_accessible_citation",
+        "noise_level_citation",
+        "kids_menu_citation",
+        "childrens_activities_citation",
+        "if_family_friendly_citation",
+        "wait_time_citation",
+        "has_live_music_citation",
+        "serves_alcohol_citation",
+        "michelin_citation",
+        "accomodates_large_groups_citation",
+        
+        # special internal fields
+        "_score",
+        "_schematization_results"
+        ]
+    
+    if field in NOT_USABLE_FIELDS:
+        return False
+    
+    if field.startswith("_score"):
+        return False
+    
+    return True
+
+# a restaurants-specific function dealing with opening_hours
+def handle_opening_hours(input_dict):
+    order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    
+    def get_order_index(x):
+        try:
+            return order.index(x['day_of_the_week'])
+        except ValueError:
+            return len(order)  # or any default value
+    
+    res = []
+    input_dict = sorted(input_dict, key=lambda x: get_order_index(x))
+    for i in input_dict:
+        res.append(f'open from {i["open_time"]} to {i["close_time"]} on {i["day_of_the_week"]}')
+    return res
 
 if __name__ == "__main__":
     print(chunk_text("The text provides general information about the restaurant, including its location in Town and Country shopping center in Palo Alto, its menu offerings such as sushi, rolls, bentos, and sashimi, and its friendly staff. The restaurant has both indoor and outdoor seating, but the indoor seating area is small. The prices are reasonable for the area, and the food is generally fresh and well-prepared. Some reviewers mention that the parking situation can be difficult on weekends.", k=15))

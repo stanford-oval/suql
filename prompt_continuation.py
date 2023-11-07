@@ -17,6 +17,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ra
 import time
 from threading import Thread
 import traceback
+from utils import num_tokens_from_string
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -185,7 +186,7 @@ def call_with_timeout(func, timeout_sec, *args, **kwargs):
 def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
             max_tokens, temperature, stop_tokens, top_p=0.9, frequency_penalty=0, presence_penalty=0,
             postprocess=True, max_tries=1, ban_line_break_start=False, filled_prompt=None,
-            attempts=0, max_wait_time=5):
+            attempts=2, max_wait_time=None):
     """
     filled_prompt gives direct access to the underlying model, without having to load a prompt template from a .prompt file. Used for testing.
     ban_line_break_start can potentially double the cost, though in practice (and especially with good prompts) this only happens for a fraction of inputs
@@ -193,6 +194,12 @@ def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
     start_time = time.time()
     if filled_prompt is None:
         filled_prompt = _fill_template(template_file, prompt_parameter_values)
+    
+    # We have experiences very long latency from time to time from both Azure's and OpenAI's chatGPT response time
+    # Here is a heuristics-based, dynamically-calculated max wait time, before we cancel the last request and re-issue a new one
+    total_token = num_tokens_from_string(filled_prompt) + max_tokens
+    if max_wait_time is None:
+        max_wait_time = 0.005 * total_token + 1
     
     success = False
     final_result = None

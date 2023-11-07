@@ -33,6 +33,7 @@ from yelp_loop import *
 from parser_server import GPT_parser_address
 
 from pymongo import MongoClient, ASCENDING
+from datetime import datetime
 
 # set up the MongoDB connection
 CONNECTION_STRING = os.environ.get("COSMOS_CONNECTION_STRING")
@@ -72,13 +73,13 @@ class BackendConnection:
         
         client = MongoClient(CONNECTION_STRING)
         self.db = client['yelpbot']  # the database name is yelpbot
-        self.table = self.db['dialog_turns_dev'] # the collection that stores dialog turns
+        self.table = self.db['dialog_turns_studies'] # the collection that stores dialog turns
         self.table.create_index("$**") # necessary to build an index before we can call sort()
 
         self.greeting = greeting
         self.engine = engine
         
-    def compute_next(self, dialog_id, user_utterance, turn_id, system_name) -> DialogueTurn:
+    def compute_next(self, dialog_id, user_utterance, turn_id, system_name, experiment_id) -> DialogueTurn:
         tuples = list(self.table.find( { "dialogID": dialog_id } ).sort('turn_id', ASCENDING))
         
         # initialize empty dialog in the first turn
@@ -96,7 +97,7 @@ class BackendConnection:
         )
         
         # update the current tuple with new DialogTurn
-        new_tuple = {"_id": '(' + str(dialog_id) + ', '+ str(turn_id) + ')', "dialogID": dialog_id, "turn_id": turn_id, "dlg_turn" : dlgHistory[-1].__dict__}
+        new_tuple = {"_id": '(' + str(dialog_id) + ', '+ str(turn_id) + ')', "dialogID": dialog_id, "turn_id": turn_id, "created_at": datetime.utcnow(), "dlg_turn" : dlgHistory[-1].__dict__, "experiment_id": experiment_id}
         
         # insert the new dialog turn into DB
         self.table.insert_one(new_tuple)
@@ -138,9 +139,13 @@ def chat():
     dialog_id = request_args['dialog_id']
     turn_id = request_args['turn_id']
     system_name = request_args['system_name']
-    # experiment_id = request_args['experiment_id']
+    experiment_id = request_args['experiment_id']
     
-    dlgItem = connection.compute_next(dialog_id, user_utterance, turn_id, system_name)
+    # special case processing when user finishes testing
+    if user_utterance == 'FINISHED':
+        return {'agent_utterance': f"{dialog_id} is your dialog ID. Please submit it in the Google Form.", 'log_object': {}}
+    
+    dlgItem = connection.compute_next(dialog_id, user_utterance, turn_id, system_name, experiment_id)
 
     log = {}
     log["1st_sql"] = dlgItem.user_target

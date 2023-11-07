@@ -79,6 +79,7 @@ class SelectVisitor(Visitor):
     def __init__(self) -> None:
         super().__init__()
         self.tmp_tables = []
+        # this cache is to store classifier results for sturctured fields (e.g. cuisines in restaurants)
         self.cache = defaultdict(dict)
     
     def __call__(self, node):
@@ -116,13 +117,20 @@ class SelectVisitor(Visitor):
                     execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True)
             
             # finally, modify the existing sql with tmp_table_name
-            # print(RawStream()(node))
-            # print(node.fromClause)
             node.fromClause = (RangeVar(relname=tmp_table_name, inh=True, relpersistence='p'),)
-            # print(node.fromClause)
             node.whereClause = None
         else:
             classify_db_fields(node, self.cache)
+
+    def serialize_cache(self):
+        res = deepcopy(self.cache)
+        for i in res:
+            for j in res[i]:
+                if isinstance(res[i][j], tuple):
+                    res[i][j] = list(map(lambda x: x.sval, res[i][j]))
+                else:
+                    res[i][j] = [res[i][j].sval]
+        return dict(res)
 
     def drop_tmp_tables(self):
         for tmp_table_name in self.tmp_tables:
@@ -382,7 +390,7 @@ class StructuralClassification(Visitor):
         
         if not res:
             print("determined the above predicate returns no result")
-            # try to classify into one the known values
+            # try to classify into one of the known values
             # first, we need to find out what is the value here - some heuristics here to find out
             column_name, value_res = get_a_expr_field_value(node)
             
@@ -462,18 +470,6 @@ def classify_db_fields(node : SelectStmt, cache):
     visitor = StructuralClassification(node, cache)
     visitor(node)
 
-            
-# class ColumnRefVisitor(Visitor):
-#     def __init__(self) -> None:
-#         super().__init__()
-#         self.res = []
-    
-#     def __call__(self, node):
-#         super().__call__(node)
-        
-#     def visit_ColumnRef(self, ancestors, node : ColumnRef):
-#         self.res.extend(list(node.fields))
-            
 
 def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict):
     node = deepcopy(node)
@@ -616,9 +612,13 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes' AND location = 'Palo Alto' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE (answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes') AND location = 'Palo Alto' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does it contain grilled cheese?') = 'Yes' AND answer(reviews, 'is this restaurant family-friendly') = 'Yes' LIMIT 1;")
-    root = parse_sql("SELECT * FROM restaurants WHERE 'coffee' = ANY (cuisines) LIMIT 1;")
-    root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'downtown SF' ORDER BY rating DESC, num_reviews DESC LIMIT 1;")
+    # root = parse_sql("SELECT * FROM restaurants WHERE 'cafe' = ANY (cuisines) LIMIT 1;")
+    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'downtown SF' ORDER BY rating DESC, num_reviews DESC LIMIT 1;")
+    # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND location = 'San Francisco' AND answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' LIMIT 1;")
+    # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant authentic?') FROM restaurants WHERE 'mexican' = ANY (cuisines) AND answer(reviews, 'is this restaurant family-friendly?') = 'Yes' AND rating >= 4.0 ORDER BY rating DESC LIMIT 3;")
+    root = parse_sql("SELECT opening_hours->>'Thursday' FROM restaurants WHERE name ILIKE 'Top of the Mark' LIMIT 1;") # FIXIT
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))
     visitor.drop_tmp_tables()
+    print(visitor.serialize_cache())

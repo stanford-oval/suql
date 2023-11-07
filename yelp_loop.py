@@ -15,7 +15,7 @@ import requests
 from datetime import datetime
 import html
 import json
-from utils import print_chatbot, input_user, num_tokens_from_string
+from utils import print_chatbot, input_user, num_tokens_from_string, if_usable_restaurants, handle_opening_hours
 import readline  # enables keyboard arrows when typing in the terminal
 from parser_server import GPT_parser_address
 import time
@@ -61,7 +61,8 @@ class DialogueTurn:
         user_target : str = None,
         sys_type : str = None,
         time_statement : dict = None,
-        db_results : list = []
+        db_results : list = [],
+        cache : dict = {},
     ):
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
@@ -307,6 +308,29 @@ def sql_rewrites(in_sql : str, classification_fields_list = {}, classification_f
     temp = temp.replace("\\'", "")
     return temp
 
+# a custom function to define what to include in the final response prompt
+# this function is used for the restuarants domain, with some processing code
+# to deal with `rating` (a float issue)
+# and `opening_hours` (represented as a dictionary, but is too long)
+def clean_up_response(results, column_names):
+    final_res = []
+    for res in results:
+        temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable_restaurants(column_name))
+        if "rating" in temp:
+            temp["rating"] = float(temp["rating"])
+            
+        if "opening_hours" in temp:
+            temp["opening_hours"] = handle_opening_hours(temp["opening_hours"])
+            
+        
+        # here is some simple heuristics to deal with too long DB results,
+        # thus cutting it at some point
+        if num_tokens_from_string(json.dumps(final_res + [temp], indent=4)) > 3500:
+            break
+        
+        final_res.append(temp)
+    return final_res
+
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
     first_sql, first_sql_time = llm_generate(template_file=prompt_file,
                 engine='gpt-35-turbo',
@@ -314,144 +338,37 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
                 max_tokens=300,
                 temperature=0,
                 prompt_parameter_values={'dlg': dlgHistory, 'query': user_query},
-                postprocess=False,
-                max_wait_time=3)
-    
-    def if_usable(field : str):
-        NOT_USABLE_FIELDS = [
-            "reviews",
-            "_id",
-            "id",
-            "opening_hours",
-
-            # schematized fields        
-            "ambiance",
-            "specials",
-            "reservation_info",
-            "nutrition_info",
-            "signature_cocktails",
-            "has_private_event_spaces",
-            "promotions",
-            "parking_options",
-            "game_day_specials",
-            "live_sports_events",
-            "dress_code",
-            "happy_hour_info",
-            "highlights",
-            "service",
-            "has_outdoor_seating",
-            "drinks",
-            "dietary_restrictions",
-            "experience",
-            "nutritious_options",
-            "creative_menu",
-            "has_student_discount",
-            "has_senior_discount",
-            "local_cuisine",
-            "trendy",
-            "wheelchair_accessible",
-            "noise_level",
-            "kids_menu",
-            "childrens_activities",
-            "if_family_friendly",
-            "wait_time",
-            "has_live_music",
-            "serves_alcohol",
-            "michelin",
-            "accomodates_large_groups",
-            
-            # the citation fields        
-            "ambiance_citation",
-            "specials_citation",
-            "reservation_info_citation",
-            "nutrition_info_citation",
-            "signature_cocktails_citation",
-            "has_private_event_spaces_citation",
-            "promotions_citation",
-            "parking_options_citation",
-            "game_day_specials_citation",
-            "live_sports_events_citation",
-            "dress_code_citation",
-            "happy_hour_info_citation",
-            "highlights_citation",
-            "service_citation",
-            "has_outdoor_seating_citation",
-            "drinks_citation",
-            "dietary_restrictions_citation",
-            "experience_citation",
-            "nutritious_options_citation",
-            "creative_menu_citation",
-            "has_student_discount_citation",
-            "has_senior_discount_citation",
-            "local_cuisine_citation",
-            "trendy_citation",
-            "wheelchair_accessible_citation",
-            "noise_level_citation",
-            "kids_menu_citation",
-            "childrens_activities_citation",
-            "if_family_friendly_citation",
-            "wait_time_citation",
-            "has_live_music_citation",
-            "serves_alcohol_citation",
-            "michelin_citation",
-            "accomodates_large_groups_citation",
-            
-            # special internal fields
-            "_score",
-            "_schematization_results"
-            ]
-        
-        if field in NOT_USABLE_FIELDS:
-            return False
-        
-        if field.startswith("_score"):
-            return False
-        
-        return True
-        
-    print("generated SQL query before rewriting: {}".format(first_sql))
-    
+                postprocess=False)
     second_sql = first_sql.replace("\\'", "''")
+    
+    print("directly generated SUQL query: {}".format(second_sql))
+    
     second_sql_start_time = time.time()
-    # second_sql = sql_rewrites(
-    #     first_sql,
-    #     classification_fields_list={
-    #         "cuisines": CUISINE_LIST
-    #     })
 
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
     
+    cache = {}
     try:
-        final_res = []
         visitor = SelectVisitor()
         root = parse_sql(second_sql)
         visitor(root)
         second_sql = RawStream()(root)
+        cache = visitor.serialize_cache()
         
-        print("generated SQL query after rewriting: {}".format(second_sql))
+        print("intermediate (temp) SUQL query executed at the end: {}".format(second_sql))
     
         results, column_names, _ = execute_sql(second_sql)
 
-        for res in results:
-            temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable(column_name))
-            if "rating" in temp:
-                temp["rating"] = float(temp["rating"])
-            
-            if num_tokens_from_string(json.dumps(final_res + [temp], indent=4)) > 3500:
-                break
-            
-            final_res.append(temp)
-        
-        print(final_res)
+        # some custom processing code to clean-up results
+        final_res = clean_up_response(results, column_names)
     except Exception:
         visitor.drop_tmp_tables()
-        sql_execution_time = 30
     finally:
         visitor.drop_tmp_tables()
     second_sql_end_time = time.time()
     
-    return final_res, first_sql, second_sql, first_sql_time, second_sql_end_time - second_sql_start_time
+    return final_res, first_sql, second_sql, first_sql_time, second_sql_end_time - second_sql_start_time, cache
 
 def turn_db_results2name(db_results):
     res = []
@@ -473,24 +390,25 @@ def compute_next_turn(
     semantic_parser_time = 0
     suql_execution_time = 0
     final_response_time = 0
+    cache = {}
 
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
     dlgHistory[-1].sys_type = sys_type
     
     # determine whether to send to Genie
     continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False, max_wait_time=3)
+                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
         if sys_type == "sql_textfcns_v0801":
-            results, first_sql, second_sql, semantic_parser_time, suql_execution_time = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
+            results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
             dlgHistory[-1].user_target = first_sql
             dlgHistory[-1].temp_target = second_sql
             dlgHistory[-1].db_results = turn_db_results2name(results)
         
         elif sys_type == "semantic_index_w_textfncs":
-            results, first_sql, second_sql, semantic_parser_time, suql_execution_time = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
+            results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
             dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
             dlgHistory[-1].user_target = first_sql
             dlgHistory[-1].temp_target = second_sql
@@ -507,7 +425,7 @@ def compute_next_turn(
         # for all systems, cut it out if no response returned
         if not results:
             response, final_response_time = llm_generate(template_file='prompts/yelp_response_no_results.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
-                                max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=7)
+                                max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].time_statement = {
                 "first_classification": first_classification_time,
@@ -518,7 +436,7 @@ def compute_next_turn(
             return dlgHistory
             
     response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-35-turbo',
-                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False, max_wait_time=7)
+                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
     
     dlgHistory[-1].time_statement = {
@@ -527,6 +445,7 @@ def compute_next_turn(
         "suql_execution": suql_execution_time,
         "final_response": final_response_time
     }
+    dlgHistory[-1].cache = cache
     
     return dlgHistory
 
