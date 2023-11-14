@@ -25,6 +25,7 @@ from langchain.output_parsers import CommaSeparatedListOutputParser
 from sql_free_text_support.execute_free_text_sql import SelectVisitor
 from pglast import parse_sql
 from pglast.stream import RawStream
+from decimal import Decimal
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -122,8 +123,9 @@ def clean_up_response(results, column_names):
     final_res = []
     for res in results:
         temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable_restaurants(column_name))
-        if "rating" in temp:
-            temp["rating"] = float(temp["rating"])
+        for i in temp:
+            if isinstance(temp[i], Decimal):
+                temp[i] = float(temp[i])
             
         if "opening_hours" in temp:
             temp["opening_hours"] = handle_opening_hours(temp["opening_hours"])
