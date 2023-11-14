@@ -13,3 +13,4 @@ tiktoken
 torch
 psycopg2-binary # you can also install from source if it works
 langchain
+pglast
