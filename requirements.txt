@@ -1,4 +1,4 @@
-openai
+openai==0.27.8
 Jinja2>=3.1.2
 tenacity
 Flask
