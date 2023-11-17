@@ -21,7 +21,6 @@ from parser_server import GPT_parser_address
 import time
 from postgresql_connection import execute_sql
 # from query_reviews import review_server_address
-from langchain.output_parsers import CommaSeparatedListOutputParser
 from sql_free_text_support.execute_free_text_sql import SelectVisitor
 from pglast import parse_sql
 from pglast.stream import RawStream

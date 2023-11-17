@@ -1,6 +1,0 @@
-The following is a restaurant review. Summarize the key point of the review in at most a few sentences.
-
-Review:
-{{ review }}
-
-Summary:

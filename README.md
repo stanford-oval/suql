@@ -1,3 +1,15 @@
+# What is SUQL
+
+SUQL stands for Structured and Unstructured Query Language. It augments SQL with several important free text primitives for a precise, succinct, and expressive representation. It can be used to build chatbots for relational data sources that contain both structured and unstructured information. Similar to how text-to-SQL has seen [great success](https://python.langchain.com/docs/use_cases/qa_structured/sql), SUQL can be uses as the target language for hybrid databases, for instance, for:
+
+![An example restaurant relational database](figures/figure1.svg)
+
+## The answer function
+
+One important component of SUQL is the `answer` function. `answer` function allows for constraints from free text to be easily combined with structured constraints. Here is one high-level example:
+
+![An example for using SUQL](figures/figure2.svg)
+
 # Installation / Usage tutorial
 
 ## Installing [PostgreSQL database](https://www.postgresql.org/)

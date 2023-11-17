@@ -13,7 +13,6 @@ from openai import OpenAIError
 from functools import partial
 from datetime import date
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 import time
 from threading import Thread
 import traceback
