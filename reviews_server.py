@@ -5,15 +5,14 @@ import os
 from flask import request, Flask
 import time
 import torch
-from torch.cuda import OutOfMemoryError
 from prompt_continuation import llm_generate
 from utils import linearize, chunk_text
 import json
 from tqdm import tqdm
-from schematization.tokenizer import num_tokens_from_string
 import hashlib
 from functools import reduce
 import operator
+from utils import num_tokens_from_string
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -252,7 +251,7 @@ def answer():
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': text_res, 'question': data["question"] + "; consider all relevant information."},
-        engine='gpt-35-turbo',
+        engine='gpt-3.5-turbo',
         max_tokens=200,
         temperature=0.0,
         stop_tokens=['\n'],
@@ -295,7 +294,7 @@ def summary():
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': text_res, 'question': "general information about this restaurant"},
-        engine='gpt-35-turbo',
+        engine='gpt-3.5-turbo',
         max_tokens=200,
         temperature=0.0,
         stop_tokens=['\n'],

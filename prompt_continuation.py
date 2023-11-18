@@ -9,7 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 from typing import List
 import openai
-from openai import OpenAIError
+from openai import OpenAI
+client = OpenAI()
 from functools import partial
 from datetime import date
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -29,9 +30,9 @@ logger.addHandler(fh)
 jinja_environment = Environment(loader=FileSystemLoader('./'),
                   autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True, line_comment_prefix='#')
 # uncomment if using Azure OpenAI
-openai.api_base = 'https://ovalopenairesource.openai.azure.com/'
-openai.api_type = 'azure'
-openai.api_version = '2022-12-01' # this may change in the future
+# openai.api_base = 'https://ovalopenairesource.openai.azure.com/'
+# openai.api_type = 'azure'
+# openai.api_version = "2023-05-15"
 
 
 inference_cost_per_1000_tokens = {'ada': 0.0004, 'babbage': 0.0005, 'curie': 0.002, 'davinci': 0.02, 'turbo': 0.002} # for Azure
@@ -48,13 +49,13 @@ def _model_name_to_cost(model_name: str) -> float:
     raise ValueError('Did not recognize GPT-3 model name %s' % model_name)
 
 # @retry(retry=retry_if_exception_type(OpenAIError), wait=wait_random_exponential(multiplier=0.5, max=20), stop=stop_after_attempt(6))
-def openai_completion_with_backoff(**kwargs):
+def openai_chat_completion_with_backoff(**kwargs):
     global total_cost
-    ret =  openai.Completion.create(**kwargs)
-    total_tokens = ret['usage']['total_tokens']
-    total_cost += total_tokens / 1000 * _model_name_to_cost(kwargs['engine'])
-    
-    return ret
+    ret = client.chat.completions.create(**kwargs)
+    total_tokens = ret.usage.total_tokens
+    total_cost += total_tokens / 1000 * _model_name_to_cost(kwargs['model'])
+    print(ret)
+    return ret.choices[0].message.content
 
 def _fill_template(template_file, prompt_parameter_values):
     template = jinja_environment.get_template(template_file)
@@ -76,41 +77,19 @@ def _generate(filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p
 
     logger.info('LLM input = %s', filled_prompt)
 
-    # ChatGPT has specific input tokens. The following is a naive implementation of few-shot prompting, which may be improved.
-    if engine == "gpt-35-turbo":
-        filled_prompt = "<|im_start|>user\n%s<|im_end|>\n<|im_start|>assistant\n" % filled_prompt
-        ban_line_break_start = False # no need to prevent new lines in ChatGPT
-        if stop_tokens is None:
-            stop_tokens = []
-        stop_tokens.append('<|im_end|>')
-    
     for _ in range(max_tries):
         no_line_break_start = ''
         no_line_break_length = 0
-        if ban_line_break_start:
-            no_line_break_length = 3
-            # generate 3 tokens that definitely are not line_breaks
-            no_line_break_start = openai_completion_with_backoff(engine=engine,
-                                                        prompt=filled_prompt,
-                                                        max_tokens=no_line_break_length,
-                                                        temperature=temperature,
-                                                        top_p=top_p,
-                                                        frequency_penalty=frequency_penalty,
-                                                        presence_penalty=presence_penalty,
-                                                        stop=stop_tokens,
-                                                        logit_bias={'198': -100, '628': -100} # \n, \n\n
-                                                        )['choices'][0]['text']
-            
-        generation_output = openai_completion_with_backoff(engine=engine,
-                                                        prompt=filled_prompt + no_line_break_start,
-                                                        max_tokens=max_tokens - no_line_break_length,
-                                                        temperature=temperature,
-                                                        top_p=top_p,
-                                                        frequency_penalty=frequency_penalty,
-                                                        presence_penalty=presence_penalty,
-                                                        stop=stop_tokens,
-                                                        )
-        generation_output = no_line_break_start + generation_output['choices'][0]['text']
+        generation_output = openai_chat_completion_with_backoff(model=engine,
+                                                                messages=[{"role": "system", "content": filled_prompt + no_line_break_start}],
+                                                                max_tokens=max_tokens - no_line_break_length,
+                                                                temperature=temperature,
+                                                                top_p=top_p,
+                                                                frequency_penalty=frequency_penalty,
+                                                                presence_penalty=presence_penalty,
+                                                                stop=stop_tokens,
+                                                                )
+        generation_output = no_line_break_start + generation_output
         logger.info('LLM output = %s', generation_output)
 
         generation_output = generation_output.strip()
@@ -120,7 +99,7 @@ def _generate(filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p
         if len(generation_output) > 0:
             break
 
-
+    logger.info(f"total cost this run: {total_cost}")
     return generation_output
 
 def _postprocess_generations(generation_output: str) -> str:

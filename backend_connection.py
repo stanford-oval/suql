@@ -30,7 +30,6 @@ from flask_cors import CORS
 from flask_restful import Api, reqparse
 
 from yelp_loop import *
-from parser_server import GPT_parser_address
 
 from pymongo import MongoClient, ASCENDING
 from datetime import datetime
@@ -180,14 +179,12 @@ def user_preference():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
-    parser.add_argument('--engine', type=str, default='text-davinci-003', choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-35-turbo'],
+    parser.add_argument('--engine', type=str, default='text-davinci-003', choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-3.5-turbo'],
                         help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')
-    parser.add_argument('--ssl_certificate_file', type=str, default='/etc/letsencrypt/live/backend.yelpbot.genie.stanford.edu/fullchain.pem',
-                        help='Where to read the SSL certificate for HTTPS')
-    parser.add_argument('--ssl_key_file', type=str, default='/etc/letsencrypt/live/backend.yelpbot.genie.stanford.edu/privkey.pem',
-                        help='Where to read the SSL certificate for HTTPS')
+    parser.add_argument('--ssl_certificate_file', type=str, help='Where to read the SSL certificate for HTTPS')
+    parser.add_argument('--ssl_key_file', type=str, help='Where to read the SSL certificate for HTTPS')
 
     args = parser.parse_args()
 
