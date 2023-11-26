@@ -84,15 +84,6 @@ class DialogueTurn:
         if self.genie_utterance is not None:
             # print(self.genie_utterance)
             ret += '\n' + '[Database returns "' + self.genie_utterance + '"]'
-        if len(self.genie_reviews) > 0:
-            ret += '\nRestaurant reviews: ['
-            for i, review in enumerate(self.genie_reviews):
-                ret += '\nReview ' + str(i+1) + ': "' + review + '"'
-            if self.reviews_query is not None:
-                ret += '\nQuestion: "' + self.reviews_query + '"'
-            if self.genie_reviews_answer is not None:
-                ret += '\nAnswer: "' + self.genie_reviews_answer + '"'
-            ret += '\n]'
         if self.agent_utterance is not None:
             ret += '\n' + you + ': ' + self.agent_utterance
         return ret
