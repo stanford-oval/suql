@@ -193,9 +193,13 @@ def compute_next_turn(
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
     dlgHistory[-1].sys_type = sys_type
     
-    # determine whether to send to Genie
-    continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo',
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+    # # determine whether to send to Genie
+    # continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo',
+    #                             max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+
+    # For now, we will assume all calls require Genie
+    continuation = "Yes"
+    first_classification_time = 0
 
     if continuation.startswith("Yes"):
         if sys_type == "sql_textfcns_v0801":

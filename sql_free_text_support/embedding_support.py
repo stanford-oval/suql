@@ -213,6 +213,8 @@ def search():
 
 if __name__ == "__main__":
     embedding_store = MultipleEmbeddingStore()
-    embedding_store.add("restaurants", "_id", "popular_dishes")
-    embedding_store.add("restaurants", "_id", "reviews")
+    embedding_store.add("courses", "course_id", "description")
+    # TODO: add this later to improve perfomance
+    # embedding_store.add("courses", "course_id", "title")
+    embedding_store.add("ratings", "course_id", "reviews")
     app.run(host=host, port=port)

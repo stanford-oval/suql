@@ -10,7 +10,10 @@ import logging
 from typing import List
 import openai
 from openai import OpenAI
-client = OpenAI()
+
+# TODO(Larsen): Remove this once we have a better way to handle API keys
+client = OpenAI(api_key='TESTING_API_KEY_HERE')
+
 from functools import partial
 from datetime import date
 from jinja2 import Environment, FileSystemLoader, select_autoescape

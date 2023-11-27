@@ -1,64 +1,78 @@
-You are a semantic parser. Generate a query for a restaurant database with the following signature:
+You are a semantic parser. Generate a query for a courses database with the following signatures:
 
-CREATE TABLE restaurants (
-    name TEXT,
-    cuisines TEXT[],
-    price ENUM ('cheap', 'moderate', 'expensive', 'luxury'),
-    rating NUMERIC(2,1),
-    num_reviews NUMBER,
-    address TEXT,
-    popular_dishes FREE_TEXT,
-    phone_number TEXT,
-    reviews FREE_TEXT,
-    opening_hours TEXT,
-    location TEXT
+CREATE TABLE courses (
+    course_id UUID PRIMARY KEY,
+    course_number VARCHAR(255),
+    max_units INT,
+    title TEXT,
+    grading TEXT,
+    course_codes TEXT[],
+    general_requirements TEXT[],
+    min_units INT,
+    description TEXT,
+    seasons_offered TEXT[],
+    average_hours_spent FLOAT
+);
+
+CREATE TABLE ratings (
+    rating_id SERIAL PRIMARY KEY,
+    course_id UUID,
+    course_number VARCHAR(255), 
+    instructor_name TEXT,
+    average_rating FLOAT,
+    num_ratings INT,
+    term_id INT,
+    start_year INT,
+    end_year INT,
+    season TEXT,
+    reviews TEXT[],
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
 );
 
 Do not generate fields beyond the given fields. The `answer` function can be used on FREE_TEXT fields.
 
-{# Basic example #}
-User: Where is Burguer King?
-Target: SELECT address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
+Here is domain-specific information on the courses schema:
+- The grading column can assume the following values: 'Satisfactory/No Credit', 'Letter or Credit/No Credit'.
+- course_codes is the abbreviated department name followed by the course number (e.g., 'CS 161'). Some courses can be listed under multiple departments and numbers, and thus have multiple course codes.
+- The general_requirements column can assume the following values: 'WAY-A-II', 'WAY-AQR', 'WAY-CE', 'WAY-EDP', 'WAY-ER', 'WAY-FR', 'WAY-SI', 'WAY-SMA', 'Language', 'Writing 1', 'Writing 2', 'Writing SLE', 'DB:Hum', 'DB:Math', 'DB:SocSci', 'DB:EngrAppSci', 'DB:NatSci', 'EC:EthicReas', 'EC:GlobalCom', 'EC:AmerCul', 'EC:Gender', 'IHUM1', 'IHUM2', 'IHUM3'.
+- seasons_offered specifies which quarters the course is offered, with 'autumn', 'winter', 'spring', or 'summer'.
+- average_hours_spent is the average reported amount of time a student spends on the course.
+
+Here is domain specific information on the ratings schema:
+- The same course (course_number / course_id) can have multiple offerings. This means that one course may have multiple rows with different seasons.
+- average_rating and num_rating corresponds to a numerical rating from each student review that is on a 5 point scale.
+- reviews contains text reviews of the course. Different offerings of the same course from the same year will share the same reviews.
+
+{# Usage of `answer` on description column#}
+User: What is a good computer science introductory course?
+Target: SELECT title, course_codes, summary(description) FROM courses WHERE answer(description, 'is this an introductory computer science course?') = 'Yes' LIMIT 3;
 --
-{# Basic example for cuisine, and follow up with restaurant names #}
-User: what are some good-reviewed japanese restaurants in Kansas City?
-Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'Kansas City' AND rating >= 4.0 LIMIT 3;
-Agent: I found Sakura Sushi, Nami Ramen, and Kaze Teppanyaki.
-User: What are their prices?
-Target: SELECT name, price FROM restaurants WHERE (name ILIKE 'Sakura Sushi' OR name ILIKE 'Nami Ramen' OR name ILIKE 'Kaze Teppanyaki') AND location = 'Kansas City';
+{# Basic example for AI courses, and follow up with course general requirements #}
+User: what are some good-reviewed AI courses during winter quarter?
+Target: SELECT title, course_codes, summary(description) FROM courses JOIN ratings ON courses.course_id = ratings.course_id WHERE 'winter' IN seasons_offered AND answer(description, 'is this an AI related course?') = 'Yes' AND average_rating >= 4.0 LIMIT 3;
+Agent: I found CS 124: From Languages to Information, CS 129: Applied Machine Learning, and CS 224N: Natural Language Processing with Deep Learning.
+User: What requirements do they cover?
+Target: SELECT general_requirements FROM courses WHERE (title ILIKE 'From Languages to Information' OR title ILIKE 'Applied Machine Learning' OR title ILIKE 'Natural Language Processing with Deep Learning');
 --
 {# Usage of `answer` function on FREE TEXT field in both projection and filter #}
-User: Show me a family-friendly restaurant that has burgers in D.C.
-Target: SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' AND answer(popular_dishes, 'does this restaurant serve burgers') = 'Yes' AND location = 'D.C.' LIMIT 1;
-Agent: I found Wesley's steakhouse. Reviews mention kids love going there with their parents. It should be a great weekend dinner for you and your family.
-User: What do the reviews say about the atmosphere in the restaurant?
-Target: SELECT answer(reviews, 'What is the atmosphere?') FROM restaurants WHERE name ILIKE 'Wesley''s steakhouse' AND location = 'D.C.' LIMIT 1;
+User: Show me courses that are good for beginners in machine learning.
+Target: SELECT title, course_codes, summary(description) FROM courses WHERE answer(description, 'is this course good for beginners in machine learning?') = 'Yes' LIMIT 3;
 --
-{# Usage of `answer` function on popular_dishes #}
-User: Find me a place with pasta in Nashville.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does this restaurant serve pasta') = 'Yes' AND location = 'Nashville' LIMIT 1;
+{# Usage of `answer` function on general_requirements #}
+User: I need a course that satisfies the WAY-ER requirement and is offered in autumn.
+Target: SELECT title, course_codes FROM courses WHERE 'WAY-ER' = ANY(general_requirements) AND 'autumn' = ANY(seasons_offered) LIMIT 3;
 --
 {# Usage of `answer` function on reviews #}
-User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
-Target: SELECT *, summary(reviews), answer(reviews, 'what is the wait time?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND answer(reviews, 'does this restaurant have short wait time?') = 'Yes' LIMIT 1;
+User: Can you find courses with high student satisfaction on operating systems?
+Target: SELECT title, course_codes, summary(description) FROM courses JOIN ratings ON courses.course_id = ratings.course_id WHERE answer(reviews, 'are students satisfied with this operating systems course?') = 'Yes' AND average_rating >= 4.0 LIMIT 3;
 --
-{# Meaning of the word "popular", and follow up on fetching reviews #}
-User: I want a popular restaurant in Napa, CA.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' ORDER BY num_reviews DESC LIMIT 1;
-Agent: I found the 5.0 star Gui's vegan house. It has 2,654 reviews and reviews mention great atmosphere, quick and good service, and good food quality.
-User: Give me the review that talk about good food quality.
-Target: SELECT single_review FROM restaurants AS r, unnest(reviews) AS single_review WHERE name ILIKE 'Gui''s vegan house' AND answer(single_review, 'does this review mention good food quality?') = 'Yes' AND r.location = 'Napa, CA' LIMIT 1;
+{# Meaning of the word "popular", and follow up on fetching average hours spent #}
+User: What's a popular course on natural language processing?
+Target: SELECT title, course_codes, average_hours_spent FROM courses JOIN ratings ON courses.course_id = ratings.course_id WHERE answer(description, 'is this a natural language processing course?') = 'Yes' ORDER BY num_ratings DESC LIMIT 1;
 --
-{# Usage of `answer` function on reviews #}
-User: Which restaurants have a happy hour in Bakersfield?
-Target: SELECT *, summary(reviews), answer(reviews, 'what is the happy hour here?') FROM restaurants WHERE location = 'Bakersfield' AND answer(reviews, 'does this restaurant have a happy hour?') = 'Yes' LIMIT 1;
---
-{# Usage of `answer` function on reviews #}
-User: i'm hungry, what should i have for lunch? I am looking for salmon in Chicago.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does this restaurant serve salmon?') = 'Yes' AND location = 'Chicago' LIMIT 1;
-Agent: I found the 4.5 star Daigo. It is a family-owned business that serves traditional Japanese cuisine.
-User: Show me something else.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(name = 'Daigo') AND answer(popular_dishes, 'does this restaurant serve salmon?') = 'Yes' AND location = 'Chicago' LIMIT 1;
+{# Usage of `answer` function on course description and follow-up on instructor #}
+User: Which courses cover probabilistic models and are taught by a renowned instructor?
+Target: SELECT title, course_codes, instructor_name FROM courses JOIN ratings ON courses.course_id = ratings.course_id WHERE answer(description, 'does this course cover probabilistic models?') = 'Yes' AND average_rating >= 4.5 LIMIT 3;
 --
 {% for dlg_turn in dlg[:-1] %}
 {% if dlg_turn.genie_utterance is not none %}
