@@ -387,8 +387,10 @@ class StructuralClassification(Visitor):
         to_execute_node.limitCount = None
         # change predicates
         to_execute_node.whereClause = node
-        res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node), user = "creator_role", password = "creator_role")
-        
+        # reset any groupby clause
+        to_execute_node.groupClause = None
+        res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node))
+                
         if not res:
             print("determined the above predicate returns no result")
             # try to classify into one of the known values
