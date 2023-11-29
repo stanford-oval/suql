@@ -232,9 +232,14 @@ def verify_single_res(doc, field_query_list):
     
     return all_found
 
-def parallel_filtering(fcn, source, limit):
+def parallel_filtering(fcn, source : list, limit, enforce_ordering = False):
     true_count = 0
     true_items = set()
+    
+    # build a dictionary with index -> true/false/None
+    # which indicates whether an item has been verified
+    ordered_results = {i : None for i in range(len(source))}
+    
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = {executor.submit(fcn, item): item for item in source}
         
@@ -244,12 +249,25 @@ def parallel_filtering(fcn, source, limit):
             if result:
                 true_count += 1
                 true_items.add(item[0])
+                ordered_results[source.index(item)] = True
+            else:
+                ordered_results[source.index(item)] = False
 
-            if true_count >= limit and limit != -1:
+            # TODO: for best performance, if enforce_ordering = True,
+            # cancel remaining futures if enough top results have been found
+            
+            if true_count >= limit and limit != -1 and not enforce_ordering:
                 # Cancel remaining futures
                 for f in futures:
                     f.cancel()
                 break
+
+    if enforce_ordering:
+        res = []
+        for i, item in enumerate(source):
+            if ordered_results[i]:
+                res.append(item[0])
+        return res
 
     return true_items
 
@@ -288,7 +306,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     
     if parallel:
         # parallelize verification calls
-        id_res = parallel_filtering(lambda x: verify_single_res(x[1], field_query_list), parsed_result, limit)
+        id_res = parallel_filtering(lambda x: verify_single_res(x[1], field_query_list), parsed_result, limit, enforce_ordering=True if node.sortClause is not None else False)
     else:
         id_res = []
         for each_res in parsed_result:
@@ -496,7 +514,7 @@ def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict
     
     sql = RawStream()(node)
     print("execute_structural_sql executing sql: {}".format(sql))
-    return execute_sql_with_column_info(sql, user = "creator_role", password = "creator_role")
+    return execute_sql_with_column_info(sql)
     
 
 def execute_free_text_queries(node, predicate : BoolExpr, existing_results, column_info, limit):
@@ -622,10 +640,16 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT * FROM restaurants WHERE 'cafe' = ANY (cuisines) LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'downtown SF' ORDER BY rating DESC, num_reviews DESC LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND location = 'San Francisco' AND answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' LIMIT 1;")
-    # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant authentic?') FROM restaurants WHERE 'mexican' = ANY (cuisines) AND answer(reviews, 'is this restaurant family-friendly?') = 'Yes' AND rating >= 4.0 ORDER BY rating DESC LIMIT 3;")
+    # root = parse_sql("SELECT name FROM restaurants WHERE 'mexican' = ANY (cuisines) AND answer(reviews, 'is this restaurant family-friendly?') = 'Yes' AND rating >= 4.0 ORDER BY rating DESC LIMIT 1;")
     root = parse_sql("SELECT opening_hours->>'Thursday' FROM restaurants WHERE name ILIKE 'Top of the Mark' LIMIT 1;") # FIXIT
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))
-    visitor.drop_tmp_tables()
     print(visitor.serialize_cache())
+    
+    # results
+    print("Executed results")
+    results, column_names, _ = execute_sql(RawStream()(root))
+    print(results)
+    
+    visitor.drop_tmp_tables()
