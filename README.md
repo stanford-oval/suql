@@ -49,7 +49,7 @@ Here is a rough breakdown of what you need to do to set up SUQL on your domain:
 
 2. Write a semantic parser prompt, and substitute `prompts/parser_sql.prompt` with it. Include examples of how to use the `answer` function.
 
-3. Set up an embedding server for the SUQL compiler to query. Go to `sql_free_text_support/embedding_support.py`, and modify the line `embedding_store.add("restaurants", "_id", "popular_dishes")` and `embedding_store.add("restaurants", "_id", "reviews")` to match your database with its column names. For instance, the current two lines there are saying that set up an embedding server for the `restaurants` database, which has `_id` column as the unique row identifier, for the `popular_dishes` and `reviews` columns (these columns need to be of type `TEXT` or `TEXT[]`). By default, this will be set up on port 8509, which is then called by `execute_free_text_sql`. In case you need to use another port, please change both addresses.
+3. Set up an embedding server for the SUQL compiler to query. Go to `sql_free_text_support/embedding_support.py`, and modify the line `embedding_store.add("restaurants", "_id", "popular_dishes")` and `embedding_store.add("restaurants", "_id", "reviews")` to match your database with its column names. For instance, the current two lines there are saying that set up an embedding server for the `restaurants` database, which has `_id` column as the unique row identifier, for the `popular_dishes` and `reviews` columns (these columns need to be of type `TEXT` or `TEXT[]`). By default, this will be set up on port 8509, which is then called by `execute_free_text_sql`. In case you need to use another port, please change both addresses. Note that this embedding server uses a mongodb to cache embedding results. Please follow https://www.mongodb.com/docs/manual/installation/ for your OS.
 
 4. In the command line for your database, copy and paste all content under `custom_functions.sql`. This will define the `answer` and `summary` functions under your PostgreSQL database.
 
@@ -57,9 +57,11 @@ Here is a rough breakdown of what you need to do to set up SUQL on your domain:
 
 6. There is a classifier to determine whether a user utterance requires database access, at this line: `llm_generate(template_file='prompts/if_db_classification.prompt', ...)`. This may or may not be applicable to your domain, and if it is, please modify the [corresponding prompt](https://github.com/stanford-oval/suql/blob/main/prompts/if_db_classification.prompt).
 
-7. A note on PostgreSQL's permission issue. Queries into the PostgreSQL database are done via functions inside the `postgresql_connection.py` file. You should change the default values for `user`, `password`, and `database` there to match your PostgreSQL set up. Furthermore, various parts of the SUQL compiler require the permission to **create** a temporary table. You can search for `yelpbot_creator` under [this file](https://github.com/stanford-oval/suql/blob/main/sql_free_text_support/execute_free_text_sql.py). You would need to create a user with the privilege to **create** tables under your database, and change `yelpbot_creator` to match that user and password.
+7. A note on PostgreSQL's permission issue. The user-facing parts of this system would only require **SELECT** privilege (it would be safe to grant only SELECT privilege for GPT-generated queries). This user is named `select_user` with password `select_user` in [this file](https://github.com/stanford-oval/suql/blob/main/postgresql_connection.py). You should change the default values for `user`, `password`, and `database` there to match your PostgreSQL set up. This user also appears once in [this file](https://github.com/stanford-oval/suql/blob/main/sql_free_text_support/execute_free_text_sql.py) of the SUQL compiler, so that intermediate tables created can be queried. Please also change it to match your user name.
 
-8. Test with `python yelp_loop.py`.
+8. Furthermore, various parts of the SUQL compiler require the permission to **create** a temporary table. You can search for `creator_role` under [this file](https://github.com/stanford-oval/suql/blob/main/sql_free_text_support/execute_free_text_sql.py). You would need to create a user with the privilege to **CREATE** tables under your database, and change `creator_role` to match that user and password. 
+
+9. Test with `python yelp_loop.py`.
 
 # Known issues
 

@@ -1,7 +1,7 @@
 import psycopg2
 import time
 
-def execute_sql(sql_query, user = "yelpbot_user", password = "yelpbot_user", data = None, commit_in_lieu_fetch = False, no_print = False, database = "restaurants"):
+def execute_sql(sql_query, user = "select_user", password = "select_user", data = None, commit_in_lieu_fetch = False, no_print = False, database = "restaurants"):
     
     start_time = time.time()
 
@@ -60,7 +60,7 @@ def execute_sql(sql_query, user = "yelpbot_user", password = "yelpbot_user", dat
     elapsed_time = end_time - start_time
     return list(results), column_names, elapsed_time
 
-def execute_sql_with_column_info(sql_query, database = "restaurants", user = "yelpbot_user", password = "yelpbot_user"):
+def execute_sql_with_column_info(sql_query, database = "restaurants", user = "select_user", password = "select_user"):
     start_time = time.time()
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(

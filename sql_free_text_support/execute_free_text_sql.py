@@ -105,9 +105,9 @@ class SelectVisitor(Visitor):
             
             # based on results and column_info, insert a temporary table
             column_create_stmt = ",\n".join(list(map(lambda x: f'"{x[0]}" {x[1]}', column_info)))
-            create_stmt = f"CREATE TABLE {tmp_table_name} (\n{column_create_stmt}\n); GRANT SELECT ON {tmp_table_name} TO yelpbot_user;"
+            create_stmt = f"CREATE TABLE {tmp_table_name} (\n{column_create_stmt}\n); GRANT SELECT ON {tmp_table_name} TO select_user;"
             print("created table {}".format(tmp_table_name))
-            execute_sql(create_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True, no_print=True)
+            execute_sql(create_stmt, user = "creator_role", password = "creator_role", commit_in_lieu_fetch=True, no_print=True)
             
             if results:
                 # some special processing is needed for python dict types - they need to be converted to json
@@ -115,7 +115,7 @@ class SelectVisitor(Visitor):
                 placeholder_str = ', '.join(['%s'] * len(results[0]))
                 for result in results:
                     updated_results = tuple([json.dumps(element) if index in json_indices else element for index, element in enumerate(result)])
-                    execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True)
+                    execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = "creator_role", password = "creator_role", commit_in_lieu_fetch=True)
             
             # finally, modify the existing sql with tmp_table_name
             node.fromClause = (RangeVar(relname=tmp_table_name, inh=True, relpersistence='p'),)
@@ -136,7 +136,7 @@ class SelectVisitor(Visitor):
     def drop_tmp_tables(self):
         for tmp_table_name in self.tmp_tables:
             drop_stmt = f"DROP TABLE {tmp_table_name}"
-            execute_sql(drop_stmt, user = "yelpbot_creator", password = "yelpbot_creator", commit_in_lieu_fetch=True)
+            execute_sql(drop_stmt, user = "creator_role", password = "creator_role", commit_in_lieu_fetch=True)
     
 
 class PredicateMapping():
@@ -387,8 +387,10 @@ class StructuralClassification(Visitor):
         to_execute_node.limitCount = None
         # change predicates
         to_execute_node.whereClause = node
-        res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator")
-        
+        # reset any groupby clause
+        to_execute_node.groupClause = None
+        res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node))
+                
         if not res:
             print("determined the above predicate returns no result")
             # try to classify into one of the known values
@@ -435,7 +437,7 @@ class StructuralClassification(Visitor):
                 
                 to_execute_node.sortClause = None
                 to_execute_node.whereClause = None
-                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "yelpbot_creator", password = "yelpbot_creator")
+                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "creator_role", password = "creator_role")
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x:x[0], field_value_choices))
                 field_value_choices.sort()
@@ -494,7 +496,7 @@ def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict
     
     sql = RawStream()(node)
     print("execute_structural_sql executing sql: {}".format(sql))
-    return execute_sql_with_column_info(sql, user = "yelpbot_creator", password = "yelpbot_creator")
+    return execute_sql_with_column_info(sql, user = "creator_role", password = "creator_role")
     
 
 def execute_free_text_queries(node, predicate : BoolExpr, existing_results, column_info, limit):
