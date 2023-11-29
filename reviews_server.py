@@ -251,7 +251,7 @@ def answer():
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': text_res, 'question': data["question"] + "; consider all relevant information."},
-        engine='gpt-3.5-turbo',
+        engine='gpt-3.5-turbo-0613',
         max_tokens=200,
         temperature=0.0,
         stop_tokens=['\n'],
@@ -294,7 +294,7 @@ def summary():
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': text_res, 'question': "general information about this restaurant"},
-        engine='gpt-3.5-turbo',
+        engine='gpt-3.5-turbo-0613',
         max_tokens=200,
         temperature=0.0,
         stop_tokens=['\n'],

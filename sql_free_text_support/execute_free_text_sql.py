@@ -202,7 +202,7 @@ def verify(document, field, query, operator, value):
             "operator": operator,
             "value": '"{}"'.format(value) if type(value) == str else value
         },
-        engine='gpt-3.5-turbo',
+        engine='gpt-3.5-turbo-0613',
         temperature=0,
         stop_tokens=["\n"],
         max_tokens=30,
@@ -450,7 +450,7 @@ class StructuralClassification(Visitor):
                             "predicted_field_value": value_res_clear,
                             "field_value_choices": field_value_choices
                         },
-                        engine='gpt-3.5-turbo',
+                        engine='gpt-3.5-turbo-0613',
                         temperature=0,
                         stop_tokens=["\n"],
                         max_tokens=100,

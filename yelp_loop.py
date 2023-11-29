@@ -130,7 +130,7 @@ def clean_up_response(results, column_names):
 
 def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
     first_sql, first_sql_time = llm_generate(template_file=prompt_file,
-                engine='gpt-3.5-turbo',
+                engine='gpt-3.5-turbo-0613',
                 stop_tokens=["Agent:"],
                 max_tokens=300,
                 temperature=0,
@@ -194,7 +194,7 @@ def compute_next_turn(
     dlgHistory[-1].sys_type = sys_type
     
     # determine whether to send to Genie
-    continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo',
+    continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
@@ -222,7 +222,7 @@ def compute_next_turn(
 
         # for all systems, cut it out if no response returned
         if not results:
-            response, final_response_time = llm_generate(template_file='prompts/yelp_response_no_results.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo',
+            response, final_response_time = llm_generate(template_file='prompts/yelp_response_no_results.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
                                 max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].time_statement = {
@@ -233,7 +233,7 @@ def compute_next_turn(
             }
             return dlgHistory
             
-    response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo',
+    response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
                         max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
     dlgHistory[-1].agent_utterance = response
     
@@ -255,7 +255,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_file', type=str, default='log.log',
                         help='Where to write the outputs.')
     parser.add_argument('--engine', type=str, default='text-davinci-003',
-                        choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-3.5-turbo'],
+                        choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-3.5-turbo-0613'],
                         help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
     parser.add_argument('--quit_commands', type=str, default=['quit', 'q'],
                         help='The conversation will continue until this string is typed in.')
