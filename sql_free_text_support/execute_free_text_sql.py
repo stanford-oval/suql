@@ -476,7 +476,7 @@ class StructuralClassification(Visitor):
                 
                 to_execute_node.sortClause = None
                 to_execute_node.whereClause = None
-                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "creator_role", password = "creator_role")
+                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node))
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x:x[0], field_value_choices))
                 field_value_choices.sort()
