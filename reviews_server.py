@@ -5,7 +5,6 @@ import os
 from flask import request, Flask
 import time
 import torch
-from prompt_continuation import llm_generate
 from utils import linearize, chunk_text
 import json
 from tqdm import tqdm
@@ -222,6 +221,7 @@ def getMenus():
 
 @app.route('/answer', methods=['POST'])
 def answer():
+    from prompt_continuation import llm_generate
     data = request.get_json()
     # print("/answer receieved request {}".format(data))
         
@@ -266,6 +266,7 @@ def answer():
 
 @app.route('/summary', methods=['POST'])
 def summary():
+    from prompt_continuation import llm_generate
     data = request.get_json()
     # print("/answer receieved request {}".format(data))
         
@@ -326,7 +327,8 @@ def _compute_single_embedding(documents, chunking_param=15, safe_assume_exists =
     for missing_hash, missing_index in missing_hashes_with_indices:
         chunked_documents = chunk_text(documents[missing_index], k=chunking_param, use_spacy=True)
         inputs = tokenizer(chunked_documents, padding=True, truncation=True, return_tensors="pt").to(device)
-        embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
+        with torch.no_grad():  # Disables gradient calculation to save memory
+            embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
         existing_embeddings = torch.cat((existing_embeddings, embeddings), dim=0)
         cache_db.insert_one({
             "_id": missing_hash,
