@@ -160,8 +160,10 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
 
         # some custom processing code to clean-up results
         final_res = clean_up_response(results, column_names)
-    finally:
         visitor.drop_tmp_tables()
+    except Exception:
+        visitor.drop_tmp_tables()
+        
     second_sql_end_time = time.time()
     
     return final_res, first_sql, second_sql, first_sql_time, second_sql_end_time - second_sql_start_time, cache
