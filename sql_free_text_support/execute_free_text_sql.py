@@ -22,6 +22,7 @@ import random
 import string
 import concurrent.futures
 from collections import defaultdict
+from psycopg2 import Error as psyconpg2Error
 
 SET_FREE_TEXT_FCNS = ["answer"]
 
@@ -69,7 +70,18 @@ class IfAllStructural(Visitor):
         
         if not (is_structural(node.lexpr) and is_structural(node.rexpr)):
             self.res = False
-            
+
+class IfInvovlesSubquery(Visitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sublink = None
+        
+    def __call__(self, node):
+        super().__call__(node)
+
+    def visit_SubLink(self, ancestors, node : SubLink):
+        print(ancestors)
+        self.sublink = node.subselect
 
 def if_all_structural(node):
     visitor = IfAllStructural()
@@ -90,8 +102,12 @@ class SelectVisitor(Visitor):
         if not node.whereClause:
             return
 
-        if isinstance(node.whereClause, SubLink):
-            self.visit_SelectStmt(None, node.whereClause.subselect)
+        # First, understand whether this involves subquery. If it does, then starts with that first and builds upwards
+        # If that subquery in turn involves other subqueries, then recursive calls take care of it
+        subquery_visitor = IfInvovlesSubquery()
+        subquery_visitor(node)
+        if subquery_visitor.sublink is not None:
+            self.visit_SelectStmt(None, subquery_visitor.sublink)
 
         freeTextFcnVisitor = FreeTextFcnVisitor()
         freeTextFcnVisitor(node.whereClause)
@@ -407,8 +423,13 @@ class StructuralClassification(Visitor):
         to_execute_node.whereClause = node
         # reset any groupby clause
         to_execute_node.groupClause = None
-        res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node))
-                
+        
+        try:
+            res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node), unprotected=True)
+        except psyconpg2Error:
+            print("above error happens during ENUM classification attempts. Marking this predicate as returning answer.")
+            res = True
+            
         if not res:
             print("determined the above predicate returns no result")
             # try to classify into one of the known values

@@ -60,7 +60,7 @@ def execute_sql(sql_query, user = "select_user", password = "select_user", data 
     elapsed_time = end_time - start_time
     return list(results), column_names, elapsed_time
 
-def execute_sql_with_column_info(sql_query, database = "restaurants", user = "select_user", password = "select_user"):
+def execute_sql_with_column_info(sql_query, database = "restaurants", user = "select_user", password = "select_user", unprotected = False):
     start_time = time.time()
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
@@ -103,6 +103,8 @@ def execute_sql_with_column_info(sql_query, database = "restaurants", user = "se
 
     except psycopg2.Error as e:
         print("Error executing SQL query:", e)
+        if unprotected:
+            raise e
         return [], []
 
     # Close the cursor and connection
