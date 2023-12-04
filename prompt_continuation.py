@@ -12,7 +12,7 @@ import openai
 from openai import OpenAI
 
 # TODO(Larsen): Remove this once we have a better way to handle API keys
-client = OpenAI(api_key='TESTING_API_KEY_HERE')
+client = OpenAI(api_key='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')
 
 from functools import partial
 from datetime import date

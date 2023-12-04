@@ -43,24 +43,26 @@ Here is domain specific information on the ratings schema:
 - average_rating and num_rating corresponds to a numerical rating from each student review that is on a 5 point scale.
 - reviews contains text reviews of the course. Different offerings of the same course from the same year will share the same reviews.
 
+Below are some examples of using the `answer` and `summary` function.
+
 {# Usage of `answer` on description column#}
 User: What is a good computer science introductory course?
-Target: SELECT title, course_codes, summary(description) FROM courses WHERE answer(description, 'is this an introductory computer science course?') = 'Yes' LIMIT 3;
+Target: SELECT title, summary(description) FROM courses WHERE answer(description, 'is this an introductory computer science course?') = 'Yes' LIMIT 3;
 --
 {# Basic example for AI courses, and follow up with course general requirements #}
 User: what are some good-reviewed AI courses during winter quarter?
-Target: SELECT title, course_codes, summary(description) FROM courses JOIN ratings ON courses.course_id = ratings.course_id WHERE 'winter' IN seasons_offered AND answer(description, 'is this an AI related course?') = 'Yes' AND average_rating >= 4.0 LIMIT 3;
+Target: SELECT title, summary(description) FROM courses JOIN ratings ON courses.course_id = ratings.course_id WHERE 'winter' IN seasons_offered AND answer(description, 'is this an AI related course?') = 'Yes' AND average_rating >= 4.0 LIMIT 3;
 Agent: I found CS 124: From Languages to Information, CS 129: Applied Machine Learning, and CS 224N: Natural Language Processing with Deep Learning.
 User: What requirements do they cover?
 Target: SELECT general_requirements FROM courses WHERE (title ILIKE 'From Languages to Information' OR title ILIKE 'Applied Machine Learning' OR title ILIKE 'Natural Language Processing with Deep Learning');
 --
 {# Usage of `answer` function on FREE TEXT field in both projection and filter #}
 User: Show me courses that are good for beginners in machine learning.
-Target: SELECT title, course_codes, summary(description) FROM courses WHERE answer(description, 'is this course good for beginners in machine learning?') = 'Yes' LIMIT 3;
+Target: SELECT title, summary(description) FROM courses WHERE answer(description, 'is this course good for beginners in machine learning?') = 'Yes' LIMIT 3;
 --
 {# Usage of `answer` function on general_requirements #}
 User: I need a course that satisfies the WAY-ER requirement and is offered in autumn.
-Target: SELECT title, course_codes FROM courses WHERE 'WAY-ER' = ANY(general_requirements) AND 'autumn' = ANY(seasons_offered) LIMIT 3;
+Target: SELECT title, summary(description) FROM courses WHERE 'WAY-ER' = ANY(general_requirements) AND 'autumn' = ANY(seasons_offered) LIMIT 3;
 --
 {# Usage of `answer` function on reviews #}
 User: Can you find courses with high student satisfaction on operating systems?
@@ -73,6 +75,14 @@ Target: SELECT title, course_codes, average_hours_spent FROM courses JOIN rating
 {# Usage of `answer` function on course description and follow-up on instructor #}
 User: Which courses cover probabilistic models and are taught by a renowned instructor?
 Target: SELECT title, course_codes, instructor_name FROM courses JOIN ratings ON courses.course_id = ratings.course_id WHERE answer(description, 'does this course cover probabilistic models?') = 'Yes' AND average_rating >= 4.5 LIMIT 3;
+--
+{# Meaning of "course number" when specified by user #}
+User: Show me computer systems courses numbered above 200.
+Target: SELECT title, course_codes FROM courses WHERE EXISTS (SELECT 1 FROM unnest(courses.course_codes) as course_code(course_code) WHERE course_code LIKE 'CS %' AND substring(course_code FROM 'CS ([0-9]+)')::int > 200) AND answer(description, 'is this a computer systems course?') = 'Yes' LIMIT 3;
+--
+{# Meaning of "course number" when specified by user #}
+User: What is CS 106 B about?
+Target: SELECT summary(description) FROM courses WHERE 'CS 106B' = ANY(course_codes);
 --
 {% for dlg_turn in dlg[:-1] %}
 {% if dlg_turn.genie_utterance is not none %}

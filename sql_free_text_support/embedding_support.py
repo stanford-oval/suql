@@ -11,9 +11,11 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from reviews_server import compute_sha256, _compute_single_embedding
 from postgresql_connection import execute_sql
 
-cuda_ok = torch.cuda.is_available()
-if cuda_ok:
-    device = torch.device("cuda")
+# cuda_ok = torch.cuda.is_available()
+# if cuda_ok:
+#     device = torch.device("cuda")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
 client = pymongo.MongoClient('localhost', 27017)
 cache_db = client['free_text_cache']['hash_to_embeddings']
@@ -96,7 +98,7 @@ class EmbeddingStore():
             current_counter += document_embeddings.size(0)
         
         self.embeddings = existing_embeddings
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         
         # Calculate memory
         memory_bytes = self.embeddings.element_size() * self.embeddings.nelement()
@@ -120,7 +122,7 @@ class EmbeddingStore():
         # chunking param = 0 makes sure that we don't chunk the query
         query_embedding = _compute_single_embedding([query], chunking_param=0)[0]
         
-        dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device='cuda')] * query_embedding, dim=1)
+        dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device=device)] * query_embedding, dim=1)
 
         if top > 0:
             _, indices_max = torch.topk(dot_products, top)
@@ -136,7 +138,7 @@ class EmbeddingStore():
     
         # chunking param = 0 makes sure that we don't chunk the query
         query_embedding = _compute_single_embedding([query], chunking_param=0)[0]
-        dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device='cuda')] * query_embedding, dim=1)
+        dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device=device)] * query_embedding, dim=1)
         
         # for each id, we would do a sorting based on each retrieval score
         # to determine the top similarity score for each id, and based on which document
@@ -216,5 +218,7 @@ if __name__ == "__main__":
     embedding_store.add("courses", "course_id", "description")
     # TODO: add this later to improve perfomance
     # embedding_store.add("courses", "course_id", "title")
-    embedding_store.add("ratings", "course_id", "reviews")
+
+    # TODO: add this later once metal is installed!
+    # embedding_store.add("ratings", "course_id", "reviews")
     app.run(host=host, port=port)

@@ -1,7 +1,7 @@
 import psycopg2
 import time
 
-def execute_sql(sql_query, user = "select_user", password = "select_user", data = None, commit_in_lieu_fetch = False, no_print = False, database = "restaurants"):
+def execute_sql(sql_query, user = "select_user", password = "select_user", data = None, commit_in_lieu_fetch = False, no_print = False, database = "course_assistant"):
     
     start_time = time.time()
 
@@ -29,29 +29,29 @@ def execute_sql(sql_query, user = "select_user", password = "select_user", data 
     cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
     conn.commit()
 
-    try:
-        if not no_print:
-            print("executing SQL {}".format(sql_query))
-        # Execute the SQL query
-        if data:
-            cursor.execute(sql_query, data)
-        else:
-            cursor.execute(sql_query)
+    # try:
+    if not no_print:
+        print("executing SQL {}".format(sql_query))
+    # Execute the SQL query
+    if data:
+        cursor.execute(sql_query, data)
+    else:
+        cursor.execute(sql_query)
 
-        # Fetch all the results
-        if commit_in_lieu_fetch:
-            conn.commit()
-            results = []
-            column_names = []
-        else:
-            results = cursor.fetchall()
-            column_names = [desc[0] for desc in cursor.description]
+    # Fetch all the results
+    if commit_in_lieu_fetch:
+        conn.commit()
+        results = []
+        column_names = []
+    else:
+        results = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description]
 
-    except psycopg2.Error as e:
-        print("Error executing SQL query:", e)
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        return [], [], elapsed_time
+    # except psycopg2.Error as e:
+    #     print("Error executing SQL query:", e)
+    #     end_time = time.time()
+    #     elapsed_time = end_time - start_time
+    #     return [], [], elapsed_time
 
     # Close the cursor and connection
     cursor.close()
@@ -60,8 +60,9 @@ def execute_sql(sql_query, user = "select_user", password = "select_user", data 
     elapsed_time = end_time - start_time
     return list(results), column_names, elapsed_time
 
-def execute_sql_with_column_info(sql_query, database = "restaurants", user = "select_user", password = "select_user"):
+def execute_sql_with_column_info(sql_query, database = "course_assistant", user = "select_user", password = "select_user"):
     start_time = time.time()
+
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
         database=database,

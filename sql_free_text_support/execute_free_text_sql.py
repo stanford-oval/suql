@@ -264,7 +264,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     # column_info: this is a list of tuples, first element is column name and second is type
     # limit: max number of returned results
     
-    id_index = list(map(lambda x: x[0], column_info)).index('_id') # TODO: this is hard-coded for restaurants. Automate fetching this
+    id_index = list(map(lambda x: x[0], column_info)).index('course_id') # TODO: this is hard-coded for restaurants. Automate fetching this -> I chnaged it from _id
     
     # get _id list from `existing_results`
     start_time = time.time()
@@ -621,9 +621,15 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'downtown SF' ORDER BY rating DESC, num_reviews DESC LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND location = 'San Francisco' AND answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant authentic?') FROM restaurants WHERE 'mexican' = ANY (cuisines) AND answer(reviews, 'is this restaurant family-friendly?') = 'Yes' AND rating >= 4.0 ORDER BY rating DESC LIMIT 3;")
-    root = parse_sql("SELECT opening_hours->>'Thursday' FROM restaurants WHERE name ILIKE 'Top of the Mark' LIMIT 1;") # FIXIT
+    root = parse_sql("SELECT title, course_codes, summary(description) FROM courses WHERE answer(description, 'is this a course on computer systems taught in C?') = 'Yes' LIMIT 3;") # FIXIT
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))
-    visitor.drop_tmp_tables()
     print(visitor.serialize_cache())
+
+    # results
+    print("Executed results")
+    results, column_names, _ = execute_sql(RawStream()(root))
+    print(results)
+    
+    visitor.drop_tmp_tables()

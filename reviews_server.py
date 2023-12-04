@@ -14,11 +14,14 @@ from functools import reduce
 import operator
 from utils import num_tokens_from_string
 
-cuda_ok = torch.cuda.is_available()
+# cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
-if cuda_ok:
-    device = torch.device("cuda")
-    model = model.to(device)
+# if cuda_ok:
+#     device = torch.device("cuda")
+#     model = model.to(device)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = model.to(device)
     
 tokenizer = AutoTokenizer.from_pretrained("OpenMatch/cocodr-base-msmarco")
 
@@ -61,16 +64,23 @@ def filter_reviews(restaurants: List[str], keyword: str) -> List[str]:
             restaurants.extend([doc['id'] for i in range(len(doc['reviews']))])
 
         inputs = tokenizer(reviews, padding=True, truncation=True, return_tensors="pt")
-        if cuda_ok:
-            inputs = inputs.to(device)
+        # if cuda_ok:
+        #     inputs = inputs.to(device)
+        # embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1]\
+        #     .squeeze(1)  # the embedding of the [CLS] token after the final layer
+        inputs = inputs.to(device)
         embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1]\
             .squeeze(1)  # the embedding of the [CLS] token after the final layer
 
-        if cuda_ok:
-            embeddings[0].to(device)
+        # if cuda_ok:
+        #     embeddings[0].to(device)
+        # for i in range(1, len(embeddings)):
+        #     embeddings[i].to(device)
+        #     similarities.append((reviews[i], embeddings[0] @ embeddings[i], restaurants[i]))
+
+        embeddings[0].to(device)
         for i in range(1, len(embeddings)):
-            if cuda_ok:
-                embeddings[i].to(device)
+            embeddings[i].to(device)
             similarities.append((reviews[i], embeddings[0] @ embeddings[i], restaurants[i]))
 
     similarities.sort(key=lambda x: x[1], reverse=True)
@@ -129,7 +139,7 @@ def baseline_filter(to_query):
         max_idx = scores.index(max_score)
         similarities.append((info[max_idx + 1], max_score, doc))
 
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         print('done')
     
     similarities.sort(key= lambda x: x[1], reverse=True)
@@ -293,7 +303,7 @@ def summary():
     
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
-        {'reviews': text_res, 'question': "general information about this restaurant"},
+        {'reviews': text_res, 'question': "give me a summary of this document"},
         engine='gpt-3.5-turbo',
         max_tokens=200,
         temperature=0.0,
@@ -375,7 +385,7 @@ def _compute_single_embedding_with_mapping(documents, question, chunking_param=1
         if len(res) >= top:
             break
         
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     return res
 
 
@@ -395,7 +405,7 @@ def _compute_embeddings(documents, question, chunking_param=15, top=1):
     dot_products = torch.mv(documents_embeddings, question_embedding)
 
     values_max, indices_max = torch.topk(dot_products, top)
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
     end_time = time.time()
     print("time for computing dot product {}".format(end_time - mid_time))
     return values_max, indices_max
@@ -426,7 +436,7 @@ def get_highest_embedding(reviews, question):
             break
         except RuntimeError as e:
             if 'out of memory' in str(e):
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
                 print("Out of memory error occurred. Try reducing the batch size or model size.")
             else:
                 print("Runtime error occurred:", e)

@@ -112,12 +112,13 @@ def clean_up_response(results, column_names):
     final_res = []
     for res in results:
         temp = dict((column_name, result) for column_name, result in zip(column_names, res) if if_usable_restaurants(column_name))
-        for i in temp:
-            if isinstance(temp[i], Decimal):
-                temp[i] = float(temp[i])
+        
+        # for i in temp:
+        #     if isinstance(temp[i], Decimal):
+        #         temp[i] = float(temp[i])
             
-        if "opening_hours" in temp:
-            temp["opening_hours"] = handle_opening_hours(temp["opening_hours"])
+        # if "opening_hours" in temp:
+        #     temp["opening_hours"] = handle_opening_hours(temp["opening_hours"])
             
         
         # here is some simple heuristics to deal with too long DB results,
@@ -158,12 +159,13 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
     
         results, column_names, _ = execute_sql(second_sql)
 
-        # some custom processing code to clean-up results
         final_res = clean_up_response(results, column_names)
-    except Exception:
+
         visitor.drop_tmp_tables()
-    finally:
+    except Exception as e:
+        print(e)
         visitor.drop_tmp_tables()
+        
     second_sql_end_time = time.time()
     
     return final_res, first_sql, second_sql, first_sql_time, second_sql_end_time - second_sql_start_time, cache
