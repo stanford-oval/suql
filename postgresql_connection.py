@@ -104,6 +104,8 @@ def execute_sql_with_column_info(sql_query, database = "course_assistant", user 
 
     except psycopg2.Error as e:
         print("Error executing SQL query:", e)
+        if unprotected:
+            raise e
         return [], []
 
     # Close the cursor and connection

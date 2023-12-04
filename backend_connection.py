@@ -179,7 +179,7 @@ def user_preference():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
-    parser.add_argument('--engine', type=str, default='text-davinci-003', choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-3.5-turbo'],
+    parser.add_argument('--engine', type=str, default='text-davinci-003', choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-3.5-turbo-0613'],
                         help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')

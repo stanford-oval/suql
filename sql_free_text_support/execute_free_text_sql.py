@@ -22,6 +22,7 @@ import random
 import string
 import concurrent.futures
 from collections import defaultdict
+from psycopg2 import Error as psyconpg2Error
 
 SET_FREE_TEXT_FCNS = ["answer"]
 
@@ -69,7 +70,18 @@ class IfAllStructural(Visitor):
         
         if not (is_structural(node.lexpr) and is_structural(node.rexpr)):
             self.res = False
-            
+
+class IfInvovlesSubquery(Visitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sublink = None
+        
+    def __call__(self, node):
+        super().__call__(node)
+
+    def visit_SubLink(self, ancestors, node : SubLink):
+        print(ancestors)
+        self.sublink = node.subselect
 
 def if_all_structural(node):
     visitor = IfAllStructural()
@@ -90,8 +102,12 @@ class SelectVisitor(Visitor):
         if not node.whereClause:
             return
 
-        if isinstance(node.whereClause, SubLink):
-            self.visit_SelectStmt(None, node.whereClause.subselect)
+        # First, understand whether this involves subquery. If it does, then starts with that first and builds upwards
+        # If that subquery in turn involves other subqueries, then recursive calls take care of it
+        subquery_visitor = IfInvovlesSubquery()
+        subquery_visitor(node)
+        if subquery_visitor.sublink is not None:
+            self.visit_SelectStmt(None, subquery_visitor.sublink)
 
         freeTextFcnVisitor = FreeTextFcnVisitor()
         freeTextFcnVisitor(node.whereClause)
@@ -202,7 +218,7 @@ def verify(document, field, query, operator, value):
             "operator": operator,
             "value": '"{}"'.format(value) if type(value) == str else value
         },
-        engine='gpt-3.5-turbo',
+        engine='gpt-3.5-turbo-0613',
         temperature=0,
         stop_tokens=["\n"],
         max_tokens=30,
@@ -232,9 +248,14 @@ def verify_single_res(doc, field_query_list):
     
     return all_found
 
-def parallel_filtering(fcn, source, limit):
+def parallel_filtering(fcn, source : list, limit, enforce_ordering = False):
     true_count = 0
     true_items = set()
+    
+    # build a dictionary with index -> true/false/None
+    # which indicates whether an item has been verified
+    ordered_results = {i : None for i in range(len(source))}
+    
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = {executor.submit(fcn, item): item for item in source}
         
@@ -244,12 +265,25 @@ def parallel_filtering(fcn, source, limit):
             if result:
                 true_count += 1
                 true_items.add(item[0])
+                ordered_results[source.index(item)] = True
+            else:
+                ordered_results[source.index(item)] = False
 
-            if true_count >= limit and limit != -1:
+            # TODO: for best performance, if enforce_ordering = True,
+            # cancel remaining futures if enough top results have been found
+            
+            if true_count >= limit and limit != -1 and not enforce_ordering:
                 # Cancel remaining futures
                 for f in futures:
                     f.cancel()
                 break
+
+    if enforce_ordering:
+        res = []
+        for i, item in enumerate(source):
+            if ordered_results[i]:
+                res.append(item[0])
+        return res
 
     return true_items
 
@@ -288,7 +322,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     
     if parallel:
         # parallelize verification calls
-        id_res = parallel_filtering(lambda x: verify_single_res(x[1], field_query_list), parsed_result, limit)
+        id_res = parallel_filtering(lambda x: verify_single_res(x[1], field_query_list), parsed_result, limit, enforce_ordering=True if node.sortClause is not None else False)
     else:
         id_res = []
         for each_res in parsed_result:
@@ -387,8 +421,15 @@ class StructuralClassification(Visitor):
         to_execute_node.limitCount = None
         # change predicates
         to_execute_node.whereClause = node
-        res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node), user = "creator_role", password = "creator_role")
+        # reset any groupby clause
+        to_execute_node.groupClause = None
         
+        try:
+            res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node), unprotected=True)
+        except psyconpg2Error:
+            print("above error happens during ENUM classification attempts. Marking this predicate as returning answer.")
+            res = True
+            
         if not res:
             print("determined the above predicate returns no result")
             # try to classify into one of the known values
@@ -435,7 +476,7 @@ class StructuralClassification(Visitor):
                 
                 to_execute_node.sortClause = None
                 to_execute_node.whereClause = None
-                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node), user = "creator_role", password = "creator_role")
+                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node))
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x:x[0], field_value_choices))
                 field_value_choices.sort()
@@ -450,7 +491,7 @@ class StructuralClassification(Visitor):
                             "predicted_field_value": value_res_clear,
                             "field_value_choices": field_value_choices
                         },
-                        engine='gpt-3.5-turbo',
+                        engine='gpt-3.5-turbo-0613',
                         temperature=0,
                         stop_tokens=["\n"],
                         max_tokens=100,
@@ -494,7 +535,7 @@ def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict
     
     sql = RawStream()(node)
     print("execute_structural_sql executing sql: {}".format(sql))
-    return execute_sql_with_column_info(sql, user = "creator_role", password = "creator_role")
+    return execute_sql_with_column_info(sql)
     
 
 def execute_free_text_queries(node, predicate : BoolExpr, existing_results, column_info, limit):
