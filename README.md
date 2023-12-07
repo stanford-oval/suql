@@ -28,9 +28,11 @@ For more details, see our paper at https://arxiv.org/abs/2311.09818.
 
 2. Run `python -m spacy download en_core_web_sm`;
 
+3. Run `pip install -e .` to install SUQL as a library.
+
 ### Entry point to the SUQL compiler
 
-The entry point to the SUQL compiler is the following snippet under `yelp_loop.py`:
+The entry point to the SUQL compiler is the following snippet under `src/suql/yelp_loop.py`:
 
 ```
 visitor = SelectVisitor()
