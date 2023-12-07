@@ -1,17 +1,18 @@
-from transformers import AutoModel, AutoTokenizer
-import pymongo
-from typing import List
-import os
-from flask import request, Flask
-import time
-import torch
-from utils import linearize, chunk_text
-import json
-from tqdm import tqdm
 import hashlib
-from functools import reduce
+import json
 import operator
-from utils import num_tokens_from_string
+import os
+import time
+from functools import reduce
+from typing import List
+
+import pymongo
+import torch
+from flask import Flask, request
+from tqdm import tqdm
+from transformers import AutoModel, AutoTokenizer
+
+from suql.utils import chunk_text, linearize, num_tokens_from_string
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -221,7 +222,7 @@ def getMenus():
 
 @app.route('/answer', methods=['POST'])
 def answer():
-    from prompt_continuation import llm_generate
+    from src.suql.prompt_continuation import llm_generate
     data = request.get_json()
     # print("/answer receieved request {}".format(data))
         
@@ -266,7 +267,7 @@ def answer():
 
 @app.route('/summary', methods=['POST'])
 def summary():
-    from prompt_continuation import llm_generate
+    from src.suql.prompt_continuation import llm_generate
     data = request.get_json()
     # print("/answer receieved request {}".format(data))
         

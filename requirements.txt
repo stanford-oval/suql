@@ -9,6 +9,5 @@ torch==2.0.1
 Requests
 spacy
 tiktoken
-torch
 psycopg2-binary # you can also install from source if it works
 pglast
