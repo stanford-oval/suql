@@ -60,7 +60,7 @@ def execute_sql(sql_query, user = "select_user", password = "select_user", data 
     elapsed_time = end_time - start_time
     return list(results), column_names, elapsed_time
 
-def execute_sql_with_column_info(sql_query, database = "course_assistant", user = "select_user", password = "select_user"):
+def execute_sql_with_column_info(sql_query, database = "course_assistant", user = "select_user", password = "select_user", unprotected = False):
     start_time = time.time()
 
     # Establish a connection to the PostgreSQL database

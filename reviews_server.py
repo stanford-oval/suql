@@ -310,6 +310,7 @@ def summary():
         temperature=0.0,
         stop_tokens=['\n'],
         postprocess=False,
+        attempts=0
     )
     
     res = {

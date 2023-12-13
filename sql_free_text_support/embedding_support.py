@@ -219,6 +219,6 @@ if __name__ == "__main__":
     # TODO: add this later to improve perfomance
     # embedding_store.add("courses", "course_id", "title")
 
-    # TODO: add this later once metal is installed!
-    # embedding_store.add("ratings", "course_id", "reviews")
+    # TODO: add this later once GPU driver is installed
+    embedding_store.add("ratings", "course_id", "reviews")
     app.run(host=host, port=port)

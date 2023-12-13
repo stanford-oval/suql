@@ -144,7 +144,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
     second_sql_start_time = time.time()
 
     if not ("LIMIT" in second_sql):
-        second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
+        second_sql = re.sub(r';$', ' LIMIT 5;', second_sql, flags=re.MULTILINE)
     
     cache = {}
     final_res = []
@@ -160,8 +160,13 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         results, column_names, _ = execute_sql(second_sql)
 
         final_res = clean_up_response(results, column_names)
+
+        print('\n' + '*' * 20 + '\n')
+        print("final response: {}".format(final_res))
+
         visitor.drop_tmp_tables()
-    except Exception:
+    except Exception as e:
+        print(e)
         visitor.drop_tmp_tables()
         
     second_sql_end_time = time.time()

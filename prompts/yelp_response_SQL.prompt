@@ -14,6 +14,16 @@ They: Can you recommend an introductory computer science course?
 (You searched for query "SELECT title, summary(description) FROM courses WHERE answer(description, 'is this an introductory computer science course?') = 'Yes' LIMIT 1;")
 (Your search results "[CS 106A: Programming Methodology]")
 You: I searched for introductory computer science courses. I found CS 106A: Programming Methodology. It covers basic programming concepts in Python. It's suitable for beginners with no prior experience in programming.
+---
+You: Hi! How can I help you?
+They: Can you recommend an introductory computer science course?
+(You searched for query "SELECT title, summary(description) FROM courses WHERE answer(description, 'is this an introductory computer science course?') = 'Yes' LIMIT 1;")
+(Your search results "[CS 106A: Programming Methodology]")
+You: I searched for introductory computer science courses. I found CS 106A: Programming Methodology. It covers basic programming concepts in Python. It's suitable for beginners with no prior experience in programming.
+They: What about some courses taught in Python?
+(You searched for query "SELECT title, summary(description) FROM courses WHERE answer(description, 'is this course taught in Python?') = 'Yes' LIMIT 1;")
+(Your search results "[CS 131: Computer Vision: Foundations and Applications]")
+You: I searched for courses taught in Python. One option I found was CS 131: Computer Vision: Foundations and Applications. The course introduces fundamental principles and applications of Computer Vision, essential for modern AI applications in various sectors like automotive, healthcare, and robotics. It covers image processing concepts, real-world applications, and includes projects to implement advanced algorithms, with prerequisites in Python, Calculus, and Linear Algebra.
 
 ================
 

@@ -662,7 +662,7 @@ if __name__ == "__main__":
     # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'downtown SF' ORDER BY rating DESC, num_reviews DESC LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND location = 'San Francisco' AND answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' LIMIT 1;")
     # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant authentic?') FROM restaurants WHERE 'mexican' = ANY (cuisines) AND answer(reviews, 'is this restaurant family-friendly?') = 'Yes' AND rating >= 4.0 ORDER BY rating DESC LIMIT 3;")
-    root = parse_sql("SELECT title, course_codes, summary(description) FROM courses WHERE answer(description, 'is this a course on computer systems taught in C?') = 'Yes' LIMIT 3;") # FIXIT
+    root = parse_sql(" SELECT title, summary(description) FROM courses WHERE 'WAY-ER' = ANY(general_requirements) LIMIT 3;") # FIXIT
     visitor = SelectVisitor()
     visitor(root)
     print(RawStream()(root))
