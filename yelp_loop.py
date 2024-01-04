@@ -20,7 +20,7 @@ import readline  # enables keyboard arrows when typing in the terminal
 import time
 from postgresql_connection import execute_sql
 # from query_reviews import review_server_address
-from sql_free_text_support.execute_free_text_sql import SelectVisitor
+from sql_free_text_support.execute_free_text_sql import suql_execute
 from pglast import parse_sql
 from pglast.stream import RawStream
 from decimal import Decimal
@@ -145,24 +145,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
     
-    cache = {}
-    final_res = []
-    try:
-        visitor = SelectVisitor()
-        root = parse_sql(second_sql)
-        visitor(root)
-        second_sql = RawStream()(root)
-        cache = visitor.serialize_cache()
-        
-        print("intermediate (temp) SUQL query executed at the end: {}".format(second_sql))
-    
-        results, column_names, _ = execute_sql(second_sql)
-
-        # some custom processing code to clean-up results
-        final_res = clean_up_response(results, column_names)
-        visitor.drop_tmp_tables()
-    except Exception:
-        visitor.drop_tmp_tables()
+    final_res, _, cache = suql_execute(second_sql)
         
     second_sql_end_time = time.time()
     
@@ -177,12 +160,7 @@ def turn_db_results2name(db_results):
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
-    user_utterance: str,
-    engine = "text-davinci-003",
-    sys_type = "sql_textfcns_v0801"):
-    
-    print(sys_type)
-    assert(sys_type in ["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
+    user_utterance: str):
     
     first_classification_time = 0
     semantic_parser_time = 0
@@ -191,36 +169,20 @@ def compute_next_turn(
     cache = {}
 
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
-    dlgHistory[-1].sys_type = sys_type
+    dlgHistory[-1].sys_type = "suql_v0102"
     
     # determine whether to send to Genie
     continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
-        if sys_type == "sql_textfcns_v0801":
-            results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
-            dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = first_sql
-            dlgHistory[-1].temp_target = second_sql
-            dlgHistory[-1].db_results = turn_db_results2name(results)
-        
-        elif sys_type == "semantic_index_w_textfncs":
-            results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql_semantic_index.prompt')
-            dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
-            dlgHistory[-1].user_target = first_sql
-            dlgHistory[-1].temp_target = second_sql
-            dlgHistory[-1].db_results = turn_db_results2name(results)
-            
-        elif sys_type == "baseline_linearization":
-            from reviews_server import baseline_filter
-            
-            results = baseline_filter(user_utterance)
-            dlgHistory[-1].temp_target = None
-            dlgHistory[-1].user_target = None
-            dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
+        results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
+        dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
+        dlgHistory[-1].user_target = first_sql
+        dlgHistory[-1].temp_target = second_sql
+        dlgHistory[-1].db_results = turn_db_results2name(results)
 
-        # for all systems, cut it out if no response returned
+        # cut it out if no response returned
         if not results:
             response, final_response_time = llm_generate(template_file='prompts/yelp_response_no_results.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
                                 max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
@@ -251,22 +213,12 @@ def compute_next_turn(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
     parser.add_argument('--output_file', type=str, default='log.log',
-                        help='Where to write the outputs.')
-    parser.add_argument('--engine', type=str, default='text-davinci-003',
-                        choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-3.5-turbo-0613'],
-                        help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
+                        help='Where to write the outputs, pertaining only to CLI testing.')
     parser.add_argument('--quit_commands', type=str, default=['quit', 'q'],
-                        help='The conversation will continue until this string is typed in.')
+                        help='The conversation will continue until this string is typed in, pertaining only to CLI testing.')
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')
-    parser.add_argument('--use_GPT_parser', action='store_true',
-                        help='Use GPT parser as opposed to Genie parser')
-    parser.add_argument('--use_direct_sentence_state', action='store_true',
-                        help='Directly use GPT parser output as full state')
-    parser.add_argument('--sys_type', type=str, default='sql_textfcns_v0801',
-                        choices=["sql_textfcns_v0801", "semantic_index_w_textfncs", "baseline_linearization"])
     parser.add_argument('--record_result', type=str, default=None, help='Write results in TSV format to file')
     parser.add_argument('--batch_process', type=str, default=None, help='A list of QA inputs to run')
 
@@ -292,8 +244,6 @@ if __name__ == '__main__':
             dlgHistory = compute_next_turn(
                 dlgHistory,
                 utterance,
-                engine=args.engine,
-                sys_type=args.sys_type
             )
             with open(args.record_result, 'a+') as fd:
                 fd.write("{}\t{}\t{}\t{}\t{}\n".format(id, dlgHistory[-1].user_utterance, dlgHistory[-1].user_target, dlgHistory[-1].agent_utterance, '\t'.join(dlgHistory[-1].db_results)))
@@ -311,12 +261,9 @@ if __name__ == '__main__':
             if user_utterance in args.quit_commands:
                 break
             
-            # this is single-user, so feeding in genieDS and genie_aux is unnecessary, but we do it to be consistent with backend_connection.py
             dlgHistory = compute_next_turn(
                 dlgHistory,
                 user_utterance,
-                engine=args.engine,
-                sys_type=args.sys_type
             )
             print_chatbot('Chatbot: ' + dlgHistory[-1].agent_utterance)
             print(dlgHistory[-1].time_statement)

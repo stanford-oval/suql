@@ -141,3 +141,10 @@ API_KEYS
 *.log
 
 experiments/*
+
+# erorr_log from SUQL compiler
+error_log.txt
+
+# test cases for the SUQL compiler
+sql_free_text_support/test_cases.txt
+sql_free_text_support/test_cases_res.txt

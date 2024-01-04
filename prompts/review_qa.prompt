@@ -1,6 +1,6 @@
-Answer a question based on the following text
+Answer a question based on the following text.{{ type_prompt }}
 
-Question: {{ question }}
+Question: {{ question }}. If there is no information, say "no info".
 
 Documents:
 {% for review in reviews %}

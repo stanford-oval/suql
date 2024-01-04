@@ -23,8 +23,25 @@ import string
 import concurrent.futures
 from collections import defaultdict
 from psycopg2 import Error as psyconpg2Error
+from typing import List
+import traceback
 
+# System parameters, do not modify
 SET_FREE_TEXT_FCNS = ["answer"]
+verified_res = {}
+
+# This denotes the model used by the SUQL compiler for all verification purposes
+MODEL = "gpt-3.5-turbo-0613"
+# This denotes whether to attempt verify against all columns
+# TODO: not yet used now
+VERIFY_ALL_COLUMNS = True
+# This denotes the max number of items per LIMIT number to be sent to GPT for verification
+MAX_VERIFY = 20
+
+# A list of declared tuples with their unique IDs
+# e.g. TABLE_W_IDS = {"courses": "course_id", "ratings": "rating_id"}
+# e.g. TABLE_W_IDS = {"restaurants": "_id"}
+TABLE_W_IDS = {"restaurants": "_id"}
 
 def generate_random_string(length=12):
     characters = string.ascii_lowercase + string.digits
@@ -50,7 +67,23 @@ def if_contains_free_text_fcn(node):
     visitor = FreeTextFcnVisitor()
     visitor(node)
     return visitor.res
-         
+
+class TypeCastAnswer(Visitor):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def __call__(self, node):
+        super().__call__(node)
+    
+    def visit_TypeCast(self, ancestors, node : TypeCast):
+        if isinstance(node.arg, FuncCall) and isinstance(node.arg.funcname[0], String) and node.arg.funcname[0].sval == 'answer':
+            # if answer does not have exactly 2 paramters
+            # it means that someone already filled the type in
+            # then skip
+            if len(node.arg.args) == 2:
+                type_name = node.typeName.names[-1].sval
+                node.arg.args = tuple(list(node.arg.args) + [A_Const(val=String(sval=type_name))])
+        
 class IfAllStructural(Visitor):
     def __init__(self) -> None:
         super().__init__()
@@ -71,18 +104,46 @@ class IfAllStructural(Visitor):
         if not (is_structural(node.lexpr) and is_structural(node.rexpr)):
             self.res = False
 
+def get_sublink_parent(ancestor):
+    if ancestor.node is not None and not isinstance(ancestor.node, tuple):
+        return ancestor.node
+    return get_sublink_parent(ancestor.parent)
+
 class IfInvovlesSubquery(Visitor):
     def __init__(self) -> None:
         super().__init__()
-        self.sublink = None
+        self.sublinks = []
+        self.ancestors = []
         
     def __call__(self, node):
         super().__call__(node)
 
     def visit_SubLink(self, ancestors, node : SubLink):
-        print(ancestors)
-        self.sublink = node.subselect
-
+        # note: it's possible that the subqueries are parallel to each other
+        # in this case we need to return a list of subqueries, but we would only return the ones
+        # on the same level
+        
+        # hiearchy-based recursion would take care of nested SubLinks
+        self.sublinks.append(node.subselect)
+        self.ancestors.append(ancestors)
+    
+    def return_top_level_sublinks(self):
+        if len(self.sublinks) == 1:
+            return self.sublinks
+        
+        # the purpose of this function is to return only the top sublinks
+        res = []
+        closest_parent = None
+        for sublink, ancestor in zip(self.sublinks, self.ancestors):
+            # first get the actual parent node
+            if ancestor.parent is None:
+                continue
+            else:
+                closest_parent = get_sublink_parent(ancestor.parent)
+            if closest_parent == closest_parent:
+                res.append(sublink)
+        return res
+            
 def if_all_structural(node):
     visitor = IfAllStructural()
     visitor(node)
@@ -99,6 +160,9 @@ class SelectVisitor(Visitor):
         super().__call__(node)
 
     def visit_SelectStmt(self, ancestors, node : SelectStmt):
+        type_cast_answer_visitor = TypeCastAnswer()
+        type_cast_answer_visitor(node)
+        
         if not node.whereClause:
             return
 
@@ -106,8 +170,9 @@ class SelectVisitor(Visitor):
         # If that subquery in turn involves other subqueries, then recursive calls take care of it
         subquery_visitor = IfInvovlesSubquery()
         subquery_visitor(node)
-        if subquery_visitor.sublink is not None:
-            self.visit_SelectStmt(None, subquery_visitor.sublink)
+        sublinks = subquery_visitor.return_top_level_sublinks()
+        for sublink in sublinks:
+            self.visit_SelectStmt(None, sublink)
 
         freeTextFcnVisitor = FreeTextFcnVisitor()
         freeTextFcnVisitor(node.whereClause)
@@ -140,11 +205,25 @@ class SelectVisitor(Visitor):
             classify_db_fields(node, self.cache)
 
     def serialize_cache(self):
+        def print_value(x):
+            if isinstance(x, String):
+                return x.sval
+            elif isinstance(x, Integer):
+                return x.ival
+            elif isinstance(x, Float):
+                return x.fval
+            else:
+                raise ValueError()
+        
         res = deepcopy(self.cache)
         for i in res:
             for j in res[i]:
                 if isinstance(res[i][j], tuple):
-                    res[i][j] = list(map(lambda x: x.sval, res[i][j]))
+                    res[i][j] = list(map(lambda x: print_value(x), res[i][j]))
+                # special case originally for HybridQA
+                # this denotes that a predicate should be thrown away
+                elif isinstance(res[i][j], bool):
+                    res[i][j] = [res[i][j]]
                 else:
                     res[i][j] = [res[i][j].sval]
         return dict(res)
@@ -207,39 +286,89 @@ def convert2dnf(predicate):
         sql_expr = symbol2predicate(dnf_symbol_predicate)
         return sql_expr
 
-
 def verify(document, field, query, operator, value):
+    if (document, field, query, operator, value) in verified_res:
+        return verified_res[(document, field, query, operator, value)]
+    
     res = llm_generate(
-        'prompts/verification.prompt',
-        {
+        template_file='prompts/verification.prompt',
+        prompt_parameter_values={
             "document": document,
-            "field": field,
+            "field": field[1], # field is a tuple (table_name, field_name)
             "query": query,
             "operator": operator,
             "value": '"{}"'.format(value) if type(value) == str else value
         },
-        engine='gpt-3.5-turbo-0613',
+        engine=MODEL,
         temperature=0,
         stop_tokens=["\n"],
         max_tokens=30,
         postprocess=False)[0]
     
     if "the output is correct" in res.lower():
-        return True
+        res = True
     else:
-        return False
+        res = False
+    verified_res[(document, field, query, operator, value)] = res
+    return res
 
-def verify_single_res(doc, field_query_list):
+def verify_single_res(doc, field_query_list):    
     # verify for each stmt, if any stmt fails to verify, exclude it
     all_found = True
     found_stmt = []
     for i, entry in enumerate(field_query_list):
         field, query, operator, value = entry
-        if not verify(doc[i], field, query, operator, value):
-            all_found = False
-            break
+        
+        # this function helps with list processing
+        # for a list, verify against each one, if any returns true then return that
+        def verify_single_value(single_value, single_column_name):
+            res = False
+            # if this is a string, then directly verify:
+            if isinstance(single_value, str):
+                res = verify(single_value, single_column_name, query, operator, value)
+            # otherwise it is a list. Go over the list until if one verifies
+            else:
+                assert(isinstance(single_value, list))
+                for current_column_each_value in single_value:
+                    if verify(current_column_each_value, single_column_name, query, operator, value):
+                        res = True
+                        break
+            return res
+        
+        # if there are three elements in doc, then this indicates that we are in the mode
+        # of attempting to verify all columns
+        # the other columns do not have an inherent order for now
+        if len(doc) == 3:
+            # first, try to find the results in the current column:
+            current_column_verified = verify_single_value(doc[1][i], field)
+            
+            if current_column_verified:
+                all_found = True
+            else:
+                # if results can't be verified with the current column
+                # then set all_found = False
+                all_found = False
+                
+                # iterate all other columns, attempt to find one, if found then revert all_found
+                for (other_column, other_value) in doc[2]:
+                    if other_column == field:
+                        continue
+                    
+                    other_column_verified = verify_single_value(other_value, other_column)
+                    if other_column_verified:
+                        all_found = True
+                        break
+                
+                # if still can't find an answer, then this row is hopeless and should be rejected
+                if not all_found:
+                    break
+        
         else:
-            found_stmt.append("Verified answer({}, '{}') {} {} based on document: {}".format(field, query, operator, value, doc[i]))
+            if not verify(doc[1][i], field, query, operator, value):
+                all_found = False
+                break
+            else:
+                found_stmt.append("Verified answer({}, '{}') {} {} in table = {} based on document: {}".format(field[1], query, operator, value, field[0], doc[1][i]))
     if all_found:
         print('\n'.join(found_stmt))
     elif found_stmt:
@@ -264,7 +393,10 @@ def parallel_filtering(fcn, source : list, limit, enforce_ordering = False):
             result = future.result()
             if result:
                 true_count += 1
-                true_items.add(item[0])
+                if isinstance(item[0], list):
+                    true_items.update(item[0])
+                else:
+                    true_items.add(item[0])
                 ordered_results[source.index(item)] = True
             else:
                 ordered_results[source.index(item)] = False
@@ -282,12 +414,15 @@ def parallel_filtering(fcn, source : list, limit, enforce_ordering = False):
         res = []
         for i, item in enumerate(source):
             if ordered_results[i]:
-                res.append(item[0])
+                if isinstance(item[0], list):
+                    res += item[0]
+                else:
+                    res.append(item[0])
         return res
 
     return true_items
 
-def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit, parallel = True):
+def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit, parallel = True, fetch_all = False):
     # field_query_list is a list of tuples, each entry of the tuple are:    
     # 0st: field: field to do retrieval on
     # 1st: query: query for retrieval model
@@ -297,43 +432,106 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
     # existing_results: existing results to run retrieval on, this is a list of tuples
     # column_info: this is a list of tuples, first element is column name and second is type
     # limit: max number of returned results
+    if len(node.fromClause) == 1 and isinstance(node.fromClause[0], RangeVar):
+        id_field_name = TABLE_W_IDS[node.fromClause[0].relname]
+        single_table = True
+        id_index = list(map(lambda x: x[0], column_info)).index(id_field_name)
+        id_list = list(map(lambda x: x[id_index], existing_results))
+    elif len(node.fromClause) == 1 and isinstance(node.fromClause[0], JoinExpr):
+        single_table = False
+        id_list = {}
+        for arg in [node.fromClause[0].larg, node.fromClause[0].rarg]:
+            if (isinstance(arg, RangeVar)):
+                table_name = arg.relname
+                id_field_name = TABLE_W_IDS[table_name]
+                id_index = list(map(lambda x: x[0], column_info)).index(f'{table_name}^{id_field_name}')
+                id_list[table_name] = list(map(lambda x: x[id_index], existing_results))
+        # also append a special "_id_join" field to keep track
+        column_info = [("_id_join", "int4")] + column_info
+        _id_join_index = list(map(lambda x: x[0], column_info)).index('_id_join')
+        existing_results = [(i, ) + v for i,v in enumerate(existing_results)]
+        id_index = 0
+        id_list["_id_join"] = list(map(lambda x: x[_id_join_index], existing_results))
+    elif len(node.fromClause) > 1 and isinstance(node.fromClause, tuple):
+        # this is a case with self joins, create a new _id column
+        # TODO: from hybridQA. Check whether this works with retriever
+        single_table = False
+        existing_results = [(i, ) + v for i,v in enumerate(existing_results)]
+        column_info = [("_id_join", "int4")] + column_info
+        id_index = list(map(lambda x: x[0], column_info)).index('_id_join')
+        id_list = list(map(lambda x: x[id_index], existing_results))
+    else:
+        # some yet-to-be-discovered cases?
+        raise ValueError()
     
-    id_index = list(map(lambda x: x[0], column_info)).index('_id') # TODO: this is hard-coded for restaurants. Automate fetching this
     
-    # get _id list from `existing_results`
     start_time = time.time()
-    data = {
-        "table_name": node.fromClause[0].relname, # TODO: implement support for JOIN statements
-        "id_list": list(map(lambda x: x[id_index], existing_results)),
-        "field_query_list": list(map(lambda x: (x[0], x[1]), field_query_list)),
-        "top": limit * 20  # return 20 times the ordered amount, for GPT filtering purposes, TODO: this needs to be better planned
-    }
-
-    # Send a POST request
-    response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
-    response.raise_for_status()
-    parsed_result = response.json()["result"]
+    # clean previous verified_res, to avoid determistic caching (this could be removed)
+    global verified_res
+    verified_res = {}
     
-    filtered_parsed_result = []
-    for res in parsed_result:
-        if res not in filtered_parsed_result:
-            filtered_parsed_result.append(res)
-    parsed_result = filtered_parsed_result
+    if fetch_all:
+        # first get all free text fields:
+        all_free_text_columns = []
+        # NOTE: uncomment the following to enable going to multiple columns for filtering
+        for each_column_info in column_info:
+            # NOTE: HybridQA-specific
+            if each_column_info[1] == 'text[]' and each_column_info[0].endswith('_Info'):
+                all_free_text_columns.append(each_column_info[0])
+                
+        # this is a list of list of tuples of the form
+        # [1, [(field_name, field_value), ...], ...]
+                
+        parsed_result = []
+        for existing_res in existing_results:
+            intermediate_result = []
+            other_columns_intermediate_result = []
+            for field in field_query_list:
+                field_index = list(map(lambda x: x[0], column_info)).index(field[0])
+                intermediate_result.append(existing_res[field_index])
+            
+            for other_column in all_free_text_columns:
+                other_columns_intermediate_result.append((other_column, existing_res[list(map(lambda x: x[0], column_info)).index(other_column)]))                
+                
+            parsed_result.append([existing_res[id_index], intermediate_result, other_columns_intermediate_result])
+    else:                
+        start_time = time.time()
+        data = {
+            "id_list": id_list,
+            "field_query_list": list(map(lambda x: (x[0], x[1]), field_query_list)),
+            "top": limit * MAX_VERIFY,  # return MAX_VERIFY times the ordered amount, for GPT filtering purposes
+        }
+        data["single_table"] = single_table
+
+        # Send a POST request
+        response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
+        response.raise_for_status()
+        parsed_result = response.json()["result"]
+        
+        filtered_parsed_result = []
+        for res in parsed_result:
+            if res not in filtered_parsed_result:
+                filtered_parsed_result.append(res)
+        parsed_result = filtered_parsed_result
     
     if parallel:
         # parallelize verification calls
-        id_res = parallel_filtering(lambda x: verify_single_res(x[1], field_query_list), parsed_result, limit, enforce_ordering=True if node.sortClause is not None else False)
+        id_res = parallel_filtering(lambda x: verify_single_res(x, field_query_list), parsed_result, limit, enforce_ordering=True if node.sortClause is not None else False)
     else:
         id_res = []
         for each_res in parsed_result:
-            if verify_single_res(each_res[1], field_query_list):
+            if verify_single_res(each_res, field_query_list):
                 id_res.append(each_res[0])
             
         
     end_time = time.time()
     print("retrieve + verification time {}s".format(end_time - start_time))
     
-    return list(filter(lambda x: x[id_index] in id_res, existing_results))
+    if single_table:
+        res = list(filter(lambda x: x[id_index] in id_res, existing_results))
+    else:
+        res = [i[1:] for i in list(filter(lambda x: x[id_index] in id_res, existing_results))]
+    return res
 
 def get_a_expr_field_value(node : A_Expr):
     if isinstance(node.lexpr, ColumnRef):
@@ -370,9 +568,24 @@ def replace_a_expr_field(node : A_Expr, ancestors : Ancestor, new_value):
             value.val = i
             res.append(new_atomic_value)
         new_node = BoolExpr(BoolExprType.OR_EXPR, args = tuple(res))
+        
+        # case where the parent is directly a select stmt
+        if isinstance(ancestors.node, SelectStmt):
+            ancestors.node.whereClause = new_node
+        # case where the parent is a boolean expression, which means we need to replace the respective one
         if isinstance(ancestors.parent.node, BoolExpr):
             new_args = list(ancestors.parent.node.args)
             new_args[ancestors.member] = new_node
+            ancestors.parent.node.args = tuple(new_args)
+    # originally for HybridQA: delete predicate if this predicate returns no results
+    elif new_value is True:
+        # case where the parent is directly a select stmt
+        if isinstance(ancestors.node, SelectStmt):
+            ancestors.node.whereClause = None
+        # case where the parent is a boolean expression. Delete this node
+        elif isinstance(ancestors.parent.node, BoolExpr):
+            new_args = list(ancestors.parent.node.args)
+            new_args = [x for x in new_args if x != node]
             ancestors.parent.node.args = tuple(new_args)
     else:
         _, value = find_value_column(node)
@@ -401,6 +614,23 @@ def greedy_search_comma(input_string, predefined_list):
 
     return results
 
+# NOTE: this function is used if an ENUM field contains commas
+# in which case asking an LLM to output a comma-seperated list could be problematic
+# currently unused
+def get_comma_separated_numbers(input_string):
+    try:
+        # Remove spaces from the input string and then split it into a list of values using a comma as the separator
+        values = input_string.replace(" ", "").split(',')
+        
+        # Convert each value to a float and store them in a list
+        num_values = [int(value) for value in values]
+        
+        return num_values  # Return the list of numbers
+    except ValueError:
+        # If a ValueError is raised, it means at least one value is not a valid number, so return False
+        return False
+    
+
 class StructuralClassification(Visitor):
     def __init__(self, node : SelectStmt, cache) -> None:
         super().__init__()
@@ -411,7 +641,32 @@ class StructuralClassification(Visitor):
         super().__call__(node)
         
     def visit_A_Expr(self, ancestors : Ancestor, node : A_Expr):
-        assert(if_all_structural(node))        
+        # TODO: handle containment clauses
+        if (isinstance(node.name[0], String) and node.name[0].sval in ['@>', '<@']):
+            parsed_res = True
+            replace_a_expr_field(node, ancestors, parsed_res)
+            return
+        
+        # if this appears in projection, disregard
+        if ancestors.find_nearest(ResTarget) is not None:
+            return
+        assert(if_all_structural(node))
+                
+        if (isinstance(node.lexpr, SubLink) or isinstance(node.rexpr, SubLink)):
+            # if there is a subquery, skip classification
+            return
+        
+        if (isinstance(node.lexpr, ColumnRef) and isinstance(node.rexpr, ColumnRef)):
+            return
+        
+        if (isinstance(node.name[0], String) and node.name[0].sval in ['BETWEEN']):
+            # skip certain numerical comparisons
+            return
+        
+        skip_fcn_list = ["try_cast", "count"]
+        if (isinstance(node.lexpr, FuncCall) and isinstance(node.lexpr.funcname[0], String) and node.lexpr.funcname[0].sval in skip_fcn_list) or (isinstance(node.rexpr, FuncCall) and isinstance(node.rexpr.funcname[0], String) and node.rexpr.funcname[0].sval in skip_fcn_list):
+            # if it involves certain functions, skip
+            return
         
         to_execute_node = deepcopy(self.node)
         
@@ -423,22 +678,36 @@ class StructuralClassification(Visitor):
         to_execute_node.whereClause = node
         # reset any groupby clause
         to_execute_node.groupClause = None
+        # reset sorting
+        to_execute_node.sortClause = None
         
         try:
             res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node), unprotected=True)
+            # it is possible if there is a type error
+            # e.g. "Passengers ( 2017 )" = '490,000', but "Passengers ( 2017 )" is actually of type int
+            # in such cases, the `column_infos` variable would not capture the actual type and instead stores an empty list
+            # thus execute an empty query just to find out the type
+            if column_infos == []:
+                to_execute_node.whereClause = None
+                _, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node))
         except psyconpg2Error:
             print("above error happens during ENUM classification attempts. Marking this predicate as returning answer.")
             res = True
-            
+
         if not res:
             print("determined the above predicate returns no result")
             # try to classify into one of the known values
             # first, we need to find out what is the value here - some heuristics here to find out
             column_name, value_res = get_a_expr_field_value(node)
             
-            # TODO handle none-text cases
-            assert(isinstance(value_res, String))
-            value_res_clear = value_res.sval
+            if isinstance(value_res, String):
+                value_res_clear = value_res.sval
+            elif isinstance(value_res, Integer):
+                value_res_clear = value_res.ival
+            elif isinstance(value_res, Float):
+                value_res_clear = value_res.fval
+            else:
+                raise ValueError()
             
             print("determined column name: {}; value: {}".format(column_name, value_res_clear))
             
@@ -489,9 +758,10 @@ class StructuralClassification(Visitor):
                         'prompts/field_classification.prompt',
                         {
                             "predicted_field_value": value_res_clear,
-                            "field_value_choices": field_value_choices
+                            "field_value_choices": field_value_choices,
+                            "field_name": column_name
                         },
-                        engine='gpt-3.5-turbo-0613',
+                        engine=MODEL,
                         temperature=0,
                         stop_tokens=["\n"],
                         max_tokens=100,
@@ -507,7 +777,6 @@ class StructuralClassification(Visitor):
                             replace_a_expr_field(node, ancestors, parsed_res)
                             self.cache[column_name][value_res_clear] = parsed_res
 
-
 def classify_db_fields(node : SelectStmt, cache):
     # we expect all atomic predicates under `predicate` to only involve stru fields
     # (no `answer` function)
@@ -516,16 +785,100 @@ def classify_db_fields(node : SelectStmt, cache):
     visitor = StructuralClassification(node, cache)
     visitor(node)
 
+class Replace_Original_Target_Visitor(Visitor):
+    def __init__(self, table_column_mapping={}) -> None:
+        super().__init__()
+        self.table_column_mapping : dict = table_column_mapping
+    
+    def __call__(self, node):
+        super().__call__(node)
+        
+    def visit_ColumnRef(self, ancestors : Ancestor, node : ColumnRef):
+        if len(list(map(lambda x: x.sval, node.fields))) > 1:
+            assert(len(list(map(lambda x: x.sval, node.fields))) == 2)
+            node.fields = (String(sval='^'.join(map(lambda x: x.sval, node.fields))), )
+        else:
+            res = None
+            for table_name, columns in self.table_column_mapping.items():
+                if node.fields[0].sval in map(lambda x: x[0], columns):
+                    if res is not None:
+                        # the same field appears twice, this means that the original syntax is problematic
+                        break
+                    res = (String(sval=f'{table_name}^{node.fields[0].sval}'), )
+            node.fields = res
 
-def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict):
-    node = deepcopy(node)
+def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cache : dict):
+    node = deepcopy(original_node)
     # change projection to include everything
-    node.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(), ))), )
+    # there are a couple of cases here
+    # the simplest case is if it is one table
+    if len(node.fromClause) == 1 and isinstance(node.fromClause[0], RangeVar):
+        node.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(), ))), )
+    # these are full joins
+    elif len(node.fromClause) == 1 and isinstance(node.fromClause[0], JoinExpr):
+        all_projection_fields = []
+        table_column_mapping = {}
+        for table in [node.fromClause[0].larg, node.fromClause[0].rarg]:
+            # find out what columns this table has
+            _, columns = execute_structural_sql(
+                SelectStmt(
+                    fromClause=(table, )
+                ), None, cache
+            )
+            # give the projection fields new names
+            projection_table_name = table.alias.aliasname if table.alias is not None else table.relname
+            table_column_mapping[projection_table_name] = columns
+            
+            for column in columns:
+                new_projection_clause = ResTarget(
+                    name = f"{projection_table_name}^{column[0]}",
+                    val = ColumnRef(fields=(String(sval=projection_table_name), String(sval=column[0]), ))
+                )
+                all_projection_fields.append(new_projection_clause)
+        node.targetList = tuple(all_projection_fields)
+        
+        # if we replaced the names, we also need to propagate the names to the original `node` in projections
+        replace_original_target_visitor = Replace_Original_Target_Visitor(table_column_mapping=table_column_mapping)
+        replace_original_target_visitor(original_node.targetList)
+        if original_node.sortClause is not None:
+            replace_original_target_visitor(original_node.sortClause)
+    # next, there are tuple joins (self joins)
+    elif len(node.fromClause) > 1 and isinstance(node.fromClause, tuple):
+        all_projection_fields = []
+        for table in node.fromClause:
+            # find out what columns this table has
+            _, columns = execute_structural_sql(
+                SelectStmt(
+                    fromClause=(table, )
+                ), None, cache
+            )
+            # give the projection fields new names
+            projection_table_name = table.alias.aliasname if table.alias is not None else table.relname
+            for column in columns:
+                new_projection_clause = ResTarget(
+                    name = f"{projection_table_name}^{column[0]}",
+                    val = ColumnRef(fields=(String(sval=projection_table_name), String(sval=column[0]), ))
+                )
+                all_projection_fields.append(new_projection_clause)
+        node.targetList = tuple(all_projection_fields)
+        
+        # if we replaced the names, we also need to propagate the names to the original `node` in projections
+        replace_original_target_visitor = Replace_Original_Target_Visitor()
+        replace_original_target_visitor(original_node.targetList)
+        if original_node.sortClause is not None:
+            replace_original_target_visitor(original_node.sortClause)
+        
+    # Some other cases?
+    else:
+        node.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(), ))), )
+    
     # reset all limits
     node.limitCount = None
     node.limitOffset = None
     # change predicates
     node.whereClause = predicate
+    node.groupClause = None
+    node.havingClause = None
     
     # only queries that involve only structural parts can be executed
     assert(if_all_structural(node))
@@ -541,6 +894,30 @@ def execute_structural_sql(node : SelectStmt, predicate : BoolExpr, cache : dict
 def execute_free_text_queries(node, predicate : BoolExpr, existing_results, column_info, limit):
     # the predicate should only contain an atomic unstructural query
     # or an AND of multiple unstructural query (NOT of an unstructural query is considered to be atmoic)
+    def assert_A_Const_Or_Tuple_A_Const(v):
+        if isinstance(v, A_Const):
+            return True
+        
+        # Assert that value is a tuple
+        assert isinstance(v, tuple), "Value must be a tuple"
+
+        # Assert that each element in the tuple is of type A_Const
+        for element in v:
+            assert isinstance(element, A_Const), "Each element must be of type A_Const"
+        
+        return True
+    
+    def extract_tuple_value(v : List[A_Const]):
+        res = []
+        for i in v:
+            if isinstance(i.val, String):
+                res.append(i.val.sval)
+            elif isinstance(i.val, Integer):
+                res.append(i.val.ival)
+            else:
+                raise ValueError()
+        return tuple(res)
+    
     def breakdown_unstructural_query(predicate : A_Expr):
         assert(if_contains_free_text_fcn(predicate.lexpr) or if_contains_free_text_fcn(predicate.rexpr))
         if if_contains_free_text_fcn(predicate.lexpr) and if_contains_free_text_fcn(predicate.rexpr):
@@ -549,7 +926,7 @@ def execute_free_text_queries(node, predicate : BoolExpr, existing_results, colu
         free_text_clause = predicate.lexpr if if_contains_free_text_fcn(predicate.lexpr) else predicate.rexpr
         value_clause = predicate.lexpr if not if_contains_free_text_fcn(predicate.lexpr) else predicate.rexpr
         assert(isinstance(free_text_clause, FuncCall))
-        assert(isinstance(value_clause, A_Const))
+        assert(assert_A_Const_Or_Tuple_A_Const(value_clause))
         
         query_lst = list(filter(lambda x: isinstance(x, A_Const), free_text_clause.args))
         assert(len(query_lst) == 1)
@@ -557,10 +934,26 @@ def execute_free_text_queries(node, predicate : BoolExpr, existing_results, colu
         
         field_lst = list(filter(lambda x: isinstance(x, ColumnRef), free_text_clause.args))
         assert(len(field_lst) == 1)
-        field = field_lst[0].fields[0].sval
+
+        field = tuple(map(lambda x: x.sval, field_lst[0].fields))
+        if len(field) > 1:
+            assert(len(field) == 2)
+        else:
+            # we need to find out the associated table for this field
+            if len(node.fromClause) == 1 and isinstance(node.fromClause[0], RangeVar):
+                field = (node.fromClause[0].relname, field_lst[0].fields[0].sval, )
+            else:
+                for column_name, _ in column_info:
+                    if "^" not in column_name:
+                        continue
+                    else:
+                        if column_name.split("^")[1] == field_lst[0].fields[0].sval:
+                            field = tuple(column_name.split("^"))
         
         operator = predicate.name[0].sval
-        if isinstance(value_clause.val, String):
+        if isinstance(value_clause, tuple):
+            value = extract_tuple_value(value_clause)
+        elif isinstance(value_clause.val, String):
             value = value_clause.val.sval
         elif isinstance(value_clause.val, Integer):
             value = value_clause.val.ival
@@ -585,7 +978,7 @@ def execute_free_text_queries(node, predicate : BoolExpr, existing_results, colu
         return retrieve_and_verify(node, field_query_list, existing_results, column_info, limit), column_info
     
     else:
-        raise ValueError("expects predicate to only contain automatic unstructural query or AND of them, but predicate is not: {}".format(RawStream()(predicate)))
+        raise ValueError("expects predicate to only contain atomic unstructural query, AND of them, or an NOT of atomic unsturctured query. However, this predicate is not: {}".format(RawStream()(predicate)))
 
 def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict):
     # there should not exist any OR expression inside sql_dnf_predicates
@@ -646,31 +1039,72 @@ def analyze_SelectStmt(node : SelectStmt, cache : dict):
         
     else:
         raise ValueError("Expects sql to be in DNF, but is not: {}".format(RawStream()(sql_dnf_predicates)))
-            
 
+def suql_execute(generated_suql, loggings = "", disable_try_catch = False):
+    results, column_names, cache = suql_execute_single(generated_suql, loggings, disable_try_catch=disable_try_catch)
+    if results == []:
+        return results, column_names, cache
+    all_no_results = True
+    for result in results:
+        for sub_result in result:
+            if not (str(sub_result).lower() in 'no information' or str(sub_result).lower() in 'no info'):
+                all_no_results = False
+                break
+        if all_no_results == False:
+            break
+        
+    # TODO: handle cases to go to multiple projection fields, from hybridQA
+    return results, column_names, cache
+    
+
+def suql_execute_single(generated_suql, loggings="", disable_try_catch = False):
+    results = []
+    column_names = []
+    cache = {}
+    
+    if disable_try_catch:
+        visitor = SelectVisitor()
+        root = parse_sql(generated_suql)
+        visitor(root)
+        second_sql = RawStream()(root)
+        cache = visitor.serialize_cache()
+        
+        print("intermediate (temp) SUQL query executed at the end: {}".format(second_sql))
+
+        return execute_sql(second_sql)
+    else:
+        try:
+            visitor = SelectVisitor()
+            root = parse_sql(generated_suql)
+            visitor(root)
+            second_sql = RawStream()(root)
+            cache = visitor.serialize_cache()
+            
+            print("intermediate (temp) SUQL query executed at the end: {}".format(second_sql))
+
+            results, column_names, cache = execute_sql(second_sql)
+        except Exception as err:
+            with open("error_log.txt", "a") as file:
+                file.write(f"==============\n")
+                file.write(f"{loggings}\n")
+                file.write(f"{generated_suql}\n")
+                file.write(f"{str(err)}\n")
+                traceback.print_exc(file=file)
+        finally:
+            visitor.drop_tmp_tables()
+            return results, column_names, cache
+            
+            
 if __name__ == "__main__":
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'brunch' = ANY (cuisines) AND location = 'San Francisco' ORDER BY num_reviews DESC LIMIT 3;")
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'is this a pet-friendly restaurant') = 'Yes' LIMIT 4")
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' LIMIT 4")
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'what is the price range') <= 20 LIMIT 4")
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE location = 'Sunnyvale' AND answer(reviews, 'does this restaurant have live music?') = 'Yes' AND answer(reviews, 'does this restaurant have good ambiance') = 'Yes' LIMIT 4")
-    # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?'), answer(reviews, 'what is the atmosphere?') FROM restaurants WHERE answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' AND answer(reviews, 'what is the atmosphere?') = 'Good' LIMIT 1;")
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes' AND location = 'Palo Alto' LIMIT 1;")
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE (answer(reviews, 'does this restaurant have outdoor seating?') = 'Yes' OR answer(reviews, 'does this restaurant have a garden') = 'Yes') AND location = 'Palo Alto' LIMIT 1;")
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does it contain grilled cheese?') = 'Yes' AND answer(reviews, 'is this restaurant family-friendly') = 'Yes' LIMIT 1;")
-    # root = parse_sql("SELECT * FROM restaurants WHERE 'cafe' = ANY (cuisines) LIMIT 1;")
-    # root = parse_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'downtown SF' ORDER BY rating DESC, num_reviews DESC LIMIT 1;")
-    # root = parse_sql("SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE 'chinese' = ANY (cuisines) AND location = 'San Francisco' AND answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' LIMIT 1;")
-    # root = parse_sql("SELECT name FROM restaurants WHERE 'mexican' = ANY (cuisines) AND answer(reviews, 'is this restaurant family-friendly?') = 'Yes' AND rating >= 4.0 ORDER BY rating DESC LIMIT 1;")
-    root = parse_sql("SELECT opening_hours->>'Thursday' FROM restaurants WHERE name ILIKE 'Top of the Mark' LIMIT 1;") # FIXIT
-    visitor = SelectVisitor()
-    visitor(root)
-    print(RawStream()(root))
-    print(visitor.serialize_cache())
-    
-    # results
-    print("Executed results")
-    results, column_names, _ = execute_sql(RawStream()(root))
-    print(results)
-    
-    visitor.drop_tmp_tables()
+    # print(suql_execute(sql, disable_try_catch=True)[0])
+    with open("sql_free_text_support/test_cases.txt", "r") as fd:
+        test_cases = fd.readlines()
+    res = []
+    for sql in test_cases:
+        sql = sql.strip()
+        i_res = suql_execute(sql, disable_try_catch=True)[0]
+        res.append(i_res)
+        with open("sql_free_text_support/test_cases_res.txt", "w") as fd:
+            for i_res in res:
+                fd.write(str(i_res))
+                fd.write("\n")

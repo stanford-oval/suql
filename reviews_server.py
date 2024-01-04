@@ -247,10 +247,17 @@ def answer():
                 break
     else:
         text_res = [data["text"]]
+        
+    type_prompt = ""
+    if "type_prompt" in data:
+        if data["type_prompt"] == "date":
+            type_prompt = f" Output in date format, for instance 2001-09-28."
+        if data["type_prompt"] == "int4":
+            type_prompt = f" Output an integer."
     
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
-        {'reviews': text_res, 'question': data["question"] + "; consider all relevant information."},
+        {'reviews': text_res, 'question': data["question"], "type_prompt": type_prompt},
         engine='gpt-3.5-turbo-0613',
         max_tokens=200,
         temperature=0.0,
@@ -294,7 +301,7 @@ def summary():
     
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
-        {'reviews': text_res, 'question': "general information about this restaurant"},
+        {'reviews': text_res, 'question': "what is the summary of this document?"},
         engine='gpt-3.5-turbo-0613',
         max_tokens=200,
         temperature=0.0,

@@ -11,13 +11,16 @@ from typing import List
 import openai
 from openai import OpenAI
 client = OpenAI()
+from openai import OpenAIError
 from functools import partial
 from datetime import date
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 import time
 from threading import Thread
 import traceback
 from utils import num_tokens_from_string
+import pymongo
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -29,13 +32,28 @@ logger.addHandler(fh)
 #singleton
 jinja_environment = Environment(loader=FileSystemLoader('./'),
                   autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True, line_comment_prefix='#')
-# uncomment if using Azure OpenAI
-# openai.api_base = 'https://ovalopenairesource.openai.azure.com/'
-# openai.api_type = 'azure'
+# # uncomment if using Azure OpenAI
+openai.api_type == 'open_ai'
+# openai.api_type = "azure"
+# openai.api_base = "https://ovalopenairesource.openai.azure.com/"
 # openai.api_version = "2023-05-15"
 
+mongo_client = pymongo.MongoClient('localhost', 27017)
+prompt_cache_db = mongo_client['open_ai_prompts']['caches']
 
-inference_cost_per_1000_tokens = {'ada': 0.0004, 'babbage': 0.0005, 'curie': 0.002, 'davinci': 0.02, 'turbo': 0.002} # for Azure
+# inference_cost_per_1000_tokens = {'ada': 0.0004, 'babbage': 0.0005, 'curie': 0.002, 'davinci': 0.02, 'turbo': 0.003, 'gpt-4': 0.03} # for Azure
+inference_input_cost_per_1000_tokens = {
+    'gpt-4': 0.03,
+    'gpt-3.5-turbo-0613': 0.0010,
+    'gpt-3.5-turbo-1106': 0.0010,
+    'gpt-4-1106-preview': 0.01,
+} # for OpenAI
+inference_output_cost_per_1000_tokens = {
+    'gpt-4': 0.06,
+    'gpt-3.5-turbo-0613': 0.0010,
+    'gpt-3.5-turbo-1106': 0.0020,
+    'gpt-4-1106-preview': 0.03,
+} # for OpenAI
 total_cost = 0 # in USD
 
 def get_total_cost():
@@ -43,18 +61,22 @@ def get_total_cost():
     return total_cost
 
 def _model_name_to_cost(model_name: str) -> float:
-    for model_family in inference_cost_per_1000_tokens.keys():
-        if model_family in model_name:
-            return inference_cost_per_1000_tokens[model_family]
-    raise ValueError('Did not recognize GPT-3 model name %s' % model_name)
+    # for model_family in inference_cost_per_1000_tokens.keys():
+    #     if model_family in model_name:
+    #         return inference_cost_per_1000_tokens[model_family]
+    if model_name in inference_input_cost_per_1000_tokens and model_name in inference_output_cost_per_1000_tokens:
+        return inference_input_cost_per_1000_tokens[model_name], inference_output_cost_per_1000_tokens[model_name]
+    raise ValueError('Did not recognize GPT model name %s' % model_name)
+
 
 # @retry(retry=retry_if_exception_type(OpenAIError), wait=wait_random_exponential(multiplier=0.5, max=20), stop=stop_after_attempt(6))
 def openai_chat_completion_with_backoff(**kwargs):
     global total_cost
     ret = client.chat.completions.create(**kwargs)
-    total_tokens = ret.usage.total_tokens
-    total_cost += total_tokens / 1000 * _model_name_to_cost(kwargs['model'])
-    print(ret)
+    num_prompt_tokens = ret.usage.prompt_tokens
+    num_completion_tokens = ret.usage.completion_tokens
+    prompt_cost, completion_cost = _model_name_to_cost(kwargs['model'])
+    total_cost += num_prompt_tokens / 1000 * prompt_cost + num_completion_tokens / 1000 * completion_cost  # TODO: update this
     return ret.choices[0].message.content
 
 def _fill_template(template_file, prompt_parameter_values):
@@ -80,15 +102,29 @@ def _generate(filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p
     for _ in range(max_tries):
         no_line_break_start = ''
         no_line_break_length = 0
-        generation_output = openai_chat_completion_with_backoff(model=engine,
-                                                                messages=[{"role": "system", "content": filled_prompt + no_line_break_start}],
-                                                                max_tokens=max_tokens - no_line_break_length,
-                                                                temperature=temperature,
-                                                                top_p=top_p,
-                                                                frequency_penalty=frequency_penalty,
-                                                                presence_penalty=presence_penalty,
-                                                                stop=stop_tokens,
-                                                                )
+        kwargs = {
+            'messages': [{"role": "system", "content": filled_prompt + no_line_break_start}],
+            'max_tokens': max_tokens - no_line_break_length,
+            'temperature': temperature,
+            'top_p': top_p,
+            'frequency_penalty': frequency_penalty,
+            'presence_penalty': presence_penalty,
+            'stop': stop_tokens,
+        }
+        if openai.api_type == 'azure':
+            kwargs.update({'engine': engine})
+        else:
+            engine_model_map = {
+                "gpt-4": "gpt-4",
+                "gpt-35-turbo": "gpt-3.5-turbo-1106",
+                "gpt-3.5-turbo": "gpt-3.5-turbo-1106",
+                "gpt-4-turbo": "gpt-4-1106-preview",
+            }
+            # https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models
+            # https://platform.openai.com/docs/models/model-endpoint-compatibility
+            kwargs.update({'model': engine_model_map[engine] if engine in engine_model_map else engine})
+
+        generation_output = openai_chat_completion_with_backoff(**kwargs)
         generation_output = no_line_break_start + generation_output
         logger.info('LLM output = %s', generation_output)
 
@@ -173,11 +209,27 @@ def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
     if filled_prompt is None:
         filled_prompt = _fill_template(template_file, prompt_parameter_values)
     
+    cache_res = prompt_cache_db.find_one(
+        {
+            "model": engine,
+            "prompt": filled_prompt,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stop_tokens": stop_tokens,
+            "top_p": top_p,
+            "frequency_penalty": frequency_penalty,
+            "presence_penalty": presence_penalty,
+        }
+    )
+    if cache_res:
+        return cache_res["res"], 0
+    
+    
     # We have experiences very long latency from time to time from both Azure's and OpenAI's chatGPT response time
     # Here is a heuristics-based, dynamically-calculated max wait time, before we cancel the last request and re-issue a new one
     total_token = num_tokens_from_string(filled_prompt) + max_tokens
     if max_wait_time is None:
-        max_wait_time = 0.005 * total_token + 1
+        max_wait_time = 0.05 * total_token + 1
     
     success = False
     final_result = None
@@ -196,6 +248,21 @@ def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
     
     end_time = time.time()
     elapsed_time = end_time - start_time
+    
+    prompt_cache_db.insert_one(
+        {
+            "model": engine,
+            "prompt": filled_prompt,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stop_tokens": stop_tokens,
+            "top_p": top_p,
+            "frequency_penalty": frequency_penalty,
+            "presence_penalty": presence_penalty,
+            "res": final_result
+        }
+    )
+    
     return final_result, elapsed_time
     
 
