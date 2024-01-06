@@ -145,7 +145,8 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
     
-    final_res, _, cache = suql_execute(second_sql)
+    final_res, column_names, cache = suql_execute(second_sql)
+    final_res = clean_up_response(final_res, column_names)
         
     second_sql_end_time = time.time()
     

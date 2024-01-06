@@ -67,8 +67,7 @@ req_parser.add_argument("loser_systems", type=list, location='json',
 class BackendConnection:
     def __init__(
         self,
-        greeting = "Hi! How can I help you?",
-        engine = "text-davinci-003") -> None:
+        greeting = "Hi! How can I help you?") -> None:
         
         client = MongoClient(CONNECTION_STRING)
         self.db = client['yelpbot']  # the database name is yelpbot
@@ -76,7 +75,6 @@ class BackendConnection:
         self.table.create_index("$**") # necessary to build an index before we can call sort()
 
         self.greeting = greeting
-        self.engine = engine
         
     def compute_next(self, dialog_id, user_utterance, turn_id, system_name, experiment_id) -> DialogueTurn:
         tuples = list(self.table.find( { "dialogID": dialog_id } ).sort('turn_id', ASCENDING))
@@ -90,9 +88,7 @@ class BackendConnection:
 
         dlgHistory = compute_next_turn(
             dlgHistory,
-            user_utterance,
-            engine=self.engine,
-            sys_type=system_name
+            user_utterance
         )
         
         # update the current tuple with new DialogTurn
@@ -179,8 +175,6 @@ def user_preference():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # parser.add_argument('--greeting', type=str, default="Hi! How can I help you?", help="The first thing the agent says to the user")
-    parser.add_argument('--engine', type=str, default='text-davinci-003', choices=['text-ada-001', 'text-babbage-001', 'text-curie-001', 'text-davinci-002', 'text-davinci-003', 'gpt-3.5-turbo-0613'],
-                        help='The GPT-3 engine to use.')  # choices are from the smallest to the largest model
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')
     parser.add_argument('--ssl_certificate_file', type=str, help='Where to read the SSL certificate for HTTPS')
