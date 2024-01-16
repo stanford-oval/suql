@@ -9,8 +9,9 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 from typing import List
 import openai
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 client = OpenAI()
+async_client = AsyncOpenAI()
 from openai import OpenAIError
 from functools import partial
 from datetime import date
@@ -129,39 +130,11 @@ def _generate(filled_prompt, engine, max_tokens, temperature, stop_tokens, top_p
         logger.info('LLM output = %s', generation_output)
 
         generation_output = generation_output.strip()
-        if postprocess:
-            generation_output = _postprocess_generations(generation_output)
 
         if len(generation_output) > 0:
             break
 
     logger.info(f"total cost this run: {total_cost}")
-    return generation_output
-
-def _postprocess_generations(generation_output: str) -> str:
-    """
-    Might output an empty string if generation is not at least one full sentence
-    """
-    # replace all whitespaces with a single space
-    generation_output = ' '.join(generation_output.split())
-
-    # remove extra dialog turns, if any
-    turn_indicators = ['You:', 'They:', 'Context:', 'You said:', 'They said:', 'Assistant:', 'Chatbot:', "User:"]
-    for t in turn_indicators:
-        if generation_output.find(t) > 0:
-            generation_output = generation_output[:generation_output.find(t)]
-
-    generation_output = generation_output.strip()
-    # delete half sentences
-    if len(generation_output) == 0:
-        return generation_output
-
-    if generation_output[-1] not in {'.', '!', '?'}:
-        last_sentence_end = max(generation_output.find(
-            '.'), generation_output.find('!'), generation_output.find('?'))
-        if last_sentence_end > 0:
-            generation_output = generation_output[:last_sentence_end+1]
-
     return generation_output
 
 def call_with_timeout(func, timeout_sec, *args, **kwargs):
@@ -281,3 +254,64 @@ def batch_llm_generate(template_file: str, prompt_parameter_values: List[dict], 
         thread_outputs = [executor.submit(f, _fill_template(template_file, p)) for p in prompt_parameter_values]
     thread_outputs = [o.result() for o in thread_outputs]
     return thread_outputs
+
+async def async_generate_chainlit(prompt_file, prompt_parameter_values, step, model,
+            max_tokens, temperature, stop, top_p=0.9, frequency_penalty=0, presence_penalty=0):
+    
+    filled_template = _fill_template(prompt_file, prompt_parameter_values)
+    cache_res = prompt_cache_db.find_one(
+        {
+            "model": model,
+            "prompt": filled_template,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stop_tokens": stop,
+            "top_p": top_p,
+            "frequency_penalty": frequency_penalty,
+            "presence_penalty": presence_penalty,
+        }
+    )
+    if cache_res:
+        if hasattr(step, "output"):
+            step.output = cache_res["res"]
+        else:
+            step.content = cache_res["res"]
+        return cache_res["res"]
+    
+    stream_resp = await async_client.chat.completions.create(
+        messages=[{"role": "system", "content": _fill_template(
+            prompt_file,
+            prompt_parameter_values)}],
+        stream=True,
+        stop=stop,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        frequency_penalty=frequency_penalty,
+        presence_penalty=presence_penalty
+    )
+    
+    async for part in stream_resp:
+        delta = part.choices[0].delta
+        if delta.content:
+            # Stream the output of the step
+            await step.stream_token(delta.content)
+    
+    res = step.output if hasattr(step, "output") else step.content
+    
+    prompt_cache_db.insert_one(
+        {
+            "model": model,
+            "prompt": filled_template,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stop_tokens": stop,
+            "top_p": top_p,
+            "frequency_penalty": frequency_penalty,
+            "presence_penalty": presence_penalty,
+            "res": res
+        }
+    )
+    
+    return res

@@ -24,10 +24,10 @@ from sql_free_text_support.execute_free_text_sql import suql_execute
 from pglast import parse_sql
 from pglast.stream import RawStream
 from decimal import Decimal
-
+import chainlit as cl
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-from prompt_continuation import llm_generate, batch_llm_generate
+from prompt_continuation import llm_generate, async_generate_chainlit
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,6 @@ def clean_up_response(results, column_names):
             
         if "opening_hours" in temp:
             temp["opening_hours"] = handle_opening_hours(temp["opening_hours"])
-            
         
         # here is some simple heuristics to deal with too long DB results,
         # thus cutting it at some point
@@ -128,29 +127,55 @@ def clean_up_response(results, column_names):
         final_res.append(temp)
     return final_res
 
-def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
-    first_sql, first_sql_time = llm_generate(template_file=prompt_file,
-                engine='gpt-3.5-turbo-0613',
-                stop_tokens=["Agent:"],
-                max_tokens=300,
-                temperature=0,
-                prompt_parameter_values={'dlg': dlgHistory, 'query': user_query},
-                postprocess=False)
-    second_sql = first_sql.replace("\\'", "''")
-    
-    print("directly generated SUQL query: {}".format(second_sql))
-    
-    second_sql_start_time = time.time()
+def json_to_markdown_table(data):
+    # Assuming the JSON data is a list of dictionaries
+    # where each dictionary represents a row in the table
+    if not data or not isinstance(data, list) or not all(isinstance(row, dict) for row in data):
+        raise ValueError("JSON data is not in the expected format for a table")
 
+    # Extract headers
+    headers = data[0].keys()
+
+    # Start building the Markdown table
+    markdown_table = "| " + " | ".join(headers) + " |\n"
+    markdown_table += "| " + " | ".join(["-" * len(header) for header in headers]) + " |\n"
+
+    # Add rows
+    for row in data:
+        markdown_table += "| " + " | ".join(str(row[header]) for header in headers) + " |\n"
+
+    return markdown_table
+
+async def generate_sql(dlgHistory, user_query):
+    async with cl.Step(name="SUQL", type="llm", language="sql", disable_feedback=False) as step:
+        first_sql = await async_generate_chainlit(
+            'prompts/parser_sql.prompt',
+            {'dlg': dlgHistory, 'query': user_query},
+            step,
+            'gpt-3.5-turbo-0613',
+            max_tokens=300,
+            temperature=0,
+            stop=["Agent:"])
+    
+    second_sql = first_sql.replace("\\'", "''")
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
     
-    final_res, column_names, cache = suql_execute(second_sql)
-    final_res = clean_up_response(final_res, column_names)
+    return second_sql
+
+async def execute_sql(sql):
+    suql_execute_start_time = time.time()
+    async with cl.Step(name="Results", type="llm", disable_feedback=False) as step:
+        final_res, column_names, cache = suql_execute(sql)
+        final_res = clean_up_response(final_res, column_names)
+        if final_res:
+            step.output = json_to_markdown_table(final_res)
+        else:
+            step.output = "SUQL returned no results"
         
-    second_sql_end_time = time.time()
+    suql_execute_end_time = time.time()
     
-    return final_res, first_sql, second_sql, first_sql_time, second_sql_end_time - second_sql_start_time, cache
+    return final_res, suql_execute_end_time - suql_execute_start_time
 
 def turn_db_results2name(db_results):
     res = []
@@ -159,7 +184,7 @@ def turn_db_results2name(db_results):
             res.append(i["name"])
     return res
 
-def compute_next_turn(
+async def compute_next_turn(
     dlgHistory : List[DialogueTurn],
     user_utterance: str):
     
@@ -177,16 +202,26 @@ def compute_next_turn(
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
-        results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
+        first_sql = await generate_sql(dlgHistory, user_utterance)
+        results, suql_execution_time = await execute_sql(first_sql)
         dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
         dlgHistory[-1].user_target = first_sql
-        dlgHistory[-1].temp_target = second_sql
+        dlgHistory[-1].temp_target = ""
         dlgHistory[-1].db_results = turn_db_results2name(results)
 
         # cut it out if no response returned
         if not results:
-            response, final_response_time = llm_generate(template_file='prompts/yelp_response_no_results.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
-                                max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
+            msg = cl.Message(content="")
+            response = await async_generate_chainlit(
+                'prompts/yelp_response_no_results.prompt',
+                {'dlg': dlgHistory},
+                msg,
+                'gpt-3.5-turbo-0613',
+                max_tokens=400,
+                temperature=0.0,
+                stop=[])
+            await msg.send()
+            
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].time_statement = {
                 "first_classification": first_classification_time,
@@ -195,9 +230,18 @@ def compute_next_turn(
                 "final_response": final_response_time
             }
             return dlgHistory
-            
-    response, final_response_time = llm_generate(template_file='prompts/yelp_response_SQL.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
-                        max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
+    
+    msg = cl.Message(content="")
+    response = await async_generate_chainlit(
+        'prompts/yelp_response_SQL.prompt',
+        {'dlg': dlgHistory},
+        msg,
+        'gpt-3.5-turbo-0613',
+        max_tokens=400,
+        temperature=0.0,
+        stop=[])
+    await msg.send()
+
     dlgHistory[-1].agent_utterance = response
     
     dlgHistory[-1].time_statement = {
