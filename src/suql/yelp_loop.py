@@ -5,29 +5,17 @@
 GPT-3 + Yelp Genie skill
 """
 
-import sys
-import os
 import re
 from typing import List
 import argparse
 import logging
-import requests
 from datetime import datetime
-import html
 import json
-from utils import print_chatbot, input_user, num_tokens_from_string, if_usable_restaurants, handle_opening_hours
-import readline  # enables keyboard arrows when typing in the terminal
+from suql.utils import print_chatbot, input_user, num_tokens_from_string, if_usable_restaurants, handle_opening_hours
 import time
-from postgresql_connection import execute_sql
-# from query_reviews import review_server_address
-from sql_free_text_support.execute_free_text_sql import suql_execute
-from pglast import parse_sql
-from pglast.stream import RawStream
 from decimal import Decimal
-
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-from prompt_continuation import llm_generate, batch_llm_generate
+from suql.sql_free_text_support.execute_free_text_sql import suql_execute
+from suql.prompt_continuation import llm_generate
 
 logger = logging.getLogger(__name__)
 

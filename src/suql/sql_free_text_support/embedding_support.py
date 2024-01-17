@@ -2,14 +2,11 @@
 
 from tqdm import tqdm
 import pymongo
-from pathlib import Path
-import sys
 import torch
 from flask import request, Flask
 # Append parent directory to sys.path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from reviews_server import compute_sha256, _compute_single_embedding
-from postgresql_connection import execute_sql
+from suql.reviews_server import compute_sha256, _compute_single_embedding
+from suql.postgresql_connection import execute_sql
 from collections import OrderedDict
 
 cuda_ok = torch.cuda.is_available()

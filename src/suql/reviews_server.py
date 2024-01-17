@@ -1,17 +1,12 @@
 from transformers import AutoModel, AutoTokenizer
 import pymongo
-from typing import List
 import os
 from flask import request, Flask
-import time
 import torch
-from utils import linearize, chunk_text
-import json
-from tqdm import tqdm
 import hashlib
 from functools import reduce
 import operator
-from utils import num_tokens_from_string
+from suql.utils import num_tokens_from_string, chunk_text
 
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")

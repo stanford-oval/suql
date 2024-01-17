@@ -28,12 +28,15 @@ For more details, see our paper at https://arxiv.org/abs/2311.09818.
 
 2. Run `python -m spacy download en_core_web_sm`;
 
+3. Run `pip install -e .` to install SUQL as a library.
+
 ### Entry point to the SUQL compiler
 
-The entry point to the SUQL compiler is the following function from `sql_free_text_support/execute_free_text_sql.py`:
+To execute an suql query `suql_query`:
 
 ```
-suql_execute()
+from suql.sql_free_text_support.execute_free_text_sql import suql_execute
+suql_execute(suql_query)
 ```
 
 ## How to set up SUQL on your PostgreSQL database step-by-step.
@@ -50,11 +53,11 @@ Here is a rough breakdown of what you need to do to set up SUQL on your domain:
 
 5. Set up the backend server for the `answer`, `summary` functions. As you probably noticed, the code in `custom_functions.sql` is just making queries to a server. This server can be instantiated by running `python reviews_server.py`.
 
-6. There is a classifier to determine whether a user utterance requires database access, at this line: `llm_generate(template_file='prompts/if_db_classification.prompt', ...)`. This may or may not be applicable to your domain, and if it is, please modify the [corresponding prompt](https://github.com/stanford-oval/suql/blob/main/prompts/if_db_classification.prompt).
+6. There is a classifier to determine whether a user utterance requires database access, at this line: `llm_generate(template_file='prompts/if_db_classification.prompt', ...)`. This may or may not be applicable to your domain, and if it is, please modify the [corresponding prompt](https://github.com/stanford-oval/suql/blob/main/src/suql/prompts/if_db_classification.prompt).
 
-7. A note on PostgreSQL's permission issue. The user-facing parts of this system would only require **SELECT** privilege (it would be safe to grant only SELECT privilege for GPT-generated queries). This user is named `select_user` with password `select_user` in [this file](https://github.com/stanford-oval/suql/blob/main/postgresql_connection.py). You should change the default values for `user`, `password`, and `database` there to match your PostgreSQL set up. This user also appears once in [this file](https://github.com/stanford-oval/suql/blob/main/sql_free_text_support/execute_free_text_sql.py) of the SUQL compiler, so that intermediate tables created can be queried. Please also change it to match your user name.
+7. A note on PostgreSQL's permission issue. The user-facing parts of this system would only require **SELECT** privilege (it would be safe to grant only SELECT privilege for GPT-generated queries). This user is named `select_user` with password `select_user` in [this file](https://github.com/stanford-oval/suql/blob/main/src/suql/postgresql_connection.py). You should change the default values for `user`, `password`, and `database` there to match your PostgreSQL set up. This user also appears once in [this file](https://github.com/stanford-oval/suql/blob/main/src/suql/sql_free_text_support/execute_free_text_sql.py) of the SUQL compiler, so that intermediate tables created can be queried. Please also change it to match your user name.
 
-8. Furthermore, various parts of the SUQL compiler require the permission to **create** a temporary table. You can search for `creator_role` under [this file](https://github.com/stanford-oval/suql/blob/main/sql_free_text_support/execute_free_text_sql.py). You would need to create a user with the privilege to **CREATE** tables under your database, and change `creator_role` to match that user and password. 
+8. Furthermore, various parts of the SUQL compiler require the permission to **create** a temporary table. You can search for `creator_role` under [this file](https://github.com/stanford-oval/suql/blob/main/src/suql/sql_free_text_support/execute_free_text_sql.py). You would need to create a user with the privilege to **CREATE** tables under your database, and change `creator_role` to match that user and password. 
 
 9. Test with `python yelp_loop.py`.
 
@@ -62,7 +65,7 @@ Here is a rough breakdown of what you need to do to set up SUQL on your domain:
 
 1. if you see error msgs similar to `PermissionError: [Errno 13] Permission denied: '/tmp/data-gym-cache/9b5ad71b2ce5302211f9c61530b329a4922fc6a4.2749b823-646b-45d7-9fcf-11414469d900.tmp'`. Refer to https://github.com/openai/tiktoken/issues/75. A likely solution is setting `TIKTOKEN_CACHE_DIR=""`.
 
-2. A lot of times, Azure/OpenAI's chatGPT deployment's latency is unstable. We have experienced up to 10 minutes of latency for some inputs. These cases are rare (we estimate < 3% of cases), but they do happen from time to time. For those cases, if we cancel the request and re-issue them, then we typically can get a response in normal time. To counter this issue, we have implemented a max-wait-then-reissue functionality in our API calls. Under [this file](https://github.com/stanford-oval/genie-llm/blob/main/prompt_continuation.py), we have the following block:
+2. A lot of times, Azure/OpenAI's chatGPT deployment's latency is unstable. We have experienced up to 10 minutes of latency for some inputs. These cases are rare (we estimate < 3% of cases), but they do happen from time to time. For those cases, if we cancel the request and re-issue them, then we typically can get a response in normal time. To counter this issue, we have implemented a max-wait-then-reissue functionality in our API calls. Under [this file](https://github.com/stanford-oval/suql/blob/main/src/suql/prompt_continuation.py), we have the following block:
 
 ```
 if max_wait_time is None:
@@ -72,18 +75,3 @@ if max_wait_time is None:
 This says that if a call to `llm_generate` does not set a `max_wait_time`, then it is dynamically calculated based on this linear function of `total_token`. This is imperfect, and we are erroring on the side of waiting longer (e.g., for an input with `1000` tokens, this would wait for 6 seconds, which might be too long). You can set a custom wait time, or disable this feature or together by setting `attempts = 0`.
 
 3. The SUQL compiler right now uses the special character `^` when handling certain join-related optimizations. Please do not include this character `^` in your column names. (This restriction could be lifted in the future.)
-
-# Update Log
-
-- 1/2/24 updates. This is a breaking update. Please follow instructions in bold:
-    - Modification of the `answer` function with basic type information (number + date). Addition of the new `try_cast` function. **To update it, go to your PSQL database, and do:**
-    ```
-    DROP FUNCTION answer (source TEXT[], question TEXT);
-    DROP FUNCTION answer (source TEXT, question TEXT);
-    ```
-    **Afterwards, copy the functions in `custom_functions.sql` to the PSQL command line and paste there.** (This is still work in progress to support complicated types).
-    - **Restart `reviews_server.py`**
-    - Support for `JOIN` statements in the SUQL compiler. This also involves changes to `sql_free_text_support/embedding_support.py`. **Please re-start the embedding server. The added field is the `db_name` field.**
-    - Added `prompt_cache_db` in `prompt_continuation.py` file, which automatically caches all SUQL-initiated LLM calls in a local MongoDB to save cost + improve latency.
-    - The new entry point to the SUQL execution is a function called `suql_execute`. No more `SelectVisitor` needed.
-    - Other minor changes, e.g. deleted `engine` from `yelp_loop.py` entry point (model is specified within each file now). Deleted `sys_type` and a few other unused args from `yelp_loop.py` entry point.

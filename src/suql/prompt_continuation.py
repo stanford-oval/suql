@@ -11,16 +11,15 @@ from typing import List
 import openai
 from openai import OpenAI
 client = OpenAI()
-from openai import OpenAIError
 from functools import partial
 from datetime import date
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 import time
 from threading import Thread
 import traceback
-from utils import num_tokens_from_string
 import pymongo
+import os
+from suql.utils import num_tokens_from_string
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -30,7 +29,9 @@ fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
 #singleton
-jinja_environment = Environment(loader=FileSystemLoader('./'),
+dir_path = os.path.dirname(os.path.realpath(__file__))
+print(dir_path)
+jinja_environment = Environment(loader=FileSystemLoader(dir_path),
                   autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True, line_comment_prefix='#')
 # # uncomment if using Azure OpenAI
 openai.api_type == 'open_ai'

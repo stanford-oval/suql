@@ -8,12 +8,7 @@ from pglast import parse_sql
 from sympy import symbols, Symbol
 from sympy.logic.boolalg import Or, And, Not, to_dnf
 from pathlib import Path
-import sys
 # Append parent directory to sys.path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from postgresql_connection import execute_sql_with_column_info, execute_sql
-from prompt_continuation import llm_generate
-from utils import num_tokens_from_string
 from copy import deepcopy
 import time
 import requests
@@ -25,6 +20,9 @@ from collections import defaultdict
 from psycopg2 import Error as psyconpg2Error
 from typing import List
 import traceback
+from suql.prompt_continuation import llm_generate
+from suql.utils import num_tokens_from_string
+from suql.postgresql_connection import execute_sql_with_column_info, execute_sql
 
 # System parameters, do not modify
 SET_FREE_TEXT_FCNS = ["answer"]
@@ -1096,15 +1094,16 @@ def suql_execute_single(generated_suql, loggings="", disable_try_catch = False):
             
             
 if __name__ == "__main__":
-    # print(suql_execute(sql, disable_try_catch=True)[0])
-    with open("sql_free_text_support/test_cases.txt", "r") as fd:
-        test_cases = fd.readlines()
-    res = []
-    for sql in test_cases:
-        sql = sql.strip()
-        i_res = suql_execute(sql, disable_try_catch=True)[0]
-        res.append(i_res)
-        with open("sql_free_text_support/test_cases_res.txt", "w") as fd:
-            for i_res in res:
-                fd.write(str(i_res))
-                fd.write("\n")
+    sql = "SELECT *, summary(reviews) FROM restaurants WHERE 'chinese' = ANY (cuisines) AND answer(reviews, 'does this restaurant serve spicy food?') = 'Yes' AND location = 'Palo Alto' LIMIT 1;"
+    print(suql_execute(sql, disable_try_catch=True)[0])
+    # with open("sql_free_text_support/test_cases.txt", "r") as fd:
+    #     test_cases = fd.readlines()
+    # res = []
+    # for sql in test_cases:
+    #     sql = sql.strip()
+    #     i_res = suql_execute(sql, disable_try_catch=True)[0]
+    #     res.append(i_res)
+    #     with open("sql_free_text_support/test_cases_res.txt", "w") as fd:
+    #         for i_res in res:
+    #             fd.write(str(i_res))
+    #             fd.write("\n")
