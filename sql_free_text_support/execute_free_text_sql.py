@@ -3,6 +3,7 @@ from pglast.visitors import Visitor, Ancestor
 import pglast
 from pglast.ast import *
 from pglast.enums.primnodes import BoolExprType, CoercionForm
+from pglast.enums.parsenodes import A_Expr_Kind
 from pglast.stream import RawStream
 from pglast import parse_sql
 from sympy import symbols, Symbol
@@ -150,11 +151,12 @@ def if_all_structural(node):
     return visitor.res
 
 class SelectVisitor(Visitor):
-    def __init__(self) -> None:
+    def __init__(self, fts_fields) -> None:
         super().__init__()
         self.tmp_tables = []
         # this cache is to store classifier results for sturctured fields (e.g. cuisines in restaurants)
         self.cache = defaultdict(dict)
+        self.fts_fields = fts_fields
     
     def __call__(self, node):
         super().__call__(node)
@@ -182,7 +184,7 @@ class SelectVisitor(Visitor):
             self.tmp_tables.append(tmp_table_name)
 
             # main entry point for SUQL compiler optimization
-            results, column_info = analyze_SelectStmt(node, self.cache)
+            results, column_info = analyze_SelectStmt(node, self.cache, self.fts_fields)
             
             # based on results and column_info, insert a temporary table
             column_create_stmt = ",\n".join(list(map(lambda x: f'"{x[0]}" {x[1]}', column_info)))
@@ -202,7 +204,7 @@ class SelectVisitor(Visitor):
             node.fromClause = (RangeVar(relname=tmp_table_name, inh=True, relpersistence='p'),)
             node.whereClause = None
         else:
-            classify_db_fields(node, self.cache)
+            classify_db_fields(node, self.cache, self.fts_fields)
 
     def serialize_cache(self):
         def print_value(x):
@@ -533,19 +535,24 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
         res = [i[1:] for i in list(filter(lambda x: x[id_index] in id_res, existing_results))]
     return res
 
-def get_a_expr_field_value(node : A_Expr):
+def get_a_expr_field_value(node : A_Expr, no_check=False):
     if isinstance(node.lexpr, ColumnRef):
         column = node.lexpr
         value = node.rexpr
-    elif isinstance(node.rexpr, ColumnRef) or isinstance(node.rexpr, ColumnRef):
+    elif isinstance(node.rexpr, ColumnRef):
         column = node.rexpr
         value = node.lexpr
-        
-    assert(isinstance(column, ColumnRef))
-    assert(isinstance(value, A_Const))
-    column_name = column.fields[0].sval
-    value_res = value.val
-    return column_name, value_res
+    elif no_check:
+        return None, None
+    
+    if isinstance(column, ColumnRef) and isinstance(value, A_Const):
+        column_name = column.fields[0].sval
+        value_res = value.val
+        return column_name, value_res
+    elif no_check:
+        return None, None
+    else:
+        raise ValueError()
 
 def replace_a_expr_field(node : A_Expr, ancestors : Ancestor, new_value):
     def find_value_column(node : A_Expr):
@@ -632,10 +639,11 @@ def get_comma_separated_numbers(input_string):
     
 
 class StructuralClassification(Visitor):
-    def __init__(self, node : SelectStmt, cache) -> None:
+    def __init__(self, node : SelectStmt, cache, fts_fields) -> None:
         super().__init__()
         self.node = node
         self.cache = cache
+        self.fts_fields = fts_fields
     
     def __call__(self, node):
         super().__call__(node)
@@ -667,6 +675,17 @@ class StructuralClassification(Visitor):
         if (isinstance(node.lexpr, FuncCall) and isinstance(node.lexpr.funcname[0], String) and node.lexpr.funcname[0].sval in skip_fcn_list) or (isinstance(node.rexpr, FuncCall) and isinstance(node.rexpr.funcname[0], String) and node.rexpr.funcname[0].sval in skip_fcn_list):
             # if it involves certain functions, skip
             return
+        
+        # if this is one of the fields declared to be used with fts (full text search), convert so:
+        for  table_name, field_name in self.fts_fields:
+            if len(self.node.fromClause) == 1 and isinstance(self.node.fromClause[0], RangeVar) and node.name[0].sval in ["~~", "~~*", "="]:
+                n_field_name, n_value_name = get_a_expr_field_value(node, no_check = True)
+                if table_name == self.node.fromClause[0].relname and field_name == n_field_name:
+                    node.lexpr = FuncCall(funcname=(String(sval='websearch_to_tsquery'),), args=(A_Const(val=String(sval=n_value_name.sval.replace("%", ""))),))
+                    node.name = (String(sval = "@@"),)
+                    node.kind = A_Expr_Kind.AEXPR_OP
+                    node.rexpr = FuncCall(funcname=(String(sval='to_tsvector'),), args=(ColumnRef(fields=(String(sval=n_field_name),)),))
+                    return
         
         to_execute_node = deepcopy(self.node)
         
@@ -777,12 +796,12 @@ class StructuralClassification(Visitor):
                             replace_a_expr_field(node, ancestors, parsed_res)
                             self.cache[column_name][value_res_clear] = parsed_res
 
-def classify_db_fields(node : SelectStmt, cache):
+def classify_db_fields(node : SelectStmt, cache : dict, fts_fields: List):
     # we expect all atomic predicates under `predicate` to only involve stru fields
     # (no `answer` function)
     # the goal of this function is to determine which predicate leads to no results
     # for a field without results, try to classify into one of the existing fields
-    visitor = StructuralClassification(node, cache)
+    visitor = StructuralClassification(node, cache, fts_fields)
     visitor(node)
 
 class Replace_Original_Target_Visitor(Visitor):
@@ -807,7 +826,7 @@ class Replace_Original_Target_Visitor(Visitor):
                     res = (String(sval=f'{table_name}^{node.fields[0].sval}'), )
             node.fields = res
 
-def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cache : dict):
+def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cache : dict, fts_fields : List):
     node = deepcopy(original_node)
     # change projection to include everything
     # there are a couple of cases here
@@ -823,7 +842,7 @@ def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cac
             _, columns = execute_structural_sql(
                 SelectStmt(
                     fromClause=(table, )
-                ), None, cache
+                ), None, cache, fts_fields
             )
             # give the projection fields new names
             projection_table_name = table.alias.aliasname if table.alias is not None else table.relname
@@ -850,7 +869,7 @@ def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cac
             _, columns = execute_structural_sql(
                 SelectStmt(
                     fromClause=(table, )
-                ), None, cache
+                ), None, cache, fts_fields
             )
             # give the projection fields new names
             projection_table_name = table.alias.aliasname if table.alias is not None else table.relname
@@ -884,7 +903,7 @@ def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cac
     assert(if_all_structural(node))
     
     # deal with sturctural field classification
-    classify_db_fields(node, cache)
+    classify_db_fields(node, cache, fts_fields)
     
     sql = RawStream()(node)
     print("execute_structural_sql executing sql: {}".format(sql))
@@ -980,7 +999,7 @@ def execute_free_text_queries(node, predicate : BoolExpr, existing_results, colu
     else:
         raise ValueError("expects predicate to only contain atomic unstructural query, AND of them, or an NOT of atomic unsturctured query. However, this predicate is not: {}".format(RawStream()(predicate)))
 
-def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict):
+def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict, fts_fields : List):
     # there should not exist any OR expression inside sql_dnf_predicates
     
     if isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
@@ -994,7 +1013,7 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict):
             structural_predicates = BoolExpr(boolop=BoolExprType.AND_EXPR, args = structural_predicates)
         
         # execute structural part
-        structural_res, column_info = execute_structural_sql(node, structural_predicates, cache)
+        structural_res, column_info = execute_structural_sql(node, structural_predicates, cache, fts_fields)
         
         free_text_predicates = tuple(filter(lambda x: not if_all_structural(x), sql_dnf_predicates.args))
         if len(free_text_predicates) == 1:
@@ -1006,13 +1025,13 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict):
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
         if if_all_structural(sql_dnf_predicates):
-            return execute_structural_sql(node, sql_dnf_predicates, cache)
+            return execute_structural_sql(node, sql_dnf_predicates, cache, fts_fields)
         else:
-            all_results, column_info = execute_structural_sql(node, None, cache)
+            all_results, column_info = execute_structural_sql(node, None, cache, fts_fields)
             return execute_free_text_queries(node, sql_dnf_predicates, all_results, column_info, limit)
 
 
-def analyze_SelectStmt(node : SelectStmt, cache : dict):
+def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List):
     limit = node.limitCount.val.ival if node.limitCount else -1
     sql_dnf_predicates = convert2dnf(node.whereClause)
 
@@ -1022,7 +1041,7 @@ def analyze_SelectStmt(node : SelectStmt, cache : dict):
         choices = sorted(sql_dnf_predicates.args, key = lambda x: if_all_structural(x), reverse=True)
         res = []
         for choice in choices:
-            choice_res, column_info = execute_and(choice, node, limit - len(res), cache)
+            choice_res, column_info = execute_and(choice, node, limit - len(res), cache, fts_fields)
             res.extend(choice_res)
             
             # at any time, if there is enough results, return that 
@@ -1032,16 +1051,25 @@ def analyze_SelectStmt(node : SelectStmt, cache : dict):
         return res, column_info
     
     elif isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
-        return execute_and(sql_dnf_predicates, node, limit, cache)
+        return execute_and(sql_dnf_predicates, node, limit, cache, fts_fields)
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
-        return execute_and(sql_dnf_predicates, node, limit, cache)
+        return execute_and(sql_dnf_predicates, node, limit, cache, fts_fields)
         
     else:
         raise ValueError("Expects sql to be in DNF, but is not: {}".format(RawStream()(sql_dnf_predicates)))
 
-def suql_execute(generated_suql, loggings = "", disable_try_catch = False):
-    results, column_names, cache = suql_execute_single(generated_suql, loggings, disable_try_catch=disable_try_catch)
+def suql_execute(
+    generated_suql,
+    loggings = "",
+    disable_try_catch = False,
+    fts_fields = [] # fields that should use PostgreSQL's Full Text Search (FTS) operators
+):
+    results, column_names, cache = suql_execute_single(
+        generated_suql,
+        loggings,
+        disable_try_catch=disable_try_catch,
+        fts_fields=fts_fields)
     if results == []:
         return results, column_names, cache
     all_no_results = True
@@ -1057,13 +1085,18 @@ def suql_execute(generated_suql, loggings = "", disable_try_catch = False):
     return results, column_names, cache
     
 
-def suql_execute_single(generated_suql, loggings="", disable_try_catch = False):
+def suql_execute_single(
+    generated_suql,
+    loggings="",
+    disable_try_catch = False,
+    fts_fields = [] # fields that should use PostgreSQL's Full Text Search (FTS) operators
+):
     results = []
     column_names = []
     cache = {}
     
     if disable_try_catch:
-        visitor = SelectVisitor()
+        visitor = SelectVisitor(fts_fields)
         root = parse_sql(generated_suql)
         visitor(root)
         second_sql = RawStream()(root)
@@ -1074,7 +1107,7 @@ def suql_execute_single(generated_suql, loggings="", disable_try_catch = False):
         return execute_sql(second_sql)
     else:
         try:
-            visitor = SelectVisitor()
+            visitor = SelectVisitor(fts_fields)
             root = parse_sql(generated_suql)
             visitor(root)
             second_sql = RawStream()(root)
@@ -1096,7 +1129,7 @@ def suql_execute_single(generated_suql, loggings="", disable_try_catch = False):
             
             
 if __name__ == "__main__":
-    # print(suql_execute(sql, disable_try_catch=True)[0])
+    # print(suql_execute(sql, disable_try_catch=True, fts_fields=[("restaurants", "name")] )[0])
     with open("sql_free_text_support/test_cases.txt", "r") as fd:
         test_cases = fd.readlines()
     res = []

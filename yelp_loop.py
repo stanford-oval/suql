@@ -166,7 +166,7 @@ async def generate_sql(dlgHistory, user_query):
 async def execute_sql(sql):
     suql_execute_start_time = time.time()
     async with cl.Step(name="Results", type="llm", disable_feedback=False) as step:
-        final_res, column_names, cache = suql_execute(sql)
+        final_res, column_names, cache = suql_execute(sql, fts_fields=[("restaurants", "name")])
         final_res = clean_up_response(final_res, column_names)
         if final_res:
             step.output = json_to_markdown_table(final_res)

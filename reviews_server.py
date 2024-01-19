@@ -77,7 +77,7 @@ def answer():
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': text_res, 'question': data["question"], "type_prompt": type_prompt},
-        engine='gpt-3.5-turbo-0613',
+        engine='gpt-4-1106-preview',
         max_tokens=200,
         temperature=0.0,
         stop_tokens=['\n'],
