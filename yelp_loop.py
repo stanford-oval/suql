@@ -148,9 +148,15 @@ def json_to_markdown_table(data):
     if not data or not isinstance(data, list) or not all(isinstance(row, dict) for row in data):
         raise ValueError("JSON data is not in the expected format for a table")
 
-    # Extract headers
-    headers = data[0].keys()
+    def rearrange_list(lst):
+        if "_id" in lst:
+            lst.remove("_id")
+            lst.insert(0, "_id")
+        return lst
 
+    # Extract headers, and put _id up front
+    headers = rearrange_list(list(data[0].keys()))
+    
     # Start building the Markdown table
     markdown_table = "| " + " | ".join(headers) + " |\n"
     markdown_table += "| " + " | ".join(["-" * len(header) for header in headers]) + " |\n"

@@ -195,7 +195,6 @@ def compute_sha256(text):
 def if_usable_restaurants(field : str):
     NOT_USABLE_FIELDS = [
         "reviews",
-        "_id",
         "id",
 
         # schematized fields        
