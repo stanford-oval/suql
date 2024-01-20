@@ -1,6 +1,7 @@
 You are a semantic parser. Generate a query for a restaurant database with the following signature:
 
 CREATE TABLE restaurants (
+    _id INT PRIMARY KEY,
     name TEXT,
     cuisines TEXT[],
     price ENUM ('cheap', 'moderate', 'expensive', 'luxury'),
@@ -18,21 +19,23 @@ Do not generate fields beyond the given fields. The `answer` function can be use
 
 {# Basic example #}
 User: Where is Burguer King?
-Target: SELECT address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
+Target: SELECT _id, name, address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
 --
 {# Basic example for cuisine, and follow up with restaurant names #}
 User: what are some good-reviewed japanese restaurants in Kansas City?
 Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'Kansas City' AND rating >= 4.0 LIMIT 3;
+Results: [{'_id': 76, 'name': 'Sakura Sushi'}, {'_id': 93, 'name': 'Nami Ramen'}, {'_id': 153, 'name': 'Kaze Teppanyaki'}]
 Agent: I found Sakura Sushi, Nami Ramen, and Kaze Teppanyaki.
 User: What are their prices?
-Target: SELECT name, price FROM restaurants WHERE (name ILIKE 'Sakura Sushi' OR name ILIKE 'Nami Ramen' OR name ILIKE 'Kaze Teppanyaki') AND location = 'Kansas City';
+Target: SELECT _id, name, price FROM restaurants WHERE (_id = 76 OR _id = 93 OR _id = 153) AND location = 'Kansas City';
 --
 {# Usage of `answer` function on FREE TEXT field in both projection and filter #}
 User: Show me a family-friendly restaurant that has burgers in D.C.
 Target: SELECT *, summary(reviews), answer(reviews, 'is this restaurant family-friendly?') FROM restaurants WHERE answer(reviews, 'do you find this restaurant to be family-friendly?') = 'Yes' AND answer(popular_dishes, 'does this restaurant serve burgers') = 'Yes' AND location = 'D.C.' LIMIT 1;
+Results: [{'_id': 1043, 'name': "Wesley's steakhouse"}]
 Agent: I found Wesley's steakhouse. Reviews mention kids love going there with their parents. It should be a great weekend dinner for you and your family.
 User: What do the reviews say about the atmosphere in the restaurant?
-Target: SELECT answer(reviews, 'What is the atmosphere?') FROM restaurants WHERE name ILIKE 'Wesley''s steakhouse' AND location = 'D.C.' LIMIT 1;
+Target: SELECT answer(reviews, 'What is the atmosphere?') FROM restaurants WHERE _id = 1043 LIMIT 1;
 --
 {# Usage of `answer` function on popular_dishes #}
 User: Find me a place with pasta in Nashville.
@@ -45,9 +48,10 @@ Target: SELECT *, summary(reviews), answer(reviews, 'what is the wait time?') FR
 {# Meaning of the word "popular", and follow up on fetching reviews #}
 User: I want a popular restaurant in Napa, CA.
 Target: SELECT *, summary(reviews) FROM restaurants WHERE rating >= 4.5 AND location = 'Napa, CA' ORDER BY num_reviews DESC LIMIT 1;
+Results: [{'_id': 2731, 'name': "Gui's vegan house"}]
 Agent: I found the 5.0 star Gui's vegan house. It has 2,654 reviews and reviews mention great atmosphere, quick and good service, and good food quality.
 User: Give me the review that talk about good food quality.
-Target: SELECT single_review FROM restaurants AS r, unnest(reviews) AS single_review WHERE name ILIKE 'Gui''s vegan house' AND answer(single_review, 'does this review mention good food quality?') = 'Yes' AND r.location = 'Napa, CA' LIMIT 1;
+Target: SELECT single_review FROM restaurants AS r, unnest(reviews) AS single_review WHERE _id = 2731 AND answer(single_review, 'does this review mention good food quality?') = 'Yes' AND r.location = 'Napa, CA' LIMIT 1;
 --
 {# Usage of `answer` function on reviews #}
 User: Which restaurants have a happy hour in Bakersfield?
@@ -56,15 +60,17 @@ Target: SELECT *, summary(reviews), answer(reviews, 'what is the happy hour here
 {# Usage of `answer` function on reviews #}
 User: i'm hungry, what should i have for lunch? I am looking for salmon in Chicago.
 Target: SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does this restaurant serve salmon?') = 'Yes' AND location = 'Chicago' LIMIT 1;
+Results: [{'_id': 53, 'name': "Daigo"}]
 Agent: I found the 4.5 star Daigo. It is a family-owned business that serves traditional Japanese cuisine.
 User: Show me something else.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(name = 'Daigo') AND answer(popular_dishes, 'does this restaurant serve salmon?') = 'Yes' AND location = 'Chicago' LIMIT 1;
+Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(_id = 53) AND answer(popular_dishes, 'does this restaurant serve salmon?') = 'Yes' AND location = 'Chicago' LIMIT 1;
 --
 {% for dlg_turn in dlg[:-1] %}
 {% if dlg_turn.genie_utterance is not none %}
 User: {{ dlg_turn.user_utterance }}
 Target: {{ dlg_turn.user_target }}
 Agent: {{ dlg_turn.agent_utterance }}
+Results: {{ dlg_turn.results_for_ned }}
 {% endif %}
 {% endfor %}
 User: {{ query }}
