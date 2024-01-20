@@ -691,8 +691,8 @@ class StructuralClassification(Visitor):
         
         # change projection to include everything
         to_execute_node.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(), ))), )
-        # reset all limits
-        to_execute_node.limitCount = None
+        # set limit to 1, to see if there are results
+        to_execute_node.limitCount = Integer(ival=1)
         # change predicates
         to_execute_node.whereClause = node
         # reset any groupby clause
@@ -764,6 +764,7 @@ class StructuralClassification(Visitor):
                 
                 to_execute_node.sortClause = None
                 to_execute_node.whereClause = None
+                to_execute_node.limitCount = None # find all entries
                 field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node))
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x:x[0], field_value_choices))

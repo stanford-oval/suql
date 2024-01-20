@@ -43,6 +43,7 @@ class DialogueTurn:
         time_statement : dict = None,
         db_results : list = [],
         cache : dict = {},
+        results_for_ned : dict = None
     ):
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
@@ -51,6 +52,7 @@ class DialogueTurn:
         self.user_target = user_target
         self.sys_type = sys_type
         self.db_results = db_results
+        self.results_for_ned = results_for_ned
         time_statement = time_statement
         
     agent_utterance: str
@@ -61,6 +63,7 @@ class DialogueTurn:
     sys_type: str
     time_statement: dict
     db_results: list
+    results_for_ned: dict
 
     def to_text(self, they='They', you='You'):
         """
@@ -127,6 +130,18 @@ def clean_up_response(results, column_names):
         final_res.append(temp)
     return final_res
 
+# this function extracts only the _id and name fields from the database results, if any
+def extract_id_name(results, column_names):
+    results_for_ned = []
+    for result in results:
+        temp = dict((column_name, each_result) for column_name, each_result in zip(column_names, result))
+        if "_id" in temp and "name" in temp:
+            results_for_ned.append({
+                "_id": temp["_id"],
+                "name": temp["name"]
+            })
+    return results_for_ned
+
 def json_to_markdown_table(data):
     # Assuming the JSON data is a list of dictionaries
     # where each dictionary represents a row in the table
@@ -167,6 +182,7 @@ async def execute_sql(sql):
     suql_execute_start_time = time.time()
     async with cl.Step(name="Results", type="llm", disable_feedback=False) as step:
         final_res, column_names, cache = suql_execute(sql, fts_fields=[("restaurants", "name")])
+        results_for_ned = extract_id_name(final_res, column_names)
         final_res = clean_up_response(final_res, column_names)
         if final_res:
             step.output = json_to_markdown_table(final_res)
@@ -175,7 +191,7 @@ async def execute_sql(sql):
         
     suql_execute_end_time = time.time()
     
-    return final_res, suql_execute_end_time - suql_execute_start_time
+    return final_res, suql_execute_end_time - suql_execute_start_time, results_for_ned
 
 def turn_db_results2name(db_results):
     res = []
@@ -197,17 +213,18 @@ async def compute_next_turn(
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
     dlgHistory[-1].sys_type = "suql_v0102"
     
-    # determine whether to send to Genie
+    # determine whether to use database
     continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
         first_sql = await generate_sql(dlgHistory, user_utterance)
-        results, suql_execution_time = await execute_sql(first_sql)
+        results, suql_execution_time, results_for_ned = await execute_sql(first_sql)
         dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
         dlgHistory[-1].user_target = first_sql
         dlgHistory[-1].temp_target = ""
         dlgHistory[-1].db_results = turn_db_results2name(results)
+        dlgHistory[-1].results_for_ned = results_for_ned
 
         # cut it out if no response returned
         if not results:
