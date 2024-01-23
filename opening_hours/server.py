@@ -7,13 +7,16 @@ app = Flask(__name__)
 chat = util.Chat()
 import random
 rn = random.randint
+STRESS_TEST = False
 truth = [ [ [ set() for minutes in range(60)] for hours in range(24)] for days in range(7)]
-
+if STRESS_TEST == True:
+    truth = [ [ [ set(x for x in range(16,8500)) for minutes in range(60)] for hours in range(24)] for days in range(7)]
+    
 RESTAURANTS = 15
 # for each restaurant, let H be their segmented hours:
 
 def index_to_segments(string_segment):
-    print(string_segment, "BOO")
+    #print(string_segment, "BOO")
     if not string_segment:
         return []
     string_segment = string_segment[0]
@@ -28,10 +31,10 @@ print(indices)
 for _ in range(1, RESTAURANTS+1):
     print("RESTAURANT ",_)
     restaurant_id = _
-    '''
+    
     if restaurant_id  % 100 ==0:
         print(restaurant_id) 
-    '''
+    
     H = index_to_segments(indices[_-1])
     print("INDEX", index_to_segments(indices[_-1]))
     for segment in H:
@@ -53,10 +56,10 @@ for _ in range(1, RESTAURANTS+1):
                     break
                 else: 
                     truth[day][hour][minute].add(restaurant_id) 
-for hour in truth[0]:
-    print(hour, "\n")
+#for hour in truth[0]:
+#    print(hour, "\n")
 def search_segment(segment):
-    print(segment)
+    #print(segment)
     segment = segment.split(".")
     segment = [int(x) for x in segment]
     #print(segment)
@@ -68,16 +71,16 @@ def search_segment(segment):
     open_restaurants = set()
     #print(segment_start)
     #print(segment_end)
-    print(starting_hour, starting_minute)
-    print(ending_hour, ending_minute)
+    #print(starting_hour, starting_minute)
+    #print(ending_hour, ending_minute)
     done = 0
-    for hour in range(starting_hour, ending_hour+1):
+    for hour in range(starting_hour, min(ending_hour+1,24)):
         if done == 1:
             break
         for minute in range(0, 60):
             current_open_restaurants = truth[day][hour][minute]
             time = (day,hour,minute)
-            print(time, current_open_restaurants)
+            #print(time, current_open_restaurants)
             if hour == starting_hour and minute < starting_minute:
                 pass
             elif hour == ending_hour and minute == ending_minute:
@@ -86,6 +89,8 @@ def search_segment(segment):
             else:
                 open_restaurants = open_restaurants.union(current_open_restaurants) 
     open_restaurants = list(open_restaurants)
+    print(open_restaurants)
+    open_restaurants = [x for x in open_restaurants if x <=15]
     print(open_restaurants)
     return open_restaurants
 

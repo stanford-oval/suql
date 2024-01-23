@@ -8,6 +8,7 @@ Example usage is below:
 
 EXAMPLE_USER_QUERY: What restaurants are open past 2pm on Tuesday?
 SEARCH_INTERVAL: 1.14.0.24.0
-SUQL_QUERY: SELECT id,name FROM restaurants WHERE CAST(restaurants.id AS INTEGER) = any ( opening_hours_search('1.14.0.24.0') )
+SUQL_QUERY: SELECT opening_hours_search('1.14.0.24.0') 
 
-Your output should only output the suql query.
+Now given the following query, output just the SUQL_QUERY.
+

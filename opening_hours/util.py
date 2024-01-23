@@ -1,10 +1,11 @@
-import openai, os, psycopg2,re,json,ast,csv
+import openai, os, psycopg2,re,json,ast,csv,random
 from sqlalchemy import create_engine
 # this class is used for text generation
 # it guarantees correct initialisation
 # it keeps messages as logs
 # generation can be customised 
 RESTAURANTS = 15
+STRESS_TEST = 10**4
 class Chat:
     def __init__(self):
         self.initialise()
@@ -49,9 +50,13 @@ def debug_load_hours(load_hours_text):
     #print(rsp)
     return rsp
      
+EXPERIMENTAL = True  
 def debug_parse_hours(opening_hours_text):
-    msg = open("parse_opening_hours.prompt", "r").read()
+    msg = open("parse_opening_hours.prompt", "r").read() # this will be deprecated soon, it is inefficient
+    if EXPERIMENTAL:
+        msg = open("experimental_opening_hours.prompt", "r").read()
     msg += opening_hours_text 
+
     rsp = Chat().send(msg)
     print(rsp)
     return rsp
@@ -69,7 +74,6 @@ def debug_add_indices():
                 command = "UPDATE restaurants SET opening_hours_index = '" + str(string_segments) + "' WHERE CAST(restaurants.id AS INTEGER) ="+ str(i)
                 print(command)
                 run_SQL(command)  
-    
 def debug_search_hours(prompt):
     print("prompt", prompt)
     parsed_prompt = debug_parse_hours(prompt)
@@ -88,11 +92,24 @@ def debug_load_dev_set(filename):
         for data in reader:
             cursor.execute(query, data)
         cursor.commit()
+def stress_test_opening_hours_index():
+    n = random.randint(1,3)
+    times = []
+    for _ in range(n):
+        new_time = str(random.randint(0,6)) + "."
+        hour, minute = random.randint(0,23), random.randint(0,59)
+        new_time += str(hour) + "." +str(minute) + "."
+        hour, minute = random.randint(0,23), random.randint(0,59)
+        new_time += str(hour) + "." +str(minute)
+        times.append(new_time)
+    intervals = "-".join(times)
+    print(intervals) 
 def debug():
     #debug_load_hours("Open from 8pm on Monday to 0200.")
-    debug_add_indices()
+    #debug_add_indices()
     #debug_parse_hours("Which restaurants are open from 1am Monday to 9pm?")
-    #debug_search_hours("Which restaurants are open between 10am and 2pm on Monday?")
+    debug_search_hours("Which restaurants are open before 9am on Sunday?")
+    #stress_test_opening_hours_index()
     #debug_load_dev_set("devset.csv")
 if __name__=="__main__":
     debug()
