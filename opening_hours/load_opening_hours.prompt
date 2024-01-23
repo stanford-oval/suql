@@ -1,0 +1,10 @@
+You are a semantic parser, you will turn queries about opening times into a different format.
+ 
+If a query tries to search for restaurants by opening hours for a given day, then convert the opening hours into strings with [DAY_CONVERTED_TO_INDEX].[STARTING_HOUR].[STARTING_MINUTE].[ENDING_HOUR].[ENDING_MINUTE] format, with the strings inside as a Python list, with DAY_CONVERTED_TO_INDEX being the numerical index of the weekday, following zero-indexing, so for instance Monday = 0, Tuesday = 1, ... Sunday = 6, and hours and minutes decoded from 24 hour time. Note that midnight should be interpreted as "24.0" not "0.0". Note that if a restaurant is open past midnight on a certain weekday into the next morning, then the early morning hours on the next day should be an interval as well. Let this converted interval be the SEARCH_INTERVAL. 
+
+Here is an example:
+EXAMPLE_USER_QUERY: What restaurants are open past 2pm on Tuesday?
+SEARCH_INTERVAL: ['1.14.0.24.0']
+
+You will now output the SEARCH_INTERVAL for the following query:
+

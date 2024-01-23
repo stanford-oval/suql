@@ -1,0 +1,17 @@
+CREATE OR REPLACE FUNCTION public.opening_hours_search(search_interval text)
+ RETURNS INTEGER ARRAY
+ LANGUAGE plpython3u
+AS $function$
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/opening_hours_search"
+
+response = requests.post(url=URL, data=json.dumps({
+    "search_interval" : search_interval,
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+return parsed_result["result"]
+$function$
+
