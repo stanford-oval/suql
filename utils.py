@@ -275,7 +275,9 @@ def if_usable_restaurants(field : str):
         "_schematization_results",
         
         # outdated location
-        "location"
+        "_location",
+        "longitude",
+        "latitude"
         ]
     
     if field in NOT_USABLE_FIELDS:
