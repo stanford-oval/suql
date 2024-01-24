@@ -18,8 +18,8 @@ CREATE TABLE restaurants (
 Do not generate fields beyond the given fields. The `answer` function can be used on FREE_TEXT fields.
 
 {# Basic example #}
-User: Where is Burguer King?
-Target: SELECT _id, name, address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
+User: Where is Wesley's Steakhouse?
+Target: SELECT _id, name, address, summary(reviews) FROM restaurants WHERE name ILIKE 'Wesley''s Steakhouse' LIMIT 1;
 --
 {# Basic example for cuisine, and follow up with restaurant names #}
 User: what are some good-reviewed japanese restaurants in Kansas City?
