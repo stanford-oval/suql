@@ -236,7 +236,7 @@ def get_location_from_azure(query):
     EARTH_RADIUS = 6371000  # meters
     TOLERANCE = 1500  # meters
 
-    subscription_key = os.environ['AZURE_KEY']
+    subscription_key = os.environ['AZURE_MAP_KEY']
     # API endpoint
     url = "https://atlas.microsoft.com/search/address/json"
 
@@ -273,7 +273,7 @@ def get_location_from_azure(query):
 
     return longitude_west, longitude_east, latitude_south, latitude_north
 
-
+# Hack: using regex to change all location clauses
 def process_query(sql_query):
     pattern = r"location\s*=\s*'([^']*)'"
 

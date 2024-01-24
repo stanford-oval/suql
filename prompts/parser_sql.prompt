@@ -7,7 +7,6 @@ CREATE TABLE restaurants (
     price ENUM ('cheap', 'moderate', 'expensive', 'luxury'),
     rating NUMERIC(2,1),
     num_reviews NUMBER,
-    address TEXT,
     popular_dishes FREE_TEXT,
     phone_number TEXT,
     reviews FREE_TEXT,
@@ -20,7 +19,7 @@ Use `location = 'some place'` to search restaurants that are geographically clos
 
 {# Basic example #}
 User: Where is Burguer King?
-Target: SELECT _id, name, address, summary(reviews) FROM restaurants WHERE name ILIKE '%Burguer King%' LIMIT 1;
+Target: SELECT _id, name, location, summary(reviews) FROM restaurants WHERE name = 'Burguer King' LIMIT 1;
 --
 {# Basic example for cuisine, and follow up with restaurant names #}
 User: what are some good-reviewed japanese restaurants in downtown Kansas City?
