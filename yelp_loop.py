@@ -25,6 +25,8 @@ from pglast import parse_sql
 from pglast.stream import RawStream
 from decimal import Decimal
 import chainlit as cl
+import math
+
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from prompt_continuation import llm_generate, async_generate_chainlit
@@ -181,6 +183,8 @@ async def generate_sql(dlgHistory, user_query):
     second_sql = first_sql.replace("\\'", "''")
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
+
+    second_sql = process_query(second_sql)
     
     return second_sql
 
@@ -277,7 +281,60 @@ async def compute_next_turn(
     
     return dlgHistory
 
-        
+
+def get_location_from_azure(query):
+
+    EARTH_RADIUS = 6371000  # meters
+    TOLERANCE = 1500  # meters
+
+    subscription_key = os.environ['AZURE_MAP_KEY']
+    # API endpoint
+    url = "https://atlas.microsoft.com/search/address/json"
+
+    # Parameters for the request
+    params = {
+        "subscription-key": subscription_key,
+        "api-version": "1.0",
+        "language": "en-US",
+        "query": query
+    }
+    # Sending the GET request
+    response = requests.get(url, params=params)
+
+    # Extracting the JSON response
+    response_json = response.json()
+
+    if response_json['results'][0]['type'] == 'Geography':
+        bbox = response_json['results'][0]['boundingBox']
+        latitude_north, longitude_west = bbox['topLeftPoint']['lat'], bbox['topLeftPoint']['lon']
+        latitude_south, longitude_east = bbox['btmRightPoint']['lat'], bbox['btmRightPoint']['lon']
+    else:
+        # get coords
+        coord = response_json['results'][0]['position']
+        longitude, latitude = coord['lon'], coord['lat']
+
+        # Get location range
+        delta_longitude = TOLERANCE / EARTH_RADIUS * 180 / math.pi
+        delta_latitude = TOLERANCE / (EARTH_RADIUS * math.cos(latitude / 180 * math.pi)) * 180 / math.pi
+
+        longitude_west = longitude - delta_longitude
+        longitude_east = longitude + delta_longitude
+        latitude_south = latitude - delta_latitude
+        latitude_north = latitude + delta_latitude
+
+    return longitude_west, longitude_east, latitude_south, latitude_north
+
+# Hack: using regex to change all location clauses
+def process_query(sql_query):
+    pattern = r"location\s*=\s*'([^']*)'"
+
+    def replacer(match):
+        location_string = match.group(1)
+        longitude_west, longitude_east, latitude_south, latitude_north = get_location_from_azure(location_string)
+        return f"longitude BETWEEN {longitude_west} AND {longitude_east} AND latitude BETWEEN {latitude_south} AND {latitude_north}"
+
+    return re.sub(pattern, replacer, sql_query)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
