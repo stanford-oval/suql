@@ -272,7 +272,10 @@ def if_usable_restaurants(field : str):
         
         # special internal fields
         "_score",
-        "_schematization_results"
+        "_schematization_results",
+        
+        # outdated location
+        "location"
         ]
     
     if field in NOT_USABLE_FIELDS:

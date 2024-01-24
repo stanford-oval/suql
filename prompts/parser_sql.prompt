@@ -7,7 +7,6 @@ CREATE TABLE restaurants (
     price ENUM ('cheap', 'moderate', 'expensive', 'luxury'),
     rating NUMERIC(2,1),
     num_reviews NUMBER,
-    address TEXT,
     popular_dishes FREE_TEXT,
     phone_number TEXT,
     reviews FREE_TEXT,
@@ -15,14 +14,15 @@ CREATE TABLE restaurants (
     location TEXT
 );
 
-Do not generate fields beyond the given fields. The `answer` function can be used on FREE_TEXT fields.
+Do not generate fields beyond the given fields. The `answer` function can be used on FREE_TEXT fields. 
+Use `location = 'some place'` to search restaurants that are geographically close, don't use other operations on the location field.
 
 {# Basic example #}
-User: Where is Wesley's Steakhouse?
-Target: SELECT _id, name, address, summary(reviews) FROM restaurants WHERE name ILIKE 'Wesley''s Steakhouse' LIMIT 1;
+User: Where is Burguer King?
+Target: SELECT _id, name, location, summary(reviews) FROM restaurants WHERE name = 'Wesley''s Steakhouse' LIMIT 1;
 --
 {# Basic example for cuisine, and follow up with restaurant names #}
-User: what are some good-reviewed japanese restaurants in Kansas City?
+User: what are some good-reviewed japanese restaurants in downtown Kansas City?
 Target: SELECT *, summary(reviews) FROM restaurants WHERE 'japanese' = ANY (cuisines) AND location = 'Kansas City' AND rating >= 4.0 LIMIT 3;
 Results: [{'_id': 76, 'name': 'Sakura Sushi'}, {'_id': 93, 'name': 'Nami Ramen'}, {'_id': 153, 'name': 'Kaze Teppanyaki'}]
 Agent: I found Sakura Sushi, Nami Ramen, and Kaze Teppanyaki.
@@ -38,8 +38,8 @@ User: What do the reviews say about the atmosphere in the restaurant?
 Target: SELECT answer(reviews, 'What is the atmosphere?') FROM restaurants WHERE _id = 1043 LIMIT 1;
 --
 {# Usage of `answer` function on popular_dishes #}
-User: Find me a place with pasta in Nashville.
-Target: SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does this restaurant serve pasta') = 'Yes' AND location = 'Nashville' LIMIT 1;
+User: Find me a place with pasta near Country Music Hall of Fame, Nashville.
+Target: SELECT *, summary(reviews) FROM restaurants WHERE answer(popular_dishes, 'does this restaurant serve pasta') = 'Yes' AND location = 'Country Music Hall of Fame, Nashville' LIMIT 1;
 --
 {# Usage of `answer` function on reviews #}
 User: I love Chinese food. Find me a restaurant that doesn't have a long wait time.
@@ -54,8 +54,8 @@ User: Give me the review that talk about good food quality.
 Target: SELECT single_review FROM restaurants AS r, unnest(reviews) AS single_review WHERE _id = 2731 AND answer(single_review, 'does this review mention good food quality?') = 'Yes' AND r.location = 'Napa, CA' LIMIT 1;
 --
 {# Usage of `answer` function on reviews #}
-User: Which restaurants have a happy hour in Bakersfield?
-Target: SELECT *, summary(reviews), answer(reviews, 'what is the happy hour here?') FROM restaurants WHERE location = 'Bakersfield' AND answer(reviews, 'does this restaurant have a happy hour?') = 'Yes' LIMIT 1;
+User: Which restaurants have a happy hour near 1017 Oak St, Bakersfield, CA 93304?
+Target: SELECT *, summary(reviews), answer(reviews, 'what is the happy hour here?') FROM restaurants WHERE location = '1017 Oak St, Bakersfield, CA 93304' AND answer(reviews, 'does this restaurant have a happy hour?') = 'Yes' LIMIT 1;
 --
 {# Usage of `answer` function on reviews #}
 User: i'm hungry, what should i have for lunch? I am looking for salmon in Chicago.
