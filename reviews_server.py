@@ -11,7 +11,7 @@ from tqdm import tqdm
 import hashlib
 from functools import reduce
 import operator
-from utils import num_tokens_from_string
+from utils import num_tokens_from_string, handle_opening_hours
 import re
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
@@ -108,10 +108,10 @@ def get_hours_request_extracted(hours_request):
 
 def get_restaurant_hours_extracted(restaurant_hours):
     restaurant_hours = json.loads(restaurant_hours)
-    restaurant_hours = utils.handle_opening_hours(hours)
+    restaurant_hours = handle_opening_hours(restaurant_hours)
     restaurant_hours_extracted = [] 
     for hours in restaurant_hours:
-        hours_tokenized= re.split("open from | to | on ", hours)
+        hours_tokenized = re.split("open from | to | on ", hours)
         _, start, end, day = hours_tokenized
         days = {"Monday":0, "Tuesday":1, "Wednesday":2, 
                 "Thursday":3, "Friday":4, "Saturday":5, 
