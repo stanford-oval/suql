@@ -93,4 +93,4 @@ response = requests.post(url=URL, data=json.dumps({
 response.raise_for_status()  # Raise an exception if the request was not successful
 parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
 return parsed_result["result"]
-$function$
+$function$;
