@@ -108,6 +108,7 @@ def get_hours_request_extracted(hours_request):
 
 def get_restaurant_hours_extracted(restaurant_hours):
     restaurant_hours = json.loads(restaurant_hours)
+    restaurant_hours = utils.handle_opening_hours(hours)
     restaurant_hours_extracted = [] 
     for hours in restaurant_hours:
         hours_tokenized= re.split("open from | to | on ", hours)
