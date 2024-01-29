@@ -180,13 +180,15 @@ async def generate_sql(dlgHistory, user_query):
             temperature=0,
             stop=["Agent:"])
     
-    second_sql = first_sql.replace("\\'", "''")
-    if not ("LIMIT" in second_sql):
-        second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
+    first_sql = first_sql.replace("\\'", "''")
+    if not ("LIMIT" in first_sql):
+        first_sql = re.sub(r';$', ' LIMIT 3;', first_sql, flags=re.MULTILINE)
 
-    second_sql = process_query(second_sql)
+    location_sql = process_query(first_sql)
+    step.output = location_sql
+    await step.update()
     
-    return second_sql
+    return first_sql, location_sql
 
 async def execute_sql(sql):
     suql_execute_start_time = time.time()
@@ -228,8 +230,8 @@ async def compute_next_turn(
                                 max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
 
     if continuation.startswith("Yes"):
-        first_sql = await generate_sql(dlgHistory, user_utterance)
-        results, suql_execution_time, results_for_ned = await execute_sql(first_sql)
+        first_sql, location_sql = await generate_sql(dlgHistory, user_utterance)
+        results, suql_execution_time, results_for_ned = await execute_sql(location_sql)
         dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
         dlgHistory[-1].user_target = first_sql
         dlgHistory[-1].temp_target = ""
