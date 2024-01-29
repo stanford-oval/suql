@@ -25,8 +25,8 @@ from pglast import parse_sql
 from pglast.stream import RawStream
 from decimal import Decimal
 import math
-
-
+import prompt_continuation, openai
+from prompt_continuation import openai_chat_completion_with_backoff
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from prompt_continuation import llm_generate, batch_llm_generate
 
@@ -160,9 +160,8 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
 
     if not ("LIMIT" in second_sql):
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
-
     second_sql = process_query(second_sql)
-    
+    second_sql = process_query2(second_sql)
     final_res, column_names, cache = suql_execute(second_sql, fts_fields=[("restaurants", "name")])
     results_for_ned = extract_id_name(final_res, column_names)
     final_res = clean_up_response(final_res, column_names)
@@ -273,17 +272,37 @@ def get_location_from_azure(query):
 
     return longitude_west, longitude_east, latitude_south, latitude_north
 
-# Hack: using regex to change all location clauses
+def convert_opening_hours_query(opening_hours_query):
+    prompt = "You are a parser for turning natural language descriptions of time intervals in a week into the format [day].[starting_hour].[starting_minute].[ending_hour].[ending_minute].\n"
+    prompt += "The days of the week are 0-indexed with Monday = 0, Tuesday = 1 ... Saturday = 5, Sunday = 6, and the hour.minute representations are between 0.0 and 23.59.\n"
+    prompt += "Multiple intervals are demarcated with the hyphen '-', and if no particular day is specified, then you must generate the intervals for every day in the week.\n"
+    prompt += "Here is an example:\n USER_QUERY: after 2pm on Monday\n TRANSLATION: 0.14.0.23.59\n"
+    prompt += "Here is another example: \n USER_QUERY: between 7am and 2pm on Tuesday and Wednesday\n TRANSLATION: 1.7.0.14.0-2.7.0.14.0\n"
+    prompt += "Here is another example:\n USER_QUERY: before 4am\n TRANSLATION: 0.0.0.3.59-1.0.0.3.59-2.0.0.3.59-3.0.0.3.59-4.0.0.3.59-5.0.0.3.59-6.0.0.3.59\n"
+    prompt += "Here is another example:\n USER_QUERY: after 3pm\n TRANSLATION: 0.15.0.23.59-1.15.0.23.59-2.15.0.23.59-3.15.0.23.59-4.15.0.23.59-5.15.0.23.59-6.15.0.23.59\n"
+    prompt += "Now it is your turn to generate the translation: USERY_QUERY " + opening_hours_query + "\n TRANSLATION: "
+    messages = [{"role":"system","content":prompt}]
+    response = openai.OpenAI().chat.completions.create(**{"messages":messages, "model":"gpt-3.5-turbo-0613"}).choices[0].message.content 
+    print(response)
+    return response
+# Hack: using regex to change all location clauses and opening_hours clauses
 def process_query(sql_query):
+    print("entered1")
     pattern = r"location\s*=\s*'([^']*)'"
-
     def replacer(match):
         location_string = match.group(1)
         longitude_west, longitude_east, latitude_south, latitude_north = get_location_from_azure(location_string)
         return f"longitude BETWEEN {longitude_west} AND {longitude_east} AND latitude BETWEEN {latitude_south} AND {latitude_north}"
 
     return re.sub(pattern, replacer, sql_query)
-
+def process_query2(sql_query): 
+    print("entered2")
+    pattern = r"'([^']*)'\s*=\s*ANY\(CAST opening_hours AS ARRAY\)"
+    def replacer(match):
+        opening_hours_query = match.group(0).split(" = ")[0]
+        opening_hours_translated = convert_opening_hours_query(opening_hours_query) 
+        return "search_by_opening_hours( \"opening_hours\", " + opening_hours_translated + ")" 
+    return re.sub(pattern, replacer, sql_query)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

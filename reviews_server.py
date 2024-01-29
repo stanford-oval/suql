@@ -12,7 +12,7 @@ import hashlib
 from functools import reduce
 import operator
 from utils import num_tokens_from_string
-
+import re
 cuda_ok = torch.cuda.is_available()
 model = AutoModel.from_pretrained("OpenMatch/cocodr-base-msmarco")
 if cuda_ok:
@@ -89,6 +89,70 @@ def answer():
     }
     print(res)
     return res
+       
+def search_by_opening_hours():
+    data = request.get_json()
+    restaurant_hours = data["opening_hours"]
+    hours_request = data["opening_hours_request"]
+    result = opening_hours_match(restaurant_hours, hours_request)
+    return {"result": result}
+
+def get_hours_request_extracted(hours_request):
+    intervals = hours_request.split("-")
+    hours_request_extracted = [[int(y) for y in x.split(".")] for x in intervals]
+    print(hours_request_extracted)
+    return hours_request_extracted
+
+def get_restaurant_hours_extracted(restaurant_hours):
+    restaurant_hours = json.loads(restaurant_hours)
+    restaurant_hours_extracted = [] 
+    for hours in restaurant_hours:
+        hours_tokenized= re.split("open from | to | on ", hours)
+        _, start, end, day = hours_tokenized
+        days = {"Monday":0, "Tuesday":1, "Wednesday":2, 
+                "Thursday":3, "Friday":4, "Saturday":5, 
+                "Sunday":6}
+        day = int(days[day])
+        end = [int(end[:2]), int(end[2:])]
+        start = [int(start[:2]), int(start[2:])] 
+        hours_extracted = []
+        if end[0] <= start[0]:
+            hours_extracted = [day] + [start[0], start[1]] + [23, 59]
+            restaurant_hours_extracted.append(hours_extracted)
+            hours_extracted = [(day + 1) % 7] + [0,0] + [end[0], end[1]] 
+            restaurant_hours_extracted.append(hours_extracted)
+        else:
+            hours_extracted = [day] + start + end 
+        restaurant_hours_extracted.append(hours_extracted)
+    return restaurant_hours_extracted
+
+def hours_intersect(restaurant_hours, hours_request):
+    day_1, sh_1, sm_1, eh_1, em_1 = restaurant_hours
+    day_2, sh_2, sm_2, eh_2, em_2 = hours_request
+
+    if day_1 != day_2: 
+        return False
+    
+    ts_1, te_1 = sh_1*60 + sm_1, eh_1*60 + em_1
+    ts_2, te_2 = sh_2*60 + sm_2, eh_2*60 + em_2
+    
+
+    if te_1 < ts_2 or te_2 < ts_1:
+        return False
+
+    return True
+
+def opening_hours_match(restaurant_opening_hours, opening_hours_request):
+    if restaurant_opening_hours == None:
+        return False
+    restaurant_hours_extracted = get_restaurant_hours_extracted(restaurant_opening_hours)
+    hours_request_extracted = get_hours_request_extracted(opening_hours_request)
+    print(restaurant_hours_extracted, hours_request_extracted)
+    for hours_request in hours_request_extracted:
+        for restaurant_hours in restaurant_hours_extracted:
+            if hours_intersect(restaurant_hours, hours_request):
+                return True
+
 
 @app.route('/summary', methods=['POST'])
 def summary():

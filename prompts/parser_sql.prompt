@@ -65,6 +65,15 @@ Agent: I found the 4.5 star Daigo. It is a family-owned business that serves tra
 User: Show me something else.
 Target: SELECT *, summary(reviews) FROM restaurants WHERE NOT(_id = 53) AND answer(popular_dishes, 'does this restaurant serve salmon?') = 'Yes' AND location = 'Chicago' LIMIT 1;
 --
+{# How to search by opening hours #}
+User: What restaurants are open after 2pm on Monday?
+Target: SELECT * FROM restaurants WHERE 'after 2pm on Monday' = ANY(CAST opening_hours AS ARRAY);
+__
+{# How to search by opening hours - segments #}
+User: restaurants open after 3am and before 7am on Monday?
+Target: SELECT * FROM restaurants WHERE 'after 3am and before 7am on Monday' = ANY(CAST opening_hours AS ARRAY);
+__
+
 {% for dlg_turn in dlg[:-1] %}
 {% if dlg_turn.genie_utterance is not none %}
 User: {{ dlg_turn.user_utterance }}
