@@ -152,16 +152,14 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
                 temperature=0,
                 prompt_parameter_values={'dlg': dlgHistory, 'query': user_query},
                 postprocess=False)
-    second_sql = first_sql.replace("\\'", "''")
-    
-    print("directly generated SUQL query: {}".format(second_sql))
-    
+    print("directly generated SUQL query: {}".format(first_sql))
     second_sql_start_time = time.time()
+    
+    first_sql = first_sql.replace("\\'", "''")
+    if not ("LIMIT" in first_sql):
+        first_sql = re.sub(r';$', ' LIMIT 3;', first_sql, flags=re.MULTILINE)
 
-    if not ("LIMIT" in second_sql):
-        second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
-
-    second_sql = process_query(second_sql)
+    second_sql = process_query(first_sql)
     
     final_res, column_names, cache = suql_execute(second_sql, fts_fields=[("restaurants", "name")])
     results_for_ned = extract_id_name(final_res, column_names)
