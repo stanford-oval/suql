@@ -77,7 +77,7 @@ def answer():
     continuation, _ = llm_generate(
         'prompts/review_qa.prompt',
         {'reviews': text_res, 'question': data["question"], "type_prompt": type_prompt},
-        engine='gpt-4-1106-preview',
+        engine='gpt-3.5-turbo-0613',
         max_tokens=200,
         temperature=0.0,
         stop_tokens=['\n'],
@@ -174,7 +174,8 @@ def _compute_single_embedding_with_mapping(documents, question, chunking_param=1
         if not cache_results:
             chunked_documents = chunk_text(document, k=chunking_param, use_spacy=True)
             inputs = tokenizer(chunked_documents, padding=True, truncation=True, return_tensors="pt").to(device)
-            embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
+            with torch.no_grad():  # Disables gradient calculation to save memory
+                embeddings = model(**inputs, output_hidden_states=True, return_dict=True).hidden_states[-1][:, :1].squeeze(1).to(device)  # the embedding of the [CLS] token after the final layer
             cache_db.insert_one({
                 "_id": document_hash,
                 "embeddings": embeddings.tolist()
