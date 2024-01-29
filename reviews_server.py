@@ -90,10 +90,13 @@ def answer():
     print(res)
     return res
        
+@app.route('/search_by_opening_hours', methods=['POST'])
 def search_by_opening_hours():
     data = request.get_json()
     restaurant_hours = data["opening_hours"]
     hours_request = data["opening_hours_request"]
+    print("RET_HOURS", restaurant_hours)
+    print("RES_REQ", hours_request)
     result = opening_hours_match(restaurant_hours, hours_request)
     return {"result": result}
 

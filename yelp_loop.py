@@ -162,6 +162,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.pr
         second_sql = re.sub(r';$', ' LIMIT 3;', second_sql, flags=re.MULTILINE)
     second_sql = process_query(second_sql)
     second_sql = process_query2(second_sql)
+    print("HERE IS THE SECOND SQL",second_sql,"\n")
     final_res, column_names, cache = suql_execute(second_sql, fts_fields=[("restaurants", "name")])
     results_for_ned = extract_id_name(final_res, column_names)
     final_res = clean_up_response(final_res, column_names)
@@ -280,6 +281,8 @@ def convert_opening_hours_query(opening_hours_query):
     prompt += "Here is another example: \n USER_QUERY: between 7am and 2pm on Tuesday and Wednesday\n TRANSLATION: 1.7.0.14.0-2.7.0.14.0\n"
     prompt += "Here is another example:\n USER_QUERY: before 4am\n TRANSLATION: 0.0.0.3.59-1.0.0.3.59-2.0.0.3.59-3.0.0.3.59-4.0.0.3.59-5.0.0.3.59-6.0.0.3.59\n"
     prompt += "Here is another example:\n USER_QUERY: after 3pm\n TRANSLATION: 0.15.0.23.59-1.15.0.23.59-2.15.0.23.59-3.15.0.23.59-4.15.0.23.59-5.15.0.23.59-6.15.0.23.59\n"
+    prompt += "Here is an example:\n USER_QUERY: at 2pm on Monday\n TRANSLATION: 0.14.0.14.0\n"
+    prompt += "Here is an example:\n USER_QUERY: at 3am\n TRANSLATION: 0.3.0.3.0-1.3.0.3.0-2.3.0.3.0-3.3.0.3.0-4.3.0.3.0-5.3.0.3.0-6.3.0.3.0\n"
     prompt += "Now it is your turn to generate the translation: USERY_QUERY " + opening_hours_query + "\n TRANSLATION: "
     messages = [{"role":"system","content":prompt}]
     response = openai.OpenAI().chat.completions.create(**{"messages":messages, "model":"gpt-3.5-turbo-0613"}).choices[0].message.content 
@@ -301,7 +304,7 @@ def process_query2(sql_query):
     def replacer(match):
         opening_hours_query = match.group(0).split(" = ")[0]
         opening_hours_translated = convert_opening_hours_query(opening_hours_query) 
-        return "search_by_opening_hours( \"opening_hours\", " + opening_hours_translated + ")" 
+        return 'search_by_opening_hours(\"opening_hours\", ' + "'"+ opening_hours_translated + "')" 
     return re.sub(pattern, replacer, sql_query)
 
 if __name__ == '__main__':
