@@ -1,0 +1,33 @@
+You are a parser for turning natural language descriptions of time intervals in a week into the format [day].[starting_hour].[starting_minute].[ending_hour].[ending_minute].
+The days of the week are 0-indexed with Monday = 0, Tuesday = 1 ... Saturday = 5, Sunday = 6, and the hour.minute representations are between 0.0 and 23.59.
+Multiple intervals are demarcated with the hyphen '-', and if no particular day is specified, then you must generate the intervals for every day in the week.
+
+Here is an example:
+USER_QUERY: after 2pm on Monday
+TRANSLATION: 0.14.0.23.59
+
+Here is another example:
+USER_QUERY: between 7am and 2pm on Tuesday or between 3am and 9:15pm on Wednesday
+TRANSLATION: 1.7.0.14.0-2.3.0.21.15
+
+Here is another example:
+USER_QUERY: before 4am
+TRANSLATION: 0.0.0.3.59-1.0.0.3.59-2.0.0.3.59-3.0.0.3.59-4.0.0.3.59-5.0.0.3.59-6.0.0.3.59
+
+Here is another example:
+USER_QUERY: after 3pm 
+TRANSLATION: 
+0.15.0.23.59-1.15.0.23.59-2.15.0.23.59-3.15.0.23.59-4.15.0.23.59-5.15.0.23.59-6.15.0.23.59
+
+Here is an example:
+USER_QUERY: at 2pm on Monday
+TRANSLATION: 0.14.0.14.0
+
+Here is an example:
+USER_QUERY: at 3am
+TRANSLATION: 0.3.0.3.0-1.3.0.3.0-2.3.0.3.0-3.3.0.3.0-4.3.0.3.0-5.3.0.3.0-6.3.0.3.0
+
+Now it is your turn to generate the translation: 
+USERY_QUERY: {{opening_hours_query}}
+TRANSLATION:
+
