@@ -26,8 +26,8 @@ from pglast.stream import RawStream
 from decimal import Decimal
 import chainlit as cl
 import math
-
-
+import prompt_continuation, openai
+from prompt_continuation import openai_chat_completion_with_backoff
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from prompt_continuation import llm_generate, async_generate_chainlit
 
@@ -184,11 +184,12 @@ async def generate_sql(dlgHistory, user_query):
     if not ("LIMIT" in first_sql):
         first_sql = re.sub(r';$', ' LIMIT 3;', first_sql, flags=re.MULTILINE)
 
-    location_sql = process_query(first_sql)
-    step.output = location_sql
+    second_sql = process_query(first_sql)
+    second_sql = process_query_opening_hours(second_sql)
+    step.output = second_sql
     await step.update()
     
-    return first_sql, location_sql
+    return first_sql, second_sql
 
 async def execute_sql(sql):
     suql_execute_start_time = time.time()
@@ -326,17 +327,34 @@ def get_location_from_azure(query):
 
     return longitude_west, longitude_east, latitude_south, latitude_north
 
-# Hack: using regex to change all location clauses
+def convert_opening_hours_query(opening_hours_query):
+    response, _ = prompt_continuation.llm_generate(
+        'prompts/opening_hours.prompt',
+        {'opening_hours_query': opening_hours_query},
+        engine='gpt-3.5-turbo-0613',
+        max_tokens=200,
+        temperature=0.0,
+        stop_tokens=['\n'],
+        postprocess=False
+    )
+    return response
+# Hack: using regex to change all location clauses and opening_hours clauses
 def process_query(sql_query):
+    print("entered1")
     pattern = r"location\s*=\s*'([^']*)'"
-
     def replacer(match):
         location_string = match.group(1)
         longitude_west, longitude_east, latitude_south, latitude_north = get_location_from_azure(location_string)
         return f"longitude BETWEEN {longitude_west} AND {longitude_east} AND latitude BETWEEN {latitude_south} AND {latitude_north}"
 
     return re.sub(pattern, replacer, sql_query)
-
+def process_query_opening_hours(sql_query): 
+    pattern = r"'([^']*)'\s*=\s*ANY\(CAST opening_hours AS ARRAY\)"
+    def replacer(match):
+        opening_hours_query = match.group(0).split(" = ")[0]
+        opening_hours_translated = convert_opening_hours_query(opening_hours_query) 
+        return 'search_by_opening_hours(\"opening_hours\", ' + "'"+ opening_hours_translated + "')" 
+    return re.sub(pattern, replacer, sql_query)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
