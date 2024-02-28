@@ -292,14 +292,19 @@ def verify(document, field, query, operator, value):
     if (document, field, query, operator, value) in verified_res:
         return verified_res[(document, field, query, operator, value)]
     
+    # construct the answer part
+    if operator == "=":
+        answer = value
+    else:
+        answer = operator + " " + value
+    
     res = llm_generate(
         template_file='prompts/verification.prompt',
         prompt_parameter_values={
             "document": document,
             "field": field[1], # field is a tuple (table_name, field_name)
             "query": query,
-            "operator": operator,
-            "value": '"{}"'.format(value) if type(value) == str else value
+            "answer": answer
         },
         engine=MODEL,
         temperature=0,
@@ -307,7 +312,7 @@ def verify(document, field, query, operator, value):
         max_tokens=30,
         postprocess=False)[0]
     
-    if "the output is correct" in res.lower():
+    if "the answer is correct" in res.lower():
         res = True
     else:
         res = False
