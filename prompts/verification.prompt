@@ -1,11 +1,17 @@
-`answer(document, query)` takes in a document and a query. It asks `query` on `document` and outputs the answer.
+Here is a question:
 
-Now, let's look at this use case. Your task is to determine whether the output is correct.
+"{{ query }}"
 
-answer({{ field }}, "{{ query }}") {{ operator }} {{ value }}
+Here is a document:
 
-{{ field }} = ["{{ document }}"]
+["{{ document }}"]
+
+Here is my answer:
+
+{{ answer }}
+
+Is my answer correct?
 
 Choose from one of the following choices:
-- the output is correct.
-- the output is incorrect.
+- the answer is correct.
+- the answer is incorrect.
