@@ -44,7 +44,7 @@ Here is a rough breakdown of what you need to do to set up SUQL on your domain:
 
 2. Write a semantic parser prompt, and substitute `prompts/parser_sql.prompt` with it. Include examples of how to use the `answer` function.
 
-3. Set up an embedding server for the SUQL compiler to query. Go to `sql_free_text_support/embedding_support.py`, and modify the lines of the form `embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="popular_dishes", db_name="restaurants")` to match your database with its column names. For instance, this line specifies the SUQL compiler to set up an embedding server for the `restaurants` database, which has `_id` column as the unique row identifier, for the `popular_dishes` and `reviews` columns (these columns need to be of type `TEXT` or `TEXT[]`) under table `restaurants`. By default, this will be set up on port 8509, which is then called by `execute_free_text_sql`. In case you need to use another port, please change both addresses. Note that this embedding server uses a mongodb to cache embedding results. Please follow https://www.mongodb.com/docs/manual/installation/ for your OS.
+3. Set up an embedding server for the SUQL compiler to query. Go to `sql_free_text_support/faiss_embedding.py`, and modify the lines of the form `embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="popular_dishes", db_name="restaurants")` to match your database with its column names. For instance, this line specifies the SUQL compiler to set up an embedding server for the `restaurants` database, which has `_id` column as the unique row identifier, for the `popular_dishes` and `reviews` columns (these columns need to be of type `TEXT` or `TEXT[]`) under table `restaurants`. By default, this will be set up on port 8509, which is then called by `execute_free_text_sql`. In case you need to use another port, please change both addresses.
 
 4. In the command line for your database, copy and paste all content under `custom_functions.sql`. This will define the `answer` and `summary` functions under your PostgreSQL database.
 
@@ -72,18 +72,3 @@ if max_wait_time is None:
 This says that if a call to `llm_generate` does not set a `max_wait_time`, then it is dynamically calculated based on this linear function of `total_token`. This is imperfect, and we are erroring on the side of waiting longer (e.g., for an input with `1000` tokens, this would wait for 6 seconds, which might be too long). You can set a custom wait time, or disable this feature or together by setting `attempts = 0`.
 
 3. The SUQL compiler right now uses the special character `^` when handling certain join-related optimizations. Please do not include this character `^` in your column names. (This restriction could be lifted in the future.)
-
-# Update Log
-
-- 1/2/24 updates. This is a breaking update. Please follow instructions in bold:
-    - Modification of the `answer` function with basic type information (number + date). Addition of the new `try_cast` function. **To update it, go to your PSQL database, and do:**
-    ```
-    DROP FUNCTION answer (source TEXT[], question TEXT);
-    DROP FUNCTION answer (source TEXT, question TEXT);
-    ```
-    **Afterwards, copy the functions in `custom_functions.sql` to the PSQL command line and paste there.** (This is still work in progress to support complicated types).
-    - **Restart `reviews_server.py`**
-    - Support for `JOIN` statements in the SUQL compiler. This also involves changes to `sql_free_text_support/embedding_support.py`. **Please re-start the embedding server. The added field is the `db_name` field.**
-    - Added `prompt_cache_db` in `prompt_continuation.py` file, which automatically caches all SUQL-initiated LLM calls in a local MongoDB to save cost + improve latency.
-    - The new entry point to the SUQL execution is a function called `suql_execute`. No more `SelectVisitor` needed.
-    - Other minor changes, e.g. deleted `engine` from `yelp_loop.py` entry point (model is specified within each file now). Deleted `sys_type` and a few other unused args from `yelp_loop.py` entry point.

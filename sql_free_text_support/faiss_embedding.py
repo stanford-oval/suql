@@ -8,22 +8,63 @@ import torch
 from flask import request, Flask
 # Append parent directory to sys.path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from reviews_server import compute_sha256, _compute_single_embedding
+from utils import chunk_text
 from postgresql_connection import execute_sql
 from collections import OrderedDict
+import numpy as np
+import faiss
+from functools import reduce
+import operator
+from FlagEmbedding import FlagModel
+import hashlib
+
 
 cuda_ok = torch.cuda.is_available()
 if cuda_ok:
     device = torch.device("cuda")
     
 client = pymongo.MongoClient('localhost', 27017)
-cache_db = client['free_text_cache']['hash_to_embeddings']
+# change this line for custom embedding model
+cache_db = client['free_text_cache']['hash_to_embeddings_bge_large_en_v1.5']
 
 # Set the server address
 host = "127.0.0.1"
 port = 8509
 embedding_server_address = 'http://{}:{}'.format(host, port)
 app = Flask(__name__)
+
+# change this line for custom embedding model
+# embedding model output dimension
+EMBEDDING_DIMENSION = 1024
+
+# number of rows to consider for multi-column operations
+MULTIPLE_COLUMN_SEL = 1000
+
+def compute_sha256(text):
+    return hashlib.sha256(text.encode()).hexdigest()
+
+# currently using https://huggingface.co/BAAI/bge-large-en-v1.5
+# change this line for custom embedding model
+model = FlagModel('BAAI/bge-large-en-v1.5', 
+    query_instruction_for_retrieval="Represent this sentence for searching relevant passages:",
+    use_fp16=True) # Setting use_fp16 to True speeds up computation with a slight performance degradation
+
+def embed_query(query):
+    """
+        Embed a query for dot product matching
+    """
+    # change this line for custom embedding model
+    q_embedding = model.encode_queries([query])
+    return q_embedding
+
+def embed_documents(documents):
+    """
+        Embed a list of docuemnts to store in vector store
+    """
+    # change this line for custom embedding model
+    embeddings = model.encode(documents)
+    return embeddings
+    
 
 # A set that also preserves insertion order
 class OrderedSet:
@@ -63,7 +104,7 @@ def construct_reverse_dict(res_individual_id, id_list):
     return res
 
 class EmbeddingStore():
-    def __init__(self, table_name, primary_key_field_name, free_text_field_name, db_name="") -> None:
+    def __init__(self, table_name, primary_key_field_name, free_text_field_name, db_name="", chunking_param=0) -> None:
         # stores three lists:
         # 1. PSQL primary key for each row
         # 2. list of strings in this field
@@ -71,6 +112,8 @@ class EmbeddingStore():
         self.psql_row_ids = []
         self.all_free_text = []
         self.embeddings = None
+        self.chunking_param = chunking_param
+        self.chunked_text = []
 
         # stores a table for bidirectional mapping (for each PSQL table and free text field) between
         # PSQL row ID <-> corresponding indexs for strings <-> corresponding embeddings stored on GPU
@@ -91,7 +134,9 @@ class EmbeddingStore():
         
         print("initializing storage and mapping for {} <-> {}".format(primary_key_field_name, free_text_field_name))
         document_counter = 0
-        for id, free_texts in res:
+        embedding_counter = 0
+        
+        for id, free_texts in tqdm(res):
             self.psql_row_ids.append(id)
             if free_texts is None:
                 free_texts = ""
@@ -105,53 +150,26 @@ class EmbeddingStore():
                 for num in range(document_counter, document_counter + len(free_texts)):
                     self.document2id[num] = id
                 
-                document_counter += len(free_texts)
+                # chunk the text and prepare the two mappings
+                for document in free_texts:
+                    chunked_text = chunk_text(document, k=self.chunking_param, use_spacy=True)
+                    document_embedding_len = len(chunked_text)
+                    self.chunked_text.extend(chunked_text)
+                    self.document2embedding[document_counter] = [num for num in range(embedding_counter, embedding_counter + document_embedding_len)]
+                    for num in range(embedding_counter, embedding_counter + document_embedding_len):
+                        self.embedding2document[num] = document_counter
+                    embedding_counter += document_embedding_len
+                    document_counter += 1
                 
             else:
-                # TODO handle easier cases with only one string as opposed to a list
-                raise ValueError()
+                raise ValueError("Expecting type Str")
 
     def initialize_embedding(self):
-        current_counter = 0
-        
         print("initializing embeddings for all documents")
-        for i, document in tqdm(list(enumerate(self.all_free_text))):
-            found_res = cache_db.find_one({"_id": compute_sha256(document)})
-            if found_res:
-                document_embeddings = found_res["embeddings"]
-                document_embeddings = torch.tensor(document_embeddings, device=device)
-            else:
-                document_embeddings = _compute_single_embedding([document])
-            
-            # initialize the first `existing_documents`
-            if current_counter == 0:
-                existing_embeddings = document_embeddings
-            else:
-                existing_embeddings = torch.cat((existing_embeddings, document_embeddings), dim=0)
+        self.embeddings = faiss.IndexFlatIP(EMBEDDING_DIMENSION)
+        self.embeddings.add(embed_documents(self.chunked_text))
 
-            # stores the bidirectional mapping
-            self.document2embedding[i] = [num for num in range(current_counter, current_counter + document_embeddings.size(0))]
-            for num in range(current_counter, current_counter + document_embeddings.size(0)):
-                self.embedding2document[num] = i
-                
-            current_counter += document_embeddings.size(0)
         
-        self.embeddings = existing_embeddings
-        torch.cuda.empty_cache()
-        
-        # Calculate memory
-        memory_bytes = self.embeddings.element_size() * self.embeddings.nelement()
-
-        # Convert to a human-readable format and print
-        if memory_bytes < 1024:
-            print(f"embedding initialized and now using {memory_bytes} bytes")
-        elif memory_bytes < 1024 ** 2:
-            print(f"embedding initialized and now using {memory_bytes / 1024:.2f} KB")
-        elif memory_bytes < 1024 ** 3:
-            print(f"embedding initialized and now using {memory_bytes / (1024 ** 2):.2f} MB")
-        else:
-            print(f"embedding initialized and now using {memory_bytes / (1024 ** 3):.2f} GB")
-    
     def dot_product(self, id_list, query, top, individual_id_list=[]):
         # given a list of id and a particular query, return the top ids and documents according to similarity score ranking
         
@@ -161,13 +179,12 @@ class EmbeddingStore():
             document_indices = [item for sublist in map(lambda x: self.id2document[x], individual_id_list) for item in sublist]
         embedding_indices = [item for sublist in map(lambda x: self.document2embedding[x], document_indices) for item in sublist]
         
-        # chunking param = 0 makes sure that we don't chunk the query
-        query_embedding = _compute_single_embedding([query], chunking_param=0)[0]
+        query_embedding = embed_query(query)
         
-        dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device='cuda')] * query_embedding, dim=1)
+        sel = faiss.IDSelectorBatch(embedding_indices)
+        D, I = self.embeddings.search(query_embedding, top, params=faiss.SearchParametersIVF(sel = sel))
 
-        indices_max = torch.argsort(dot_products, descending=True)
-        embeddings_indices_max = [embedding_indices[index] for index in indices_max.tolist()]
+        embeddings_indices_max = I[0]
         
         # append the top documents as result
         # there exists repeated documents when mapping embedding_indices_max directly to document_id
@@ -191,37 +208,33 @@ class EmbeddingStore():
             return [(reverse_dict[self.document2id[index]], [self.all_free_text[index]]) for index in res_document_ids]
 
     def dot_product_with_value(self, id_list, query, individual_id_list=[]):
-        # when joins are invovled, a new id field will be created, stored in id_list
-        # individual_id_list instead would store the corresponding column-specific id for this predicate
         if individual_id_list == []:
             individual_id_list = id_list
-        
+        print(individual_id_list)
         document_indices = [item for sublist in map(lambda x: self.id2document[x], individual_id_list) for item in sublist]
         embedding_indices = [item for sublist in map(lambda x: self.document2embedding[x], document_indices) for item in sublist]
+        print(embedding_indices)
     
         # chunking param = 0 makes sure that we don't chunk the query
-        query_embedding = _compute_single_embedding([query], chunking_param=0)[0]
-        dot_products = torch.sum(self.embeddings[torch.tensor(embedding_indices, device='cuda')] * query_embedding, dim=1)
+        # this is actually a 2-D array, matching what faiss expects
+        query_embedding = embed_query(query)
         
-        # for each id, we would do a sorting based on each retrieval score
-        # to determine the top similarity score for each id, and based on which document
-        counter = 0
-        res = []
-        for id, individual_id in zip(id_list, individual_id_list):
-            # this records the embedding indices for a given id
-            id_embedding_indices = [item for sublist in map(lambda x: self.document2embedding[x], self.id2document[individual_id]) for item in sublist]
-            # this gets the top value and index of similarity score based on the big `dot_products` matrix
-            # remember, index here is with respect to the id_embedding_indices above
-            if not id_embedding_indices:
-                top_value = -1
-                top_document = ""
-            else:
-                top_value, top_index = torch.topk(dot_products[torch.tensor(list(range(counter, counter + len(id_embedding_indices))))], 1)
-                # getting the actual document requires going from top_index to actual embedding index to document index
-                top_document = self.all_free_text[self.embedding2document[id_embedding_indices[top_index]]]
-                counter += len(id_embedding_indices)
-            res.append((id, top_value, top_document))
+        sel = faiss.IDSelectorBatch(embedding_indices)
+        D, I = self.embeddings.search(query_embedding, MULTIPLE_COLUMN_SEL, params=faiss.SearchParametersIVF(sel = sel))
+        print(D)
+        print(I)
+        embedding_indices = I[0]
+        dot_products = D[0]
         
+        # when joins are invovled, a new id field will be created, stored in id_list
+        # individual_id_list instead would store the corresponding column-specific id for this predicate
+        # so, first build a mapping from `individual_id_list` to `id_list`
+        if individual_id_list:
+            individual2id_list_mapping = construct_reverse_dict(individual_id_list, id_list)
+            res = [(individual_id, dot_product, [self.all_free_text[self.embedding2document[indice]]]) for indice, dot_product in zip(embedding_indices, dot_products) for individual_id in individual2id_list_mapping[self.document2id[self.embedding2document[indice]]]]
+        else:
+            res = [(self.document2id[self.embedding2document[indice]], dot_product, [self.all_free_text[self.embedding2document[indice]]]) for indice, dot_product in zip(embedding_indices, dot_products)]
+            
         return res
         
 
@@ -230,13 +243,13 @@ class MultipleEmbeddingStore():
         # table name -> free text field name -> EmbeddingStore
         self.mapping = {}
     
-    def add(self, table_name, primary_key_field_name, free_text_field_name, db_name):
+    def add(self, table_name, primary_key_field_name, free_text_field_name, db_name, chunking_param=0):
         if table_name in self.mapping and free_text_field_name in self.mapping[table_name]:
             print("Table {} for free text field {} already in storage. Negelecting...".format(table_name, free_text_field_name))
             return
         if table_name not in self.mapping:
             self.mapping[table_name] = {}
-        self.mapping[table_name][free_text_field_name] = EmbeddingStore(table_name, primary_key_field_name, free_text_field_name, db_name)
+        self.mapping[table_name][free_text_field_name] = EmbeddingStore(table_name, primary_key_field_name, free_text_field_name, db_name, chunking_param=chunking_param)
     
     def retrieve(self, table_name, free_text_field_name):
         return self.mapping[table_name][free_text_field_name]
@@ -246,6 +259,7 @@ class MultipleEmbeddingStore():
         if len(id_list) == 0:
             return []
         
+        # optimization for a single column - an easier case
         if len(field_query_list) == 1:
             free_text_field_table, free_text_field_name = field_query_list[0][0]
             query = field_query_list[0][1]
@@ -255,22 +269,22 @@ class MultipleEmbeddingStore():
             else:
                 return self.retrieve(free_text_field_table, free_text_field_name).dot_product(id_list["_id_join"], query, top, individual_id_list=id_list[free_text_field_table])
 
-        res = {}
+        res = []
         for free_text_field, query in field_query_list:
             free_text_field_table, free_text_field_name = free_text_field
             if single_table:
                 one_predicate_result = self.retrieve(free_text_field_table, free_text_field_name).dot_product_with_value(id_list, query)
             else:
                 one_predicate_result = self.retrieve(free_text_field_table, free_text_field_name).dot_product_with_value(id_list["_id_join"], query, individual_id_list=id_list[free_text_field_table])
-            for id, top_value, top_document in one_predicate_result:
-                if id not in res:
-                    res[id] = [top_value, [top_document]]
-                else:
-                    res[id][0] += top_value
-                    res[id][1].append(top_document)
-        
-        sorted_res = sorted(res.items(), key=lambda x: x[1][0], reverse=True)[:top]
-        return list(map(lambda x: (x[0], x[1][1]), sorted_res))
+            
+            # first time, simply overwrite res
+            if not res:
+                res = one_predicate_result
+            else:
+                res = [(x[0], x[1] + y[1], x[2] + y[2]) for x in res for y in one_predicate_result if x[0] == y[0]]
+            
+        sorted_res = sorted(res, key=lambda x: x[1], reverse=True)[:top]
+        return list(map(lambda x: (x[0], x[2]), sorted_res))
     
     def dot_product(self, data):
         res = self._dot_product(data["id_list"], data["field_query_list"], data["top"], data["single_table"])
@@ -287,8 +301,6 @@ def search():
 
 if __name__ == "__main__":
     embedding_store = MultipleEmbeddingStore()
-    embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="popular_dishes", db_name="restaurants")
     embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="reviews", db_name="restaurants")
-    embedding_store.add(table_name="courses", primary_key_field_name="course_id", free_text_field_name="description", db_name="course_assistants")
-    embedding_store.add(table_name="ratings", primary_key_field_name="rating_id", free_text_field_name="reviews", db_name="course_assistants")
+    embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="popular_dishes", db_name="restaurants")
     app.run(host=host, port=port)
