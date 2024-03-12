@@ -87,15 +87,15 @@ def compute_top_similarity_documents(documents, query, chunking_param=0, top=3):
     embeddings = faiss.IndexFlatIP(EMBEDDING_DIMENSION)
     embeddings.add(chunked_documents_embeddings)
     
-    _, I = embeddings.search(embed_query(query), top=len(chunked_documents_embeddings))
+    _, I = embeddings.search(embed_query(query), len(chunked_documents_embeddings))
     # attempt to re-construct the top queries, keeping going untill we actually get all top
     iter_chunk = top * 2
     doc_ids = OrderedSet()
     for i in range(0, len(I[0]), iter_chunk):
         doc_ids = doc_ids.union(OrderedSet(chunked_documents_tuple[i][0] for i in I[0][i:i + iter_chunk]))
         if len(doc_ids) >= min(top, len(documents)):
-            return list(doc_ids)[:top]
-    return list(doc_ids)[:top]
+            return [documents[index] for index in list(doc_ids)[:top]]
+    return [documents[index] for index in list(doc_ids)[:top]]
 
 def construct_reverse_dict(res_individual_id, id_list):
     res = {}
