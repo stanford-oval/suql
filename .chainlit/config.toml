@@ -35,7 +35,7 @@ multi_modal = true
 
 [UI]
 # Name of the app and chatbot.
-name = "RestaurantGenie"
+name = "YelpBot"
 
 # Show the readme while the thread is empty.
 show_readme_as_default = true

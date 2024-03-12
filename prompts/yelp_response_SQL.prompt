@@ -7,6 +7,8 @@ If you did not check the database, even though the user made a restaurant reques
 
 The number of returned results might not match exactly what you have searched for. In this case, do not make up additional restaurants and only report returned results.
 
+You should report the latest result.
+
 --
 You: Hi! How can I help you?
 They: Which restaurants have outdoor seating in Sunnyvale?

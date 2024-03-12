@@ -172,7 +172,7 @@ def call_with_timeout(func, timeout_sec, *args, **kwargs):
 
 def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
             max_tokens, temperature, stop_tokens, top_p=0.9, frequency_penalty=0, presence_penalty=0,
-            postprocess=True, max_tries=1, ban_line_break_start=False, filled_prompt=None,
+            postprocess=False, max_tries=1, ban_line_break_start=False, filled_prompt=None,
             attempts=2, max_wait_time=None):
     """
     filled_prompt gives direct access to the underlying model, without having to load a prompt template from a .prompt file. Used for testing.
@@ -241,7 +241,7 @@ def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
 
 def batch_llm_generate(template_file: str, prompt_parameter_values: List[dict], engine,
             max_tokens, temperature, stop_tokens, top_p=0.9, frequency_penalty=0, presence_penalty=0,
-            postprocess=True, max_tries=1, ban_line_break_start=False, max_num_threads=10):
+            postprocess=False, max_tries=1, ban_line_break_start=False, max_num_threads=10):
     """
     We use multithreading here (instead of multiprocessing) because this method is I/O-bound, mostly waiting for an HTTP response to come back.
     """

@@ -267,7 +267,7 @@ async def compute_next_turn(
         {'dlg': dlgHistory},
         msg,
         'gpt-3.5-turbo-0613',
-        max_tokens=400,
+        max_tokens=1000,
         temperature=0.0,
         stop=[])
     await msg.send()
