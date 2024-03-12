@@ -1,20 +1,9 @@
-import pymongo
-from typing import List
-import os
 from flask import request, Flask
-from utils import chunk_text
 import json
 from utils import num_tokens_from_string, handle_opening_hours
 import re
 from sql_free_text_support.faiss_embedding import compute_top_similarity_documents
     
-mongo = os.environ.get('COSMOS_CONNECTION_STRING')
-client = pymongo.MongoClient(mongo)
-db = client['yelpbot']
-collection = db['yelp_data']
-schematized = db['schematized']
-cache_db = client['free_text_cache']['hash_to_embeddings']
-
 # Set the server address
 host = "127.0.0.1"
 port = 8500
@@ -73,6 +62,52 @@ def answer():
     }
     print(res)
     return res
+
+@app.route('/summary', methods=['POST'])
+def summary():
+    from prompt_continuation import llm_generate
+    data = request.get_json()
+    # print("/answer receieved request {}".format(data))
+        
+    # input params in this `data`    
+    # data["text"] : text to QA upon
+    # (optional) data["focus"] : focus of summary
+
+    if "text" not in data:
+        return None
+    
+    if not data["text"]:
+        return {
+            "result": "no information"
+        }
+    
+    text_res = []
+    if isinstance(data["text"], list):
+        for i in data["text"]:
+            if num_tokens_from_string('\n'.join(text_res + [i])) < 3800:
+                text_res.append(i)
+            else:
+                break
+    else:
+        text_res = [data["text"]]
+    
+    continuation, _ = llm_generate(
+        'prompts/review_qa.prompt',
+        {'reviews': text_res, 'question': "what is the summary of this document?"},
+        engine='gpt-3.5-turbo-0613',
+        max_tokens=200,
+        temperature=0.0,
+        stop_tokens=['\n'],
+        postprocess=False,
+    )
+    
+    res = {
+        "result" : continuation
+    }
+    print(res)
+    return res
+
+### Functions below are used by the restaurants application only
        
 @app.route('/search_by_opening_hours', methods=['POST'])
 def search_by_opening_hours():
@@ -140,51 +175,6 @@ def opening_hours_match(restaurant_opening_hours, opening_hours_request):
         for restaurant_hours in restaurant_hours_extracted:
             if hours_intersect(restaurant_hours, hours_request):
                 return True
-
-
-@app.route('/summary', methods=['POST'])
-def summary():
-    from prompt_continuation import llm_generate
-    data = request.get_json()
-    # print("/answer receieved request {}".format(data))
-        
-    # input params in this `data`    
-    # data["text"] : text to QA upon
-    # (optional) data["focus"] : focus of summary
-
-    if "text" not in data:
-        return None
-    
-    if not data["text"]:
-        return {
-            "result": "no information"
-        }
-    
-    text_res = []
-    if isinstance(data["text"], list):
-        for i in data["text"]:
-            if num_tokens_from_string('\n'.join(text_res + [i])) < 3800:
-                text_res.append(i)
-            else:
-                break
-    else:
-        text_res = [data["text"]]
-    
-    continuation, _ = llm_generate(
-        'prompts/review_qa.prompt',
-        {'reviews': text_res, 'question': "what is the summary of this document?"},
-        engine='gpt-3.5-turbo-0613',
-        max_tokens=200,
-        temperature=0.0,
-        stop_tokens=['\n'],
-        postprocess=False,
-    )
-    
-    res = {
-        "result" : continuation
-    }
-    print(res)
-    return res
 
 if __name__ == "__main__":
     app.run(host=host, port=port)

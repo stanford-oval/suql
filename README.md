@@ -48,7 +48,7 @@ Here is a rough breakdown of what you need to do to set up SUQL on your domain:
 
 4. In the command line for your database, copy and paste all content under `custom_functions.sql`. This will define the `answer` and `summary` functions under your PostgreSQL database.
 
-5. Set up the backend server for the `answer`, `summary` functions. As you probably noticed, the code in `custom_functions.sql` is just making queries to a server. This server can be instantiated by running `python reviews_server.py`.
+5. Set up the backend server for the `answer`, `summary` functions. As you probably noticed, the code in `custom_functions.sql` is just making queries to a server. This server can be instantiated by running `python free_text_fcns_server.py.py`.
 
 6. There is a classifier to determine whether a user utterance requires database access, at this line: `llm_generate(template_file='prompts/if_db_classification.prompt', ...)`. This may or may not be applicable to your domain, and if it is, please modify the [corresponding prompt](https://github.com/stanford-oval/suql/blob/main/prompts/if_db_classification.prompt).
 
