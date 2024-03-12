@@ -146,5 +146,5 @@ experiments/*
 error_log.txt
 
 # test cases for the SUQL compiler
-sql_free_text_support/test_cases.txt
-sql_free_text_support/test_cases_res.txt
+sql_free_text_support/test_cases*
+**/_suql_compiler_debug_*
