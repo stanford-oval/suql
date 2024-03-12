@@ -1,7 +1,5 @@
 # stores a list of embeddings for reviews
-
 from tqdm import tqdm
-import pymongo
 from pathlib import Path
 import sys
 import torch
@@ -11,27 +9,13 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from utils import chunk_text
 from postgresql_connection import execute_sql
 from collections import OrderedDict
-import numpy as np
 import faiss
-from functools import reduce
-import operator
 from FlagEmbedding import FlagModel
 import hashlib
-
-
-cuda_ok = torch.cuda.is_available()
-if cuda_ok:
-    device = torch.device("cuda")
-    
-client = pymongo.MongoClient('localhost', 27017)
-# change this line for custom embedding model
-cache_db = client['free_text_cache']['hash_to_embeddings_bge_large_en_v1.5']
 
 # Set the server address
 host = "127.0.0.1"
 port = 8509
-embedding_server_address = 'http://{}:{}'.format(host, port)
-app = Flask(__name__)
 
 # change this line for custom embedding model
 # embedding model output dimension
@@ -39,9 +23,6 @@ EMBEDDING_DIMENSION = 1024
 
 # number of rows to consider for multi-column operations
 MULTIPLE_COLUMN_SEL = 1000
-
-def compute_sha256(text):
-    return hashlib.sha256(text.encode()).hexdigest()
 
 # currently using https://huggingface.co/BAAI/bge-large-en-v1.5
 # change this line for custom embedding model
@@ -65,6 +46,11 @@ def embed_documents(documents):
     embeddings = model.encode(documents)
     return embeddings
     
+def compute_sha256(text):
+    return hashlib.sha256(text.encode()).hexdigest()
+
+embedding_server_address = 'http://{}:{}'.format(host, port)
+app = Flask(__name__)
 
 # A set that also preserves insertion order
 class OrderedSet:
