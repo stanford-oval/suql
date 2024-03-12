@@ -41,6 +41,9 @@ def chunk_text(text, k, use_spacy=True):
     :param k: int representing size of each chunk
     :return: a list of k-token-sized chunks of the original text
     """
+    if k == 0:
+        return [text]
+    
     if use_spacy:
         if text == "":
             return [""]
