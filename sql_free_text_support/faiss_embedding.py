@@ -2,7 +2,6 @@
 from tqdm import tqdm
 from pathlib import Path
 import sys
-import torch
 from flask import request, Flask
 # Append parent directory to sys.path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -49,9 +48,6 @@ def embed_documents(documents):
 def compute_sha256(text):
     return hashlib.sha256(text.encode()).hexdigest()
 
-embedding_server_address = 'http://{}:{}'.format(host, port)
-app = Flask(__name__)
-
 # A set that also preserves insertion order
 class OrderedSet:
     def __init__(self, iterable=None):
@@ -80,6 +76,26 @@ class OrderedSet:
 
     def __len__(self):
         return len(self.items)
+
+def compute_top_similarity_documents(documents, query, chunking_param=0, top=3):
+    """
+        Directly call the model to compute the top documents based on
+        dot product with query
+    """
+    chunked_documents_tuple = [(i, doc) for (i, document) in enumerate(documents) for doc in chunk_text(document, k=chunking_param, use_spacy=True)]
+    chunked_documents_embeddings = embed_documents(list(map(lambda x: x[1], chunked_documents_tuple)))
+    embeddings = faiss.IndexFlatIP(EMBEDDING_DIMENSION)
+    embeddings.add(chunked_documents_embeddings)
+    
+    _, I = embeddings.search(embed_query(query), top=len(chunked_documents_embeddings))
+    # attempt to re-construct the top queries, keeping going untill we actually get all top
+    iter_chunk = top * 2
+    doc_ids = OrderedSet()
+    for i in range(0, len(I[0]), iter_chunk):
+        doc_ids = doc_ids.union(OrderedSet(chunked_documents_tuple[i][0] for i in I[0][i:i + iter_chunk]))
+        if len(doc_ids) >= min(top, len(documents)):
+            return list(doc_ids)[:top]
+    return list(doc_ids)[:top]
 
 def construct_reverse_dict(res_individual_id, id_list):
     res = {}
@@ -275,18 +291,19 @@ class MultipleEmbeddingStore():
     def dot_product(self, data):
         res = self._dot_product(data["id_list"], data["field_query_list"], data["top"], data["single_table"])
         return res
-    
-@app.route('/search', methods=['POST'])
-def search():
-    data = request.get_json()
-    res = {
-        "result" : embedding_store.dot_product(data)
-    }
-    
-    return res
 
 if __name__ == "__main__":
     embedding_store = MultipleEmbeddingStore()
     embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="reviews", db_name="restaurants")
     embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="popular_dishes", db_name="restaurants")
+
+    app = Flask(__name__)
+    @app.route('/search', methods=['POST'])
+    def search():
+        data = request.get_json()
+        res = {
+            "result" : embedding_store.dot_product(data)
+        }
+        
+        return res
     app.run(host=host, port=port)
