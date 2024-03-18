@@ -184,7 +184,10 @@ class EmbeddingStore():
         query_embedding = embed_query(query)
         
         sel = faiss.IDSelectorBatch(embedding_indices)
-        D, I = self.embeddings.search(query_embedding, top, params=faiss.SearchParametersIVF(sel = sel))
+        if top < 0:
+            D, I = self.embeddings.search(query_embedding, len(embedding_indices), params=faiss.SearchParametersIVF(sel = sel))
+        else:
+            D, I = self.embeddings.search(query_embedding, top, params=faiss.SearchParametersIVF(sel = sel))
 
         embeddings_indices_max = I[0]
         

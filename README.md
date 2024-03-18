@@ -1,8 +1,39 @@
+<p align="center">
+    <b>SUQL (Structured and Unstructured Query Language)</b>
+    <br>
+    <a href="https://arxiv.org/abs/2311.09818">
+        <img src="https://img.shields.io/badge/cs.CL-2311.09818-b31b1b" alt="arXiv">
+    </a>
+    <a href="https://github.com/stanford-oval/suql/stargazers">
+        <img src="https://img.shields.io/github/stars/stanford-oval/suql?style=social" alt="Github Stars">
+    </a>
+</p>
+<p align="center">
+    Conversational Search over Structured and Unstructured Data with LLMs
+</p>
+<p align="center">
+    Online demo:
+    <a href="https://yelpbot.genie.stanford.edu" target="_blank">
+        https://yelpbot.genie.stanford.edu
+    </a>
+    <br>
+</p>
+
+
 # What is SUQL
 
-SUQL stands for Structured and Unstructured Query Language. It augments SQL with several important free text primitives for a precise, succinct, and expressive representation. It can be used to build chatbots for relational data sources that contain both structured and unstructured information. Similar to how text-to-SQL has seen [great success](https://python.langchain.com/docs/use_cases/qa_structured/sql), SUQL can be uses as the target language for hybrid databases, for instance, for:
+SUQL stands for Structured and Unstructured Query Language. It augments SQL with several important free text primitives for a precise, succinct, and expressive representation. It can be used to build chatbots for relational data sources that contain both structured and unstructured information. Similar to how text-to-SQL has seen [great success](https://python.langchain.com/docs/use_cases/qa_structured/sql), SUQL can be uses as the semantic parsing target language for hybrid databases, for instance, for:
 
 ![An example restaurant relational database](figures/figure1.png)
+
+Several important features:
+
+- SUQL seamlessly integrates retrieval models, LLMs, and traditional SQL to deliver a clean, effective interface for hybrid data access;
+    - It utilizes techniques inherent to each component: retrieval model and LM for unstructured data and relational SQL for structured data;
+- Index of free text fields built with [faiss](https://github.com/facebookresearch/faiss), natively supporting all your favorite dense vector processing methods, e.g. product quantizer, HNSW, etc.;
+- A series of important optimizations to minimize expensive LLM calls;
+- Scalability to large databases with PostgreSQL;
+- Support for general SQLs, e.g. JOINs, GROUP BYs.
 
 ## The answer function
 
