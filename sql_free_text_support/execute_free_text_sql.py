@@ -682,7 +682,7 @@ class StructuralClassification(Visitor):
             return
         
         # if this is one of the fields declared to be used with fts (full text search), convert so:
-        for  table_name, field_name in self.fts_fields:
+        for table_name, field_name in self.fts_fields:
             if len(self.node.fromClause) == 1 and isinstance(self.node.fromClause[0], RangeVar) and node.name[0].sval in ["~~", "~~*", "="]:
                 n_field_name, n_value_name = get_a_expr_field_value(node, no_check = True)
                 if table_name == self.node.fromClause[0].relname and field_name == n_field_name:
@@ -1066,13 +1066,45 @@ def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List):
         raise ValueError("Expects sql to be in DNF, but is not: {}".format(RawStream()(sql_dnf_predicates)))
 
 def suql_execute(
-    generated_suql,
+    suql,
+    fts_fields = [],
     loggings = "",
     disable_try_catch = False,
-    fts_fields = [] # fields that should use PostgreSQL's Full Text Search (FTS) operators
 ):
+    """
+    Main entry point to the SUQL Python-based compiler.
+        
+    Parameters:
+    `suql` (str): The to-be-executed suql query,
+    `fts_fields` (List[str], optional): Fields that should use PostgreSQL's Full Text Search (FTS) operators;
+        The SUQL compiler would change certain string operators like "=" to use PostgreSQL's FTS operators.
+        It uses `websearch_to_tsquery` and the `@@` operator to match against these fields.
+        
+    `loggings` (str, optional): Prefix for error case loggings. Errors are written to a "_suql_error_log.txt"
+        file by default.
+    `disable_try_catch` (bool, optional): whether to disable try-catch (errors would directly propagate to caller)
+    
+    Returns:
+    `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result
+    `column_names` (List[str]): A list of database column names in the same order as `results`
+    `cache` (Dict()): Debugging information from the SUQL compiler
+    
+    Example:
+    ```
+    suql_execute("SELECT * FROM restaurants WHERE 
+    answer(reviews, 'is this restaurant family-friendly?') = 'yes'", fts_fields=[("restaurants", "name")])
+    ```
+    
+    In restaurants, one would likely need to apply FTS on the name of the restaurants
+    since for queries that search by name, e.g.:
+    ```
+    suql_execute("SELECT * FROM restaurants WHERE name = 'mcdonalds'", fts_fields=[("restaurants", "name")])
+    ```
+    Ideally, this query should match against all `Mcdonald's`, as opposed to just 'mcdonalds'.
+    FTS helps with such cases.
+    """
     results, column_names, cache = suql_execute_single(
-        generated_suql,
+        suql,
         loggings,
         disable_try_catch=disable_try_catch,
         fts_fields=fts_fields)
@@ -1092,7 +1124,7 @@ def suql_execute(
     
 
 def suql_execute_single(
-    generated_suql,
+    suql,
     loggings="",
     disable_try_catch = False,
     fts_fields = [] # fields that should use PostgreSQL's Full Text Search (FTS) operators
@@ -1103,30 +1135,26 @@ def suql_execute_single(
     
     if disable_try_catch:
         visitor = SelectVisitor(fts_fields)
-        root = parse_sql(generated_suql)
+        root = parse_sql(suql)
         visitor(root)
         second_sql = RawStream()(root)
         cache = visitor.serialize_cache()
         
-        print("intermediate (temp) SUQL query executed at the end: {}".format(second_sql))
-
         return execute_sql(second_sql)
     else:
         try:
             visitor = SelectVisitor(fts_fields)
-            root = parse_sql(generated_suql)
+            root = parse_sql(suql)
             visitor(root)
             second_sql = RawStream()(root)
             cache = visitor.serialize_cache()
             
-            print("intermediate (temp) SUQL query executed at the end: {}".format(second_sql))
-
             results, column_names, cache = execute_sql(second_sql)
         except Exception as err:
-            with open("error_log.txt", "a") as file:
+            with open("_suql_error_log.txt", "a") as file:
                 file.write(f"==============\n")
                 file.write(f"{loggings}\n")
-                file.write(f"{generated_suql}\n")
+                file.write(f"{suql}\n")
                 file.write(f"{str(err)}\n")
                 traceback.print_exc(file=file)
         finally:

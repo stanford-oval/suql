@@ -29,7 +29,7 @@ from flask import Flask, request
 from flask_cors import CORS
 from flask_restful import Api, reqparse
 
-from yelp_loop import *
+from agent import *
 
 from pymongo import MongoClient, ASCENDING
 from datetime import datetime
