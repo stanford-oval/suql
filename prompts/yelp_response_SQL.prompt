@@ -30,7 +30,7 @@ They: {{ dlg_turn.user_utterance }}
     {% if loop.index == loop.length %}
         {% if dlg_turn.user_target is not none %}
         (You searched for query "{{ dlg_turn.user_target }}")
-        (Your search results "{{ dlg_turn.genie_utterance }}")
+        (Your search results "{{ dlg_turn.db_results }}")
         {% else %}
         (You did not check the restaurant database.)
         {% endif %}

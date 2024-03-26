@@ -79,6 +79,8 @@ CREATE OR REPLACE FUNCTION try_cast(_in text, INOUT _out anyelement)
  END
  $function$;
 
+-- Function below is only used in the restaurant database
+
 CREATE OR REPLACE FUNCTION search_by_opening_hours(opening_hours jsonb, opening_hours_request text)
  RETURNS boolean
  LANGUAGE plpython3u

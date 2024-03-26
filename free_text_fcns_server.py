@@ -1,131 +1,185 @@
 from flask import request, Flask
 import json
-from utils import num_tokens_from_string, handle_opening_hours
+from utils import num_tokens_from_string
 import re
-from sql_free_text_support.faiss_embedding import compute_top_similarity_documents
-    
-# Set the server address
-host = "127.0.0.1"
-port = 8500
-review_server_address = 'http://{}:{}'.format(host, port)
+from faiss_embedding import compute_top_similarity_documents
+
 app = Flask(__name__)
 
+# # Default top number of results to send to LLM answer function
+# # if given a list of strings
+# k = 5
 
-@app.route('/answer', methods=['POST'])
-def answer():
-    from prompt_continuation import llm_generate
-    data = request.get_json()
-    # print("/answer receieved request {}".format(data))
-        
-    # input params in this `data`    
-    # data["text"] : text to QA upon
-    # data["question"] : question to answer
+# # Max number of input tokens for the `summary` function
+# max_input_token = 3800
 
-    if "text" not in data or "question" not in data:
-        return None
+# # Default LLM engine for `answer` and `summary` functions
+# engine = "gpt-3.5-turbo-0613"
+
+def start_free_text_fncs_server(
+    host = "127.0.0.1",
+    port = 8500,
+    k = 5,
+    max_input_token = 3800,
+    engine = "gpt-3.5-turbo-0613"
+):
+    """
+    Set up a free text functions server for the free text
+    `answer` and `summary` functions.
+
+    Args:
+        host (str, optional): The host running this server. Defaults to "127.0.0.1" (localhost).
+        port (int, optional): The port running this server. Defaults to 8500.
+        k (int, optional): Default top number of results to send to LLM answer function
+            if given a list of strings. Defaults to 5.
+        max_input_token (int, optional): Max number of input tokens for the `summary` function.
+            Defaults to 3800.
+        engine (str, optional): Default LLM engine for `answer` and `summary` functions.
+            Defaults to "gpt-3.5-turbo-0613".
+    """
     
-    if not data["text"]:
-        return {
-            "result": "no information"
+    @app.route('/answer', methods=['POST'])
+    def answer():
+        """
+        LLM-based answer function, set up as a server for PSQL to call.
+
+        Expected input params in request.get_json():
+        
+        data["text"] (str or List[str]): text to QA upon
+        data["question"] (str): question to answer
+        
+        If data["text"] is a list of string, compute embedding to find top k
+        documents to send the LLM to answer with (Default set to 5);
+        Include those in the LLM prompt until `max_input_token` is reached
+        in the same order (Default set to 3800).
+        
+        Returns:
+        {
+            "result" (str): answer function result
         }
-    
-    text_res = []
-    if isinstance(data["text"], list):
-        documents = compute_top_similarity_documents(data["text"], data["question"], top=5)
-        for i in documents:
-            if num_tokens_from_string('\n'.join(text_res + [i])) < 3800:
-                text_res.append(i)
-            else:
-                break
-    else:
-        text_res = [data["text"]]
+        """
+        from prompt_continuation import llm_generate
         
-    type_prompt = ""
-    if "type_prompt" in data:
-        if data["type_prompt"] == "date":
-            type_prompt = f" Output in date format, for instance 2001-09-28."
-        if data["type_prompt"] == "int4":
-            type_prompt = f" Output an integer."
-    
-    continuation, _ = llm_generate(
-        'prompts/review_qa.prompt',
-        {'reviews': text_res, 'question': data["question"], "type_prompt": type_prompt},
-        engine='gpt-3.5-turbo-0613',
-        max_tokens=200,
-        temperature=0.0,
-        stop_tokens=['\n'],
-        postprocess=False
-    )
-    
-    res = {
-        "result" : continuation
-    }
-    print(res)
-    return res
+        data = request.get_json()
 
-@app.route('/summary', methods=['POST'])
-def summary():
-    from prompt_continuation import llm_generate
-    data = request.get_json()
-    # print("/answer receieved request {}".format(data))
+        if "text" not in data or "question" not in data:
+            return None
         
-    # input params in this `data`    
-    # data["text"] : text to QA upon
-    # (optional) data["focus"] : focus of summary
-
-    if "text" not in data:
-        return None
-    
-    if not data["text"]:
-        return {
-            "result": "no information"
+        if not data["text"]:
+            return {
+                "result": "no information"
+            }
+        
+        text_res = []
+        if isinstance(data["text"], list):
+            documents = compute_top_similarity_documents(data["text"], data["question"], top=k)
+            for i in documents:
+                if num_tokens_from_string('\n'.join(text_res + [i])) < max_input_token:
+                    text_res.append(i)
+                else:
+                    break
+        else:
+            text_res = [data["text"]]
+            
+        type_prompt = ""
+        if "type_prompt" in data:
+            if data["type_prompt"] == "date":
+                type_prompt = f" Output in date format, for instance 2001-09-28."
+            if data["type_prompt"] == "int4":
+                type_prompt = f" Output an integer."
+        
+        continuation, _ = llm_generate(
+            'prompts/review_qa.prompt',
+            {'reviews': text_res, 'question': data["question"], "type_prompt": type_prompt},
+            engine=engine,
+            max_tokens=200,
+            temperature=0.0,
+            stop_tokens=['\n'],
+            postprocess=False
+        )
+        
+        res = {
+            "result" : continuation
         }
-    
-    text_res = []
-    if isinstance(data["text"], list):
-        for i in data["text"]:
-            if num_tokens_from_string('\n'.join(text_res + [i])) < 3800:
-                text_res.append(i)
-            else:
-                break
-    else:
-        text_res = [data["text"]]
-    
-    continuation, _ = llm_generate(
-        'prompts/review_qa.prompt',
-        {'reviews': text_res, 'question': "what is the summary of this document?"},
-        engine='gpt-3.5-turbo-0613',
-        max_tokens=200,
-        temperature=0.0,
-        stop_tokens=['\n'],
-        postprocess=False,
-    )
-    
-    res = {
-        "result" : continuation
-    }
-    print(res)
-    return res
+        print(res)
+        return res
 
-### Functions below are used by the restaurants application only
+    @app.route('/summary', methods=['POST'])
+    def summary():
+        """
+        LLM-based summary function, set up as a server for PSQL to call.
+        `summary(text)` is a syntactic sugar for `answer(text, 'what is the summary of this document?')`
+        By default, append as many documents as possible until `max_input_token` is reached
+        (Default set to 3800).
+
+        Expected input params in request.get_json():
+        
+        data["text"] : text to summarize upon.
+        
+        Returns:
+        {
+            "result" (str): summary function result
+        }
+        """
+        print(k)
+        from prompt_continuation import llm_generate
+        data = request.get_json()
+
+        if "text" not in data:
+            return None
+        
+        if not data["text"]:
+            return {
+                "result": "no information"
+            }
+        
+        text_res = []
+        if isinstance(data["text"], list):
+            for i in data["text"]:
+                if num_tokens_from_string('\n'.join(text_res + [i])) < max_input_token:
+                    text_res.append(i)
+                else:
+                    break
+        else:
+            text_res = [data["text"]]
+        
+        continuation, _ = llm_generate(
+            'prompts/review_qa.prompt',
+            {'reviews': text_res, 'question': "what is the summary of this document?"},
+            engine=engine,
+            max_tokens=200,
+            temperature=0.0,
+            stop_tokens=['\n'],
+            postprocess=False,
+        )
+        
+        res = {
+            "result" : continuation
+        }
+        print(res)
+        return res
+
+    # start Flask server
+    app.run(host=host, port=port)
+
+# Functions below are used by the restaurants application only.
        
 @app.route('/search_by_opening_hours', methods=['POST'])
 def search_by_opening_hours():
     data = request.get_json()
     restaurant_hours = data["opening_hours"]
     hours_request = data["opening_hours_request"]
-    print("RET_HOURS", restaurant_hours)
-    print("RES_REQ", hours_request)
     result = opening_hours_match(restaurant_hours, hours_request)
     return {"result": result}
 
 def get_hours_request_extracted(hours_request):
     intervals = hours_request.split("-")
     hours_request_extracted = [[int(y) for y in x.split(".")] for x in intervals]
-    print(hours_request_extracted)
     return hours_request_extracted
 
 def get_restaurant_hours_extracted(restaurant_hours):
+    from agent import handle_opening_hours
+    
     restaurant_hours = json.loads(restaurant_hours)
     restaurant_hours = handle_opening_hours(restaurant_hours)
     restaurant_hours_extracted = [] 
@@ -170,11 +224,10 @@ def opening_hours_match(restaurant_opening_hours, opening_hours_request):
         return False
     restaurant_hours_extracted = get_restaurant_hours_extracted(restaurant_opening_hours)
     hours_request_extracted = get_hours_request_extracted(opening_hours_request)
-    print(restaurant_hours_extracted, hours_request_extracted)
     for hours_request in hours_request_extracted:
         for restaurant_hours in restaurant_hours_extracted:
             if hours_intersect(restaurant_hours, hours_request):
                 return True
 
 if __name__ == "__main__":
-    app.run(host=host, port=port)
+    start_free_text_fncs_server()

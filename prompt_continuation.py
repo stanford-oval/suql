@@ -11,11 +11,8 @@ from typing import List
 import openai
 from openai import OpenAI
 client = OpenAI()
-from openai import OpenAIError
 from functools import partial
-from datetime import date
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 import time
 from threading import Thread
 import traceback
@@ -61,15 +58,10 @@ def get_total_cost():
     return total_cost
 
 def _model_name_to_cost(model_name: str) -> float:
-    # for model_family in inference_cost_per_1000_tokens.keys():
-    #     if model_family in model_name:
-    #         return inference_cost_per_1000_tokens[model_family]
     if model_name in inference_input_cost_per_1000_tokens and model_name in inference_output_cost_per_1000_tokens:
         return inference_input_cost_per_1000_tokens[model_name], inference_output_cost_per_1000_tokens[model_name]
     raise ValueError('Did not recognize GPT model name %s' % model_name)
 
-
-# @retry(retry=retry_if_exception_type(OpenAIError), wait=wait_random_exponential(multiplier=0.5, max=20), stop=stop_after_attempt(6))
 def openai_chat_completion_with_backoff(**kwargs):
     global total_cost
     ret = client.chat.completions.create(**kwargs)
@@ -81,12 +73,6 @@ def openai_chat_completion_with_backoff(**kwargs):
 
 def _fill_template(template_file, prompt_parameter_values):
     template = jinja_environment.get_template(template_file)
-
-    # always make these useful constants available in a template
-    today = date.today() # make a new function call each time since the date might change during a long-term server deployment
-    prompt_parameter_values['today'] = today
-    prompt_parameter_values['current_year'] = today.year
-    prompt_parameter_values['chatbot_name'] = 'RestaurantGenie'
 
     filled_prompt = template.render(**prompt_parameter_values)
     filled_prompt = '\n'.join([line.strip() for line in filled_prompt.split('\n')]) # remove whitespace at the beginning and end of each line
@@ -224,7 +210,6 @@ def llm_generate(template_file: str, prompt_parameter_values: dict, engine,
     if cache_res:
         return cache_res["res"], 0
     
-    
     # We have experiences very long latency from time to time from both Azure's and OpenAI's chatGPT response time
     # Here is a heuristics-based, dynamically-calculated max wait time, before we cancel the last request and re-issue a new one
     total_token = num_tokens_from_string(filled_prompt) + max_tokens
@@ -271,6 +256,7 @@ def batch_llm_generate(template_file: str, prompt_parameter_values: List[dict], 
             postprocess=True, max_tries=1, ban_line_break_start=False, max_num_threads=10):
     """
     We use multithreading here (instead of multiprocessing) because this method is I/O-bound, mostly waiting for an HTTP response to come back.
+    Currently not used by the SUQL repo, but could be brought back in a future version.
     """
 
     f = partial(_generate, engine=engine,

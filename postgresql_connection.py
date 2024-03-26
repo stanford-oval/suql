@@ -1,8 +1,15 @@
 import psycopg2
 import time
 
-def execute_sql(sql_query, user = "select_user", password = "select_user", data = None, commit_in_lieu_fetch = False, no_print = False, database = "restaurants"):
-    
+def execute_sql(
+    sql_query,
+    database = "restaurants",
+    user = "select_user",
+    password = "select_user",
+    data = None,
+    commit_in_lieu_fetch = False,
+    no_print = False
+):
     start_time = time.time()
 
     if password == "":
@@ -60,7 +67,13 @@ def execute_sql(sql_query, user = "select_user", password = "select_user", data 
     elapsed_time = end_time - start_time
     return list(results), column_names, elapsed_time
 
-def execute_sql_with_column_info(sql_query, database = "restaurants", user = "select_user", password = "select_user", unprotected = False):
+def execute_sql_with_column_info(
+    sql_query,
+    database = "restaurants",
+    user = "select_user",
+    password = "select_user",
+    unprotected = False
+):
     start_time = time.time()
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
@@ -99,7 +112,6 @@ def execute_sql_with_column_info(sql_query, database = "restaurants", user = "se
 
         column_types = [type_map[oid] for oid in column_type_oids]
         column_info = list(zip(column_names, column_types))
-
 
     except psycopg2.Error as e:
         print("Error executing SQL query:", e)

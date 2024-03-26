@@ -1,8 +1,7 @@
 """
-    Main file for a SUQL-powered agent loop
+Main file for a SUQL-powered agent loop
 """
 
-import sys
 import os
 import re
 from typing import List
@@ -16,7 +15,6 @@ import time
 from sql_free_text_support.execute_free_text_sql import suql_execute
 from decimal import Decimal
 import math
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from prompt_continuation import llm_generate
 
 logger = logging.getLogger(__name__)
@@ -26,30 +24,27 @@ class DialogueTurn:
         self,
         agent_utterance: str = None,
         user_utterance: str = None,
-        genie_utterance: str = None,
+        db_results: str = None,
         temp_target : str = None,
         user_target : str = None,
-        sys_type : str = None,
         time_statement : dict = None,
         cache : dict = {},
         results_for_ned : dict = None
     ):
         self.agent_utterance = agent_utterance
         self.user_utterance = user_utterance
-        self.genie_utterance = genie_utterance
+        self.db_results = db_results
         self.temp_target = temp_target
         self.user_target = user_target
-        self.sys_type = sys_type
         self.results_for_ned = results_for_ned
         self.cache = cache
         self.time_statement = time_statement
         
     agent_utterance: str
     user_utterance: str
-    genie_utterance: str
+    db_results: str
     user_target: str
     temp_target: str
-    sys_type: str
     time_statement: dict
     results_for_ned: dict
     cache: dict
@@ -73,9 +68,8 @@ class DialogueTurn:
         ret = ''
         
         ret += they + ': ' + self.user_utterance
-        if self.genie_utterance is not None:
-            # print(self.genie_utterance)
-            ret += '\n' + '[Database returns "' + self.genie_utterance + '"]'
+        if self.db_results is not None:
+            ret += '\n' + '[Database returns "' + self.db_results + '"]'
         if self.agent_utterance is not None:
             ret += '\n' + you + ': ' + self.agent_utterance
         return ret
@@ -339,8 +333,8 @@ def postprocess_suql(suql_query):
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
-    user_utterance: str):
-    
+    user_utterance: str
+):
     first_classification_time = 0
     semantic_parser_time = 0
     suql_execution_time = 0
@@ -348,23 +342,38 @@ def compute_next_turn(
     cache = {}
 
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
-    dlgHistory[-1].sys_type = "SUQL"
     
     # determine whether to use database
-    continuation, first_classification_time = llm_generate(template_file='prompts/if_db_classification.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
-                                max_tokens=50, temperature=0.0, stop_tokens=['\n'], postprocess=False)
+    continuation, first_classification_time = llm_generate(
+        template_file='prompts/if_db_classification.prompt',
+        prompt_parameter_values={'dlg': dlgHistory},
+        engine='gpt-3.5-turbo-0613',
+        max_tokens=50,
+        temperature=0.0,
+        stop_tokens=['\n'], 
+        postprocess=False
+    )
 
     if continuation.startswith("Yes"):
         results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache, results_for_ned = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
-        dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
+        dlgHistory[-1].db_results = json.dumps(results, indent=4)
         dlgHistory[-1].user_target = first_sql
         dlgHistory[-1].temp_target = second_sql
         dlgHistory[-1].results_for_ned = results_for_ned
 
         # cut it out if no response returned
         if not results:
-            response, final_response_time = llm_generate(template_file='prompts/yelp_response_no_results.prompt', prompt_parameter_values={'dlg': dlgHistory}, engine='gpt-3.5-turbo-0613',
-                                max_tokens=400, temperature=0.0, stop_tokens=[], top_p=0.5, postprocess=False)
+            response, final_response_time = llm_generate(
+                template_file='prompts/yelp_response_no_results.prompt',
+                prompt_parameter_values={'dlg': dlgHistory},
+                engine='gpt-3.5-turbo-0613',
+                max_tokens=400,
+                temperature=0.0,
+                stop_tokens=[],
+                top_p=0.5,
+                postprocess=False
+            )
+            
             dlgHistory[-1].agent_utterance = response
             dlgHistory[-1].time_statement = {
                 "first_classification": first_classification_time,
@@ -396,9 +405,6 @@ if __name__ == '__main__':
                         help='The conversation will continue until this string is typed in, pertaining only to CLI testing.')
     parser.add_argument('--no_logging', action='store_true',
                         help='Do not output extra information about the intermediate steps.')
-    parser.add_argument('--record_result', type=str, default=None, help='Write results in TSV format to file')
-    parser.add_argument('--batch_process', type=str, default=None, help='A list of QA inputs to run')
-
     args = parser.parse_args()
 
     if args.no_logging:
@@ -406,30 +412,8 @@ if __name__ == '__main__':
     else:
         logging.basicConfig(level=logging.INFO, format=' %(name)s : %(levelname)-8s : %(message)s')
 
-
-    if args.batch_process:
-        assert(args.record_result)
-        
-        with open(args.batch_process, "r") as fd:
-            inputs = fd.readlines()
-        for each_input in inputs:
-            id, utterance = each_input.split('\t')
-            utterance = utterance.strip()
-            
-            dlgHistory = []
-            genieDS, genie_aux = None, []
-            dlgHistory = compute_next_turn(
-                dlgHistory,
-                utterance,
-            )
-            with open(args.record_result, 'a+') as fd:
-                fd.write("{}\t{}\t{}\t{}\n".format(id, dlgHistory[-1].user_utterance, dlgHistory[-1].user_target, dlgHistory[-1].agent_utterance))
-
-    # The dialogue loop
-    # the agent starts the dialogue
+    # The dialogue loop. The agent starts the dialogue
     dlgHistory = []
-    genieDS, genie_aux = None, []
-
     print_chatbot(dialogue_history_to_text(dlgHistory, they='User', you='Chatbot'))
 
     try:

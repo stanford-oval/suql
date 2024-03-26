@@ -1,20 +1,12 @@
 # stores a list of embeddings for reviews
-from tqdm import tqdm
-from pathlib import Path
-import sys
 from flask import request, Flask
-# Append parent directory to sys.path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+from tqdm import tqdm
 from utils import chunk_text
 from postgresql_connection import execute_sql
 from collections import OrderedDict
 import faiss
 from FlagEmbedding import FlagModel
 import hashlib
-
-# Set the server address
-host = "127.0.0.1"
-port = 8509
 
 # change this line for custom embedding model
 # embedding model output dimension
@@ -31,7 +23,7 @@ model = FlagModel('BAAI/bge-large-en-v1.5',
 
 def embed_query(query):
     """
-        Embed a query for dot product matching
+    Embed a query for dot product matching
     """
     # change this line for custom embedding model
     q_embedding = model.encode_queries([query])
@@ -39,7 +31,7 @@ def embed_query(query):
 
 def embed_documents(documents):
     """
-        Embed a list of docuemnts to store in vector store
+    Embed a list of docuemnts to store in vector store
     """
     # change this line for custom embedding model
     embeddings = model.encode(documents)
@@ -79,8 +71,8 @@ class OrderedSet:
 
 def compute_top_similarity_documents(documents, query, chunking_param=0, top=3):
     """
-        Directly call the model to compute the top documents based on
-        dot product with query
+    Directly call the model to compute the top documents based on
+    dot product with query
     """
     chunked_documents_tuple = [(i, doc) for (i, document) in enumerate(documents) for doc in chunk_text(document, k=chunking_param, use_spacy=True)]
     chunked_documents_embeddings = embed_documents(list(map(lambda x: x[1], chunked_documents_tuple)))
@@ -215,10 +207,8 @@ class EmbeddingStore():
     def dot_product_with_value(self, id_list, query, individual_id_list=[]):
         if individual_id_list == []:
             individual_id_list = id_list
-        print(individual_id_list)
         document_indices = [item for sublist in map(lambda x: self.id2document[x], individual_id_list) for item in sublist]
         embedding_indices = [item for sublist in map(lambda x: self.document2embedding[x], document_indices) for item in sublist]
-        print(embedding_indices)
     
         # chunking param = 0 makes sure that we don't chunk the query
         # this is actually a 2-D array, matching what faiss expects
@@ -226,8 +216,6 @@ class EmbeddingStore():
         
         sel = faiss.IDSelectorBatch(embedding_indices)
         D, I = self.embeddings.search(query_embedding, MULTIPLE_COLUMN_SEL, params=faiss.SearchParametersIVF(sel = sel))
-        print(D)
-        print(I)
         embedding_indices = I[0]
         dot_products = D[0]
         
@@ -294,11 +282,28 @@ class MultipleEmbeddingStore():
     def dot_product(self, data):
         res = self._dot_product(data["id_list"], data["field_query_list"], data["top"], data["single_table"])
         return res
+    
+    def start_embedding_server(host = "127.0.0.1", port = 8501):
+        app = Flask(__name__)
+        @app.route('/search', methods=['POST'])
+        def search():
+            data = request.get_json()
+            res = {
+                "result" : embedding_store.dot_product(data)
+            }
+        
+            return res
+        
+        app.run(host=host, port=port)
 
 if __name__ == "__main__":
     embedding_store = MultipleEmbeddingStore()
     embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="reviews", db_name="restaurants")
     embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="popular_dishes", db_name="restaurants")
+
+    # Set the server address, if running through command line
+    host = "127.0.0.1"
+    port = 8501
 
     app = Flask(__name__)
     @app.route('/search', methods=['POST'])
@@ -307,6 +312,6 @@ if __name__ == "__main__":
         res = {
             "result" : embedding_store.dot_product(data)
         }
-        
+ 
         return res
     app.run(host=host, port=port)

@@ -511,7 +511,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
         data["single_table"] = single_table
 
         # Send a POST request
-        response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
+        response = requests.post('http://127.0.0.1:8501/search', json=data, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
         parsed_result = response.json()["result"]
         
