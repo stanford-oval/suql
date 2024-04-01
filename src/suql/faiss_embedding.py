@@ -1,7 +1,7 @@
 # stores a list of embeddings for reviews
 from flask import request, Flask
 from tqdm import tqdm
-from utils import chunk_text
+from suql.utils import chunk_text
 from postgresql_connection import execute_sql
 from collections import OrderedDict
 import faiss

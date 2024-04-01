@@ -10,7 +10,7 @@ import logging
 import requests
 from datetime import datetime
 import json
-from utils import print_chatbot, input_user, num_tokens_from_string
+from suql.utils import print_chatbot, input_user, num_tokens_from_string
 import time
 from sql_free_text_support.execute_free_text_sql import suql_execute
 from decimal import Decimal

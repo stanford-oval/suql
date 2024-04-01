@@ -1,6 +1,6 @@
 from flask import request, Flask
 import json
-from utils import num_tokens_from_string
+from suql.utils import num_tokens_from_string
 import re
 from faiss_embedding import compute_top_similarity_documents
 
@@ -178,7 +178,7 @@ def get_hours_request_extracted(hours_request):
     return hours_request_extracted
 
 def get_restaurant_hours_extracted(restaurant_hours):
-    from agent import handle_opening_hours
+    from suql.agent import handle_opening_hours
     
     restaurant_hours = json.loads(restaurant_hours)
     restaurant_hours = handle_opening_hours(restaurant_hours)

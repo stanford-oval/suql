@@ -16,7 +16,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 import time
 from threading import Thread
 import traceback
-from utils import num_tokens_from_string
+from suql.utils import num_tokens_from_string
 import pymongo
 
 logger = logging.getLogger(__name__)

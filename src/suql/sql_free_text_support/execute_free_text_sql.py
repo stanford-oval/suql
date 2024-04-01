@@ -8,13 +8,13 @@ from pglast.stream import RawStream
 from pglast import parse_sql
 from sympy import symbols, Symbol
 from sympy.logic.boolalg import Or, And, Not, to_dnf
-from pathlib import Path
-import sys
-# Append parent directory to sys.path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+# from pathlib import Path
+# import sys
+# # Append parent directory to sys.path
+# sys.path.append(str(Path(__file__).resolve().parent.parent))
 from postgresql_connection import execute_sql_with_column_info, execute_sql
 from prompt_continuation import llm_generate
-from utils import num_tokens_from_string
+from suql.utils import num_tokens_from_string
 from copy import deepcopy
 import time
 import requests
