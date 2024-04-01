@@ -18,6 +18,7 @@ from threading import Thread
 import traceback
 from suql.utils import num_tokens_from_string
 import pymongo
+import os
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -26,8 +27,7 @@ fh = logging.FileHandler('prompts.log')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
-#singleton
-jinja_environment = Environment(loader=FileSystemLoader('./'),
+jinja_environment = Environment(loader=FileSystemLoader(os.path.dirname(os.path.abspath(__file__))),
                   autoescape=select_autoescape(), trim_blocks=True, lstrip_blocks=True, line_comment_prefix='#')
 # # uncomment if using Azure OpenAI
 openai.api_type == 'open_ai'

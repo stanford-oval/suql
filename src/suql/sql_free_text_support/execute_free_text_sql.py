@@ -8,12 +8,8 @@ from pglast.stream import RawStream
 from pglast import parse_sql
 from sympy import symbols, Symbol
 from sympy.logic.boolalg import Or, And, Not, to_dnf
-# from pathlib import Path
-# import sys
-# # Append parent directory to sys.path
-# sys.path.append(str(Path(__file__).resolve().parent.parent))
-from postgresql_connection import execute_sql_with_column_info, execute_sql
-from prompt_continuation import llm_generate
+from suql.postgresql_connection import execute_sql_with_column_info, execute_sql
+from suql.prompt_continuation import llm_generate
 from suql.utils import num_tokens_from_string
 from copy import deepcopy
 import time
@@ -511,7 +507,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
         data["single_table"] = single_table
 
         # Send a POST request
-        response = requests.post('http://127.0.0.1:8501/search', json=data, headers={'Content-Type': 'application/json'})
+        response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
         parsed_result = response.json()["result"]
         

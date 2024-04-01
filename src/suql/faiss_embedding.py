@@ -2,7 +2,7 @@
 from flask import request, Flask
 from tqdm import tqdm
 from suql.utils import chunk_text
-from postgresql_connection import execute_sql
+from suql.postgresql_connection import execute_sql
 from collections import OrderedDict
 import faiss
 from FlagEmbedding import FlagModel

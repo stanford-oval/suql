@@ -2,7 +2,7 @@ from flask import request, Flask
 import json
 from suql.utils import num_tokens_from_string
 import re
-from faiss_embedding import compute_top_similarity_documents
+from suql.faiss_embedding import compute_top_similarity_documents
 
 app = Flask(__name__)
 
