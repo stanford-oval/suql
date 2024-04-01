@@ -27,6 +27,8 @@ import traceback
 SET_FREE_TEXT_FCNS = ["answer"]
 verified_res = {}
 
+# Embedding server address
+EMBEDDING_SERVER_ADDRESS = 'http://127.0.0.1:8501'
 # This denotes the model used by the SUQL compiler for all verification purposes
 MODEL = "gpt-3.5-turbo-0613"
 # This denotes whether to attempt verify against all columns
@@ -147,12 +149,13 @@ def if_all_structural(node):
     return visitor.res
 
 class SelectVisitor(Visitor):
-    def __init__(self, fts_fields) -> None:
+    def __init__(self, fts_fields, embedding_server_address) -> None:
         super().__init__()
         self.tmp_tables = []
         # this cache is to store classifier results for sturctured fields (e.g. cuisines in restaurants)
         self.cache = defaultdict(dict)
         self.fts_fields = fts_fields
+        self.embedding_server_address = embedding_server_address
     
     def __call__(self, node):
         super().__call__(node)
@@ -180,7 +183,7 @@ class SelectVisitor(Visitor):
             self.tmp_tables.append(tmp_table_name)
 
             # main entry point for SUQL compiler optimization
-            results, column_info = analyze_SelectStmt(node, self.cache, self.fts_fields)
+            results, column_info = analyze_SelectStmt(node, self.cache, self.fts_fields, self.embedding_server_address)
             
             # based on results and column_info, insert a temporary table
             column_create_stmt = ",\n".join(list(map(lambda x: f'"{x[0]}" {x[1]}', column_info)))
@@ -425,7 +428,16 @@ def parallel_filtering(fcn, source : list, limit, enforce_ordering = False):
 
     return true_items
 
-def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, column_info, limit, parallel = True, fetch_all = False):
+def retrieve_and_verify(
+    node : SelectStmt,
+    field_query_list,
+    existing_results,
+    column_info,
+    limit,
+    embedding_server_address,
+    parallel = True,
+    fetch_all = False
+):
     # field_query_list is a list of tuples, each entry of the tuple are:    
     # 0st: field: field to do retrieval on
     # 1st: query: query for retrieval model
@@ -507,7 +519,7 @@ def retrieve_and_verify(node : SelectStmt, field_query_list, existing_results, c
         data["single_table"] = single_table
 
         # Send a POST request
-        response = requests.post('http://127.0.0.1:8509/search', json=data, headers={'Content-Type': 'application/json'})
+        response = requests.post(embedding_server_address + '/search', json=data, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
         parsed_result = response.json()["result"]
         
@@ -912,7 +924,14 @@ def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cac
     return execute_sql_with_column_info(sql)
     
 
-def execute_free_text_queries(node, predicate : BoolExpr, existing_results, column_info, limit):
+def execute_free_text_queries(
+    node,
+    predicate : BoolExpr,
+    existing_results,
+    column_info,
+    limit,
+    embedding_server_address
+):
     # the predicate should only contain an atomic unstructural query
     # or an AND of multiple unstructural query (NOT of an unstructural query is considered to be atmoic)
     def assert_A_Const_Or_Tuple_A_Const(v):
@@ -989,19 +1008,19 @@ def execute_free_text_queries(node, predicate : BoolExpr, existing_results, colu
         return existing_results
     if isinstance(predicate, A_Expr):
         field, query, operator, value = breakdown_unstructural_query(predicate)
-        return retrieve_and_verify(node, [(field, query, operator, value)], existing_results, column_info, limit), column_info
+        return retrieve_and_verify(node, [(field, query, operator, value)], existing_results, column_info, limit, embedding_server_address), column_info
 
     elif isinstance(predicate, BoolExpr) and predicate.boolop == BoolExprType.AND_EXPR:
         field_query_list = []
         for a_pred in predicate.args:
             field_query_list.append(breakdown_unstructural_query(a_pred))
         
-        return retrieve_and_verify(node, field_query_list, existing_results, column_info, limit), column_info
+        return retrieve_and_verify(node, field_query_list, existing_results, column_info, limit, embedding_server_address), column_info
     
     else:
         raise ValueError("expects predicate to only contain atomic unstructural query, AND of them, or an NOT of atomic unsturctured query. However, this predicate is not: {}".format(RawStream()(predicate)))
 
-def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict, fts_fields : List):
+def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict, fts_fields : List, embedding_server_address):
     # there should not exist any OR expression inside sql_dnf_predicates
     
     if isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
@@ -1023,17 +1042,17 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict, fts_
         else:
             free_text_predicates = BoolExpr(boolop=BoolExprType.AND_EXPR, args = free_text_predicates)
         
-        return execute_free_text_queries(node, free_text_predicates, structural_res , column_info, limit)
+        return execute_free_text_queries(node, free_text_predicates, structural_res , column_info, limit, embedding_server_address)
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
         if if_all_structural(sql_dnf_predicates):
             return execute_structural_sql(node, sql_dnf_predicates, cache, fts_fields)
         else:
             all_results, column_info = execute_structural_sql(node, None, cache, fts_fields)
-            return execute_free_text_queries(node, sql_dnf_predicates, all_results, column_info, limit)
+            return execute_free_text_queries(node, sql_dnf_predicates, all_results, column_info, limit, embedding_server_address)
 
 
-def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List):
+def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List, embedding_server_address):
     limit = node.limitCount.val.ival if node.limitCount else -1
     sql_dnf_predicates = convert2dnf(node.whereClause)
 
@@ -1043,7 +1062,7 @@ def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List):
         choices = sorted(sql_dnf_predicates.args, key = lambda x: if_all_structural(x), reverse=True)
         res = []
         for choice in choices:
-            choice_res, column_info = execute_and(choice, node, limit - len(res), cache, fts_fields)
+            choice_res, column_info = execute_and(choice, node, limit - len(res), cache, fts_fields, embedding_server_address)
             res.extend(choice_res)
             
             # at any time, if there is enough results, return that 
@@ -1053,10 +1072,10 @@ def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List):
         return res, column_info
     
     elif isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
-        return execute_and(sql_dnf_predicates, node, limit, cache, fts_fields)
+        return execute_and(sql_dnf_predicates, node, limit, cache, fts_fields, embedding_server_address)
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
-        return execute_and(sql_dnf_predicates, node, limit, cache, fts_fields)
+        return execute_and(sql_dnf_predicates, node, limit, cache, fts_fields, embedding_server_address)
         
     else:
         raise ValueError("Expects sql to be in DNF, but is not: {}".format(RawStream()(sql_dnf_predicates)))
@@ -1066,6 +1085,7 @@ def suql_execute(
     fts_fields = [],
     loggings = "",
     disable_try_catch = False,
+    embedding_server_address=EMBEDDING_SERVER_ADDRESS
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -1079,6 +1099,7 @@ def suql_execute(
     `loggings` (str, optional): Prefix for error case loggings. Errors are written to a "_suql_error_log.txt"
         file by default.
     `disable_try_catch` (bool, optional): whether to disable try-catch (errors would directly propagate to caller)
+    `embedding_server_address` (str, optional): the embedding server address. Defaults to 'http://127.0.0.1:8501'
     
     Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result
@@ -1101,7 +1122,8 @@ def suql_execute(
     """
     results, column_names, cache = suql_execute_single(
         suql,
-        loggings,
+        embedding_server_address,
+        loggings=loggings,
         disable_try_catch=disable_try_catch,
         fts_fields=fts_fields)
     if results == []:
@@ -1121,6 +1143,7 @@ def suql_execute(
 
 def suql_execute_single(
     suql,
+    embedding_server_address,
     loggings="",
     disable_try_catch = False,
     fts_fields = [] # fields that should use PostgreSQL's Full Text Search (FTS) operators
@@ -1130,7 +1153,7 @@ def suql_execute_single(
     cache = {}
     
     if disable_try_catch:
-        visitor = SelectVisitor(fts_fields)
+        visitor = SelectVisitor(fts_fields, embedding_server_address)
         root = parse_sql(suql)
         visitor(root)
         second_sql = RawStream()(root)
@@ -1139,7 +1162,7 @@ def suql_execute_single(
         return execute_sql(second_sql)
     else:
         try:
-            visitor = SelectVisitor(fts_fields)
+            visitor = SelectVisitor(fts_fields, embedding_server_address)
             root = parse_sql(suql)
             visitor(root)
             second_sql = RawStream()(root)
