@@ -89,7 +89,7 @@ def start_free_text_fncs_server(
                 type_prompt = f" Output an integer."
         
         continuation, _ = llm_generate(
-            'prompts/review_qa.prompt',
+            'prompts/answer_qa.prompt',
             {'reviews': text_res, 'question': data["question"], "type_prompt": type_prompt},
             engine=engine,
             max_tokens=200,
@@ -144,7 +144,7 @@ def start_free_text_fncs_server(
             text_res = [data["text"]]
         
         continuation, _ = llm_generate(
-            'prompts/review_qa.prompt',
+            'prompts/answer_qa.prompt',
             {'reviews': text_res, 'question': "what is the summary of this document?"},
             engine=engine,
             max_tokens=200,

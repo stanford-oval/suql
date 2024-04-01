@@ -120,7 +120,7 @@ def extract_id_name(results, column_names):
     
     This function does exactly that. It extracts the name and _id association for each
     result presented to the user, which is used in the next turn.
-    See the rows starting with `Results:` in `parser_sql.prompt`.
+    See the rows starting with `Results:` in `parser_suql.prompt`.
     """
     results_for_ned = []
     for result in results:
@@ -204,7 +204,7 @@ def clean_up_response(results, column_names):
         final_res.append(temp)
     return final_res
 
-def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_sql.prompt'):
+def parse_execute_sql(dlgHistory, user_query, prompt_file='prompts/parser_suql.prompt'):
     """
     Call an LLM to predict a SUQL, execute it and return results.
     """
@@ -355,7 +355,7 @@ def compute_next_turn(
     )
 
     if continuation.startswith("Yes"):
-        results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache, results_for_ned = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_sql.prompt')
+        results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache, results_for_ned = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_suql.prompt')
         dlgHistory[-1].db_results = json.dumps(results, indent=4)
         dlgHistory[-1].user_target = first_sql
         dlgHistory[-1].temp_target = second_sql

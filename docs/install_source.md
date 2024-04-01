@@ -61,7 +61,7 @@ ALTER ROLE creator_role LOGIN;
 
 We are very close to a fully-working LLM-powered agent!
 
-6. Write a semantic parser prompt that asks LLMs to generate SUQL. Look at `prompts/parser_sql.prompt` for an example on how this is done on restaurants. 
+6. Write a semantic parser prompt that asks LLMs to generate SUQL. Look at `prompts/parser_suql.prompt` for an example on how this is done on restaurants. 
    - You should change the schema declaration and few-shot examples to match your domain. Make sure to include examples on how to use the `answer` function;
    - Feel free to incorporate other prompting techniques from text2sql advances.
 
