@@ -333,7 +333,8 @@ def postprocess_suql(suql_query):
 
 def compute_next_turn(
     dlgHistory : List[DialogueTurn],
-    user_utterance: str
+    user_utterance: str,
+    enable_classifier=True
 ):
     first_classification_time = 0
     semantic_parser_time = 0
@@ -344,17 +345,18 @@ def compute_next_turn(
     dlgHistory.append(DialogueTurn(user_utterance=user_utterance))
     
     # determine whether to use database
-    continuation, first_classification_time = llm_generate(
-        template_file='prompts/if_db_classification.prompt',
-        prompt_parameter_values={'dlg': dlgHistory},
-        engine='gpt-3.5-turbo-0613',
-        max_tokens=50,
-        temperature=0.0,
-        stop_tokens=['\n'], 
-        postprocess=False
-    )
+    if enable_classifier:
+        continuation, first_classification_time = llm_generate(
+            template_file='prompts/if_db_classification.prompt',
+            prompt_parameter_values={'dlg': dlgHistory},
+            engine='gpt-3.5-turbo-0613',
+            max_tokens=50,
+            temperature=0.0,
+            stop_tokens=['\n'], 
+            postprocess=False
+        )
 
-    if continuation.startswith("Yes"):
+    if not enable_classifier or continuation.startswith("Yes"):
         results, first_sql, second_sql, semantic_parser_time, suql_execution_time, cache, results_for_ned = parse_execute_sql(dlgHistory, user_utterance, prompt_file='prompts/parser_suql.prompt')
         dlgHistory[-1].db_results = json.dumps(results, indent=4)
         dlgHistory[-1].user_target = first_sql

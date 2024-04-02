@@ -230,4 +230,7 @@ def opening_hours_match(restaurant_opening_hours, opening_hours_request):
                 return True
 
 if __name__ == "__main__":
-    start_free_text_fncs_server()
+    start_free_text_fncs_server(
+        host = "127.0.0.1",
+        port = 8500,
+    )
