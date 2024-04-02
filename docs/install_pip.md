@@ -63,12 +63,12 @@ ALTER ROLE creator_role LOGIN;
 from suql.faiss_embedding import MultipleEmbeddingStore
 embedding_store = MultipleEmbeddingStore()
 embedding_store.add(
-    table_name="restaurants",
-    primary_key_field_name="_id",
-    free_text_field_name="reviews",
-    db_name="restaurants",
-    user="select_user",
-    password="select_user"
+   table_name="restaurants",
+   primary_key_field_name="_id",
+   free_text_field_name="reviews",
+   db_name="restaurants",
+   user="select_user",
+   password="select_user"
 )
 
 host = "127.0.0.1"
