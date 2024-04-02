@@ -1,12 +1,14 @@
 <p align="center">
-    <b>SUQL (Structured and Unstructured Query Language)</b>
-    <br>
-    <a href="https://arxiv.org/abs/2311.09818">
-        <img src="https://img.shields.io/badge/cs.CL-2311.09818-b31b1b" alt="arXiv">
-    </a>
-    <a href="https://github.com/stanford-oval/suql/stargazers">
-        <img src="https://img.shields.io/github/stars/stanford-oval/suql?style=social" alt="Github Stars">
-    </a>
+    <h1 align="center">
+        <b>SUQL (Structured and Unstructured Query Language)</b>
+        <br>
+        <a href="https://arxiv.org/abs/2311.09818">
+            <img src="https://img.shields.io/badge/cs.CL-2311.09818-b31b1b" alt="arXiv">
+        </a>
+        <a href="https://github.com/stanford-oval/suql/stargazers">
+            <img src="https://img.shields.io/github/stars/stanford-oval/suql?style=social" alt="Github Stars">
+        </a>
+    </h1>
 </p>
 <p align="center">
     Conversational Search over Structured and Unstructured Data with LLMs
@@ -62,6 +64,10 @@ Check out [docs/conv_agent.md](docs/conv_agent.md) for more information on best 
 # Bugs / Contribution
 
 If you encounter a problem, first checkout [docs/known_issues.md](docs/known_issues.md). If it is not listed there, we welcome Issues and/or PRs!
+
+# Paper results
+
+To replicate our results on HybridQA and restaurants in our paper, see `docs/paper_results.md` for details.
 
 # Citation
 

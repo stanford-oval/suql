@@ -98,7 +98,16 @@ def construct_reverse_dict(res_individual_id, id_list):
     return res
 
 class EmbeddingStore():
-    def __init__(self, table_name, primary_key_field_name, free_text_field_name, db_name="", chunking_param=0) -> None:
+    def __init__(
+        self,
+        table_name,
+        primary_key_field_name,
+        free_text_field_name,
+        db_name="",
+        user = "select_user",
+        password = "select_user",
+        chunking_param=0
+    ) -> None:
         # stores three lists:
         # 1. PSQL primary key for each row
         # 2. list of strings in this field
@@ -116,15 +125,19 @@ class EmbeddingStore():
         self.id2document = {}
         self.document2id = {}
         
+        # stores PSQL login credentails
+        self.user = user
+        self.password = password
+        
         self.initialize_from_sql(table_name, primary_key_field_name, free_text_field_name, db_name)
         self.initialize_embedding()
         
     def initialize_from_sql(self, table_name, primary_key_field_name, free_text_field_name, db_name):
         sql = "SELECT {}, {} FROM {}".format(primary_key_field_name, free_text_field_name, table_name)
         if db_name == "":
-            res = execute_sql(sql)[0]
+            res = execute_sql(sql, user = self.user, password = self.password)[0]
         else:
-            res = execute_sql(sql, database=db_name)[0]
+            res = execute_sql(sql, database=db_name, user = self.user, password = self.password)[0]
         
         print("initializing storage and mapping for {} <-> {}".format(primary_key_field_name, free_text_field_name))
         document_counter = 0
@@ -236,13 +249,30 @@ class MultipleEmbeddingStore():
         # table name -> free text field name -> EmbeddingStore
         self.mapping = {}
     
-    def add(self, table_name, primary_key_field_name, free_text_field_name, db_name, chunking_param=0):
+    def add(
+        self,
+        table_name,
+        primary_key_field_name,
+        free_text_field_name,
+        db_name,
+        user = "select_user",
+        password = "select_user",
+        chunking_param=0
+    ):
         if table_name in self.mapping and free_text_field_name in self.mapping[table_name]:
             print("Table {} for free text field {} already in storage. Negelecting...".format(table_name, free_text_field_name))
             return
         if table_name not in self.mapping:
             self.mapping[table_name] = {}
-        self.mapping[table_name][free_text_field_name] = EmbeddingStore(table_name, primary_key_field_name, free_text_field_name, db_name, chunking_param=chunking_param)
+        self.mapping[table_name][free_text_field_name] = EmbeddingStore(
+            table_name,
+            primary_key_field_name,
+            free_text_field_name,
+            db_name,
+            user = user,
+            password = password,
+            chunking_param = chunking_param
+        )
     
     def retrieve(self, table_name, free_text_field_name):
         return self.mapping[table_name][free_text_field_name]
@@ -283,7 +313,7 @@ class MultipleEmbeddingStore():
         res = self._dot_product(data["id_list"], data["field_query_list"], data["top"], data["single_table"])
         return res
     
-    def start_embedding_server(host = "127.0.0.1", port = 8501):
+    def start_embedding_server(self, host = "127.0.0.1", port = 8501):
         app = Flask(__name__)
         @app.route('/search', methods=['POST'])
         def search():
@@ -298,20 +328,25 @@ class MultipleEmbeddingStore():
 
 if __name__ == "__main__":
     embedding_store = MultipleEmbeddingStore()
-    embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="reviews", db_name="restaurants")
-    embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="popular_dishes", db_name="restaurants")
+    embedding_store.add(
+        table_name="restaurants",
+        primary_key_field_name="_id",
+        free_text_field_name="reviews",
+        db_name="restaurants",
+        user="select_user",
+        password="select_user"
+    )
+    embedding_store.add(
+        table_name="restaurants",
+        primary_key_field_name="_id",
+        free_text_field_name="popular_dishes",
+        db_name="restaurants",
+        user="select_user",
+        password="select_user"
+    )
 
     # Set the server address, if running through command line
     host = "127.0.0.1"
     port = 8501
 
-    app = Flask(__name__)
-    @app.route('/search', methods=['POST'])
-    def search():
-        data = request.get_json()
-        res = {
-            "result" : embedding_store.dot_product(data)
-        }
- 
-        return res
-    app.run(host=host, port=port)
+    embedding_store.start_embedding_server(host = host, port = port)

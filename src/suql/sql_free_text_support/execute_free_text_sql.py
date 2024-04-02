@@ -28,7 +28,7 @@ SET_FREE_TEXT_FCNS = ["answer"]
 verified_res = {}
 
 # Embedding server address
-EMBEDDING_SERVER_ADDRESS = 'http://127.0.0.1:8501'
+EMBEDDING_SERVER_ADDRESS = 'http://127.0.0.1:8509'
 # This denotes the model used by the SUQL compiler for all verification purposes
 MODEL = "gpt-3.5-turbo-0613"
 # This denotes whether to attempt verify against all columns
@@ -149,13 +149,27 @@ def if_all_structural(node):
     return visitor.res
 
 class SelectVisitor(Visitor):
-    def __init__(self, fts_fields, embedding_server_address) -> None:
+    def __init__(
+        self,
+        fts_fields,
+        embedding_server_address,
+        select_username,
+        select_userpswd,
+        create_username,
+        create_userpswd
+    ) -> None:
         super().__init__()
         self.tmp_tables = []
         # this cache is to store classifier results for sturctured fields (e.g. cuisines in restaurants)
         self.cache = defaultdict(dict)
         self.fts_fields = fts_fields
         self.embedding_server_address = embedding_server_address
+    
+        # stores credentials
+        self.select_username = select_username
+        self.select_userpswd = select_userpswd
+        self.create_username = create_username
+        self.create_userpswd = create_userpswd
     
     def __call__(self, node):
         super().__call__(node)
@@ -183,13 +197,20 @@ class SelectVisitor(Visitor):
             self.tmp_tables.append(tmp_table_name)
 
             # main entry point for SUQL compiler optimization
-            results, column_info = analyze_SelectStmt(node, self.cache, self.fts_fields, self.embedding_server_address)
+            results, column_info = analyze_SelectStmt(
+                node,
+                self.cache,
+                self.fts_fields,
+                self.embedding_server_address,
+                self.select_username,
+                self.select_userpswd
+            )
             
             # based on results and column_info, insert a temporary table
             column_create_stmt = ",\n".join(list(map(lambda x: f'"{x[0]}" {x[1]}', column_info)))
-            create_stmt = f"CREATE TABLE {tmp_table_name} (\n{column_create_stmt}\n); GRANT SELECT ON {tmp_table_name} TO select_user;"
+            create_stmt = f"CREATE TABLE {tmp_table_name} (\n{column_create_stmt}\n); GRANT SELECT ON {tmp_table_name} TO {self.select_username};"
             print("created table {}".format(tmp_table_name))
-            execute_sql(create_stmt, user = "creator_role", password = "creator_role", commit_in_lieu_fetch=True, no_print=True)
+            execute_sql(create_stmt, user = self.create_username, password = self.create_userpswd, commit_in_lieu_fetch=True, no_print=True)
             
             if results:
                 # some special processing is needed for python dict types - they need to be converted to json
@@ -197,13 +218,13 @@ class SelectVisitor(Visitor):
                 placeholder_str = ', '.join(['%s'] * len(results[0]))
                 for result in results:
                     updated_results = tuple([json.dumps(element) if index in json_indices else element for index, element in enumerate(result)])
-                    execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = "creator_role", password = "creator_role", commit_in_lieu_fetch=True)
+                    execute_sql(f"INSERT INTO {tmp_table_name} VALUES ({placeholder_str})", data = updated_results, user = self.create_username, password = self.create_userpswd, commit_in_lieu_fetch=True)
             
             # finally, modify the existing sql with tmp_table_name
             node.fromClause = (RangeVar(relname=tmp_table_name, inh=True, relpersistence='p'),)
             node.whereClause = None
         else:
-            classify_db_fields(node, self.cache, self.fts_fields)
+            classify_db_fields(node, self.cache, self.fts_fields, self.select_username, self.select_userpswd)
 
     def serialize_cache(self):
         def print_value(x):
@@ -232,7 +253,7 @@ class SelectVisitor(Visitor):
     def drop_tmp_tables(self):
         for tmp_table_name in self.tmp_tables:
             drop_stmt = f"DROP TABLE {tmp_table_name}"
-            execute_sql(drop_stmt, user = "creator_role", password = "creator_role", commit_in_lieu_fetch=True)
+            execute_sql(drop_stmt, user = self.create_username, password = self.create_userpswd, commit_in_lieu_fetch=True)
     
 
 class PredicateMapping():
@@ -652,11 +673,13 @@ def get_comma_separated_numbers(input_string):
     
 
 class StructuralClassification(Visitor):
-    def __init__(self, node : SelectStmt, cache, fts_fields) -> None:
+    def __init__(self, node : SelectStmt, cache, fts_fields, select_username, select_userpswd) -> None:
         super().__init__()
         self.node = node
         self.cache = cache
         self.fts_fields = fts_fields
+        self.select_username = select_username
+        self.select_userpswd = select_userpswd
     
     def __call__(self, node):
         super().__call__(node)
@@ -714,14 +737,23 @@ class StructuralClassification(Visitor):
         to_execute_node.sortClause = None
         
         try:
-            res, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node), unprotected=True)
+            res, column_infos = execute_sql_with_column_info(
+                RawStream()(to_execute_node),
+                unprotected=True,
+                user=self.select_username,
+                password=self.select_userpswd
+                )
             # it is possible if there is a type error
             # e.g. "Passengers ( 2017 )" = '490,000', but "Passengers ( 2017 )" is actually of type int
             # in such cases, the `column_infos` variable would not capture the actual type and instead stores an empty list
             # thus execute an empty query just to find out the type
             if column_infos == []:
                 to_execute_node.whereClause = None
-                _, column_infos = execute_sql_with_column_info(RawStream()(to_execute_node))
+                _, column_infos = execute_sql_with_column_info(
+                    RawStream()(to_execute_node),
+                    user=self.select_username,
+                    password=self.select_userpswd
+                )
         except psyconpg2Error:
             print("above error happens during ENUM classification attempts. Marking this predicate as returning answer.")
             res = True
@@ -778,7 +810,11 @@ class StructuralClassification(Visitor):
                 to_execute_node.sortClause = None
                 to_execute_node.whereClause = None
                 to_execute_node.limitCount = None # find all entries
-                field_value_choices, _ = execute_sql_with_column_info(RawStream()(to_execute_node))
+                field_value_choices, _ = execute_sql_with_column_info(
+                    RawStream()(to_execute_node),
+                    user=self.select_username,
+                    password=self.select_userpswd
+                )
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x:x[0], field_value_choices))
                 field_value_choices.sort()
@@ -810,12 +846,24 @@ class StructuralClassification(Visitor):
                             replace_a_expr_field(node, ancestors, parsed_res)
                             self.cache[column_name][value_res_clear] = parsed_res
 
-def classify_db_fields(node : SelectStmt, cache : dict, fts_fields: List):
+def classify_db_fields(
+    node : SelectStmt,
+    cache : dict,
+    fts_fields: List,
+    select_username : str,
+    select_userpswd : str
+):
     # we expect all atomic predicates under `predicate` to only involve stru fields
     # (no `answer` function)
     # the goal of this function is to determine which predicate leads to no results
     # for a field without results, try to classify into one of the existing fields
-    visitor = StructuralClassification(node, cache, fts_fields)
+    visitor = StructuralClassification(
+        node,
+        cache,
+        fts_fields,
+        select_username,
+        select_userpswd
+    )
     visitor(node)
 
 class Replace_Original_Target_Visitor(Visitor):
@@ -840,7 +888,14 @@ class Replace_Original_Target_Visitor(Visitor):
                     res = (String(sval=f'{table_name}^{node.fields[0].sval}'), )
             node.fields = res
 
-def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cache : dict, fts_fields : List):
+def execute_structural_sql(
+    original_node : SelectStmt,
+    predicate : BoolExpr,
+    cache : dict,
+    fts_fields : List,
+    select_username : str,
+    select_userpswd : str
+):
     node = deepcopy(original_node)
     # change projection to include everything
     # there are a couple of cases here
@@ -856,7 +911,9 @@ def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cac
             _, columns = execute_structural_sql(
                 SelectStmt(
                     fromClause=(table, )
-                ), None, cache, fts_fields
+                ), None, cache, fts_fields,
+                select_username,
+                select_userpswd,
             )
             # give the projection fields new names
             projection_table_name = table.alias.aliasname if table.alias is not None else table.relname
@@ -883,7 +940,9 @@ def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cac
             _, columns = execute_structural_sql(
                 SelectStmt(
                     fromClause=(table, )
-                ), None, cache, fts_fields
+                ), None, cache, fts_fields,
+                select_username,
+                select_userpswd,
             )
             # give the projection fields new names
             projection_table_name = table.alias.aliasname if table.alias is not None else table.relname
@@ -917,11 +976,11 @@ def execute_structural_sql(original_node : SelectStmt, predicate : BoolExpr, cac
     assert(if_all_structural(node))
     
     # deal with sturctural field classification
-    classify_db_fields(node, cache, fts_fields)
+    classify_db_fields(node, cache, fts_fields, select_username, select_userpswd)
     
     sql = RawStream()(node)
     print("execute_structural_sql executing sql: {}".format(sql))
-    return execute_sql_with_column_info(sql)
+    return execute_sql_with_column_info(sql, user=select_username, password=select_userpswd)
     
 
 def execute_free_text_queries(
@@ -1020,7 +1079,16 @@ def execute_free_text_queries(
     else:
         raise ValueError("expects predicate to only contain atomic unstructural query, AND of them, or an NOT of atomic unsturctured query. However, this predicate is not: {}".format(RawStream()(predicate)))
 
-def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict, fts_fields : List, embedding_server_address):
+def execute_and(
+    sql_dnf_predicates,
+    node : SelectStmt,
+    limit,
+    cache : dict,
+    fts_fields : List,
+    embedding_server_address,
+    select_username,
+    select_userpswd
+    ):
     # there should not exist any OR expression inside sql_dnf_predicates
     
     if isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
@@ -1034,7 +1102,14 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict, fts_
             structural_predicates = BoolExpr(boolop=BoolExprType.AND_EXPR, args = structural_predicates)
         
         # execute structural part
-        structural_res, column_info = execute_structural_sql(node, structural_predicates, cache, fts_fields)
+        structural_res, column_info = execute_structural_sql(
+            node,
+            structural_predicates,
+            cache,
+            fts_fields,
+            select_username,
+            select_userpswd
+        )
         
         free_text_predicates = tuple(filter(lambda x: not if_all_structural(x), sql_dnf_predicates.args))
         if len(free_text_predicates) == 1:
@@ -1046,13 +1121,34 @@ def execute_and(sql_dnf_predicates, node : SelectStmt, limit, cache : dict, fts_
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
         if if_all_structural(sql_dnf_predicates):
-            return execute_structural_sql(node, sql_dnf_predicates, cache, fts_fields)
+            return execute_structural_sql(
+                node,
+                sql_dnf_predicates,
+                cache,
+                fts_fields,
+                select_username,
+                select_userpswd
+            )
         else:
-            all_results, column_info = execute_structural_sql(node, None, cache, fts_fields)
+            all_results, column_info = execute_structural_sql(
+                node,
+                None,
+                cache,
+                fts_fields,
+                select_username,
+                select_userpswd
+            )
             return execute_free_text_queries(node, sql_dnf_predicates, all_results, column_info, limit, embedding_server_address)
 
 
-def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List, embedding_server_address):
+def analyze_SelectStmt(
+    node : SelectStmt,
+    cache : dict,
+    fts_fields : List,
+    embedding_server_address : str,
+    select_username : str,
+    select_userpswd : str
+):
     limit = node.limitCount.val.ival if node.limitCount else -1
     sql_dnf_predicates = convert2dnf(node.whereClause)
 
@@ -1062,7 +1158,16 @@ def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List, embed
         choices = sorted(sql_dnf_predicates.args, key = lambda x: if_all_structural(x), reverse=True)
         res = []
         for choice in choices:
-            choice_res, column_info = execute_and(choice, node, limit - len(res), cache, fts_fields, embedding_server_address)
+            choice_res, column_info = execute_and(
+                choice,
+                node,
+                limit - len(res),
+                cache,
+                fts_fields,
+                embedding_server_address,
+                select_username,
+                select_userpswd
+            )
             res.extend(choice_res)
             
             # at any time, if there is enough results, return that 
@@ -1072,11 +1177,28 @@ def analyze_SelectStmt(node : SelectStmt, cache : dict, fts_fields : List, embed
         return res, column_info
     
     elif isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.AND_EXPR:
-        return execute_and(sql_dnf_predicates, node, limit, cache, fts_fields, embedding_server_address)
+        return execute_and(
+            sql_dnf_predicates,
+            node,
+            limit,
+            cache,
+            fts_fields,
+            embedding_server_address,
+            select_username,
+            select_userpswd
+        )
     
     elif isinstance(sql_dnf_predicates, A_Expr) or (isinstance(sql_dnf_predicates, BoolExpr) and sql_dnf_predicates.boolop == BoolExprType.NOT_EXPR):
-        return execute_and(sql_dnf_predicates, node, limit, cache, fts_fields, embedding_server_address)
-        
+        return execute_and(
+            sql_dnf_predicates,
+            node,
+            limit,
+            cache,
+            fts_fields,
+            embedding_server_address,
+            select_username,
+            select_userpswd
+        )
     else:
         raise ValueError("Expects sql to be in DNF, but is not: {}".format(RawStream()(sql_dnf_predicates)))
 
@@ -1085,7 +1207,11 @@ def suql_execute(
     fts_fields = [],
     loggings = "",
     disable_try_catch = False,
-    embedding_server_address=EMBEDDING_SERVER_ADDRESS
+    embedding_server_address=EMBEDDING_SERVER_ADDRESS,
+    select_username = "select_user",
+    select_userpswd = "select_user",
+    create_username = "creator_role",
+    create_userpswd = "creator_role"
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -1100,6 +1226,10 @@ def suql_execute(
         file by default.
     `disable_try_catch` (bool, optional): whether to disable try-catch (errors would directly propagate to caller)
     `embedding_server_address` (str, optional): the embedding server address. Defaults to 'http://127.0.0.1:8501'
+    `select_username` (str, optional): user name with select privilege in db. Defaults to "select_user".
+    `select_userpswd` (str, optional): above user's password with select privilege in db. Defaults to "select_user".
+    `create_username` (str, optional): user name with create privilege in db. Defaults to "creator_role".
+    `create_userpswd` (str, optional): above user's password with create privilege in db. Defaults to "creator_role".
     
     Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result
@@ -1123,9 +1253,14 @@ def suql_execute(
     results, column_names, cache = suql_execute_single(
         suql,
         embedding_server_address,
-        loggings=loggings,
-        disable_try_catch=disable_try_catch,
-        fts_fields=fts_fields)
+        loggings,
+        disable_try_catch,
+        fts_fields,
+        select_username,
+        select_userpswd,
+        create_username,
+        create_userpswd
+    )
     if results == []:
         return results, column_names, cache
     all_no_results = True
@@ -1144,31 +1279,49 @@ def suql_execute(
 def suql_execute_single(
     suql,
     embedding_server_address,
-    loggings="",
-    disable_try_catch = False,
-    fts_fields = [] # fields that should use PostgreSQL's Full Text Search (FTS) operators
+    loggings,
+    disable_try_catch,
+    fts_fields,
+    select_username,
+    select_userpswd,
+    create_username,
+    create_userpswd
 ):
     results = []
     column_names = []
     cache = {}
     
     if disable_try_catch:
-        visitor = SelectVisitor(fts_fields, embedding_server_address)
+        visitor = SelectVisitor(
+            fts_fields,
+            embedding_server_address,
+            select_username,
+            select_userpswd,
+            create_username,
+            create_userpswd
+        )
         root = parse_sql(suql)
         visitor(root)
         second_sql = RawStream()(root)
         cache = visitor.serialize_cache()
         
-        return execute_sql(second_sql)
+        return execute_sql(second_sql, user=select_username, password=select_userpswd)
     else:
         try:
-            visitor = SelectVisitor(fts_fields, embedding_server_address)
+            visitor = SelectVisitor(
+                fts_fields,
+                embedding_server_address,
+                select_username,
+                select_userpswd,
+                create_username,
+                create_userpswd
+            )
             root = parse_sql(suql)
             visitor(root)
             second_sql = RawStream()(root)
             cache = visitor.serialize_cache()
             
-            results, column_names, cache = execute_sql(second_sql)
+            results, column_names, cache = execute_sql(second_sql, user=select_username, password=select_userpswd)
         except Exception as err:
             with open("_suql_error_log.txt", "a") as file:
                 file.write(f"==============\n")
