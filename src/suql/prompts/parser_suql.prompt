@@ -75,7 +75,7 @@ Target: SELECT * FROM restaurants WHERE 'after 3am and before 7am on Monday' = A
 __
 
 {% for dlg_turn in dlg[:-1] %}
-{% if dlg_turn.genie_utterance is not none %}
+{% if dlg_turn.db_results is not none %}
 User: {{ dlg_turn.user_utterance }}
 Target: {{ dlg_turn.user_target }}
 Agent: {{ dlg_turn.agent_utterance }}
