@@ -459,7 +459,7 @@ class MultipleEmbeddingStore:
         @app.route("/search", methods=["POST"])
         def search():
             data = request.get_json()
-            res = {"result": embedding_store.dot_product(data)}
+            res = {"result": self.dot_product(data)}
 
             return res
 

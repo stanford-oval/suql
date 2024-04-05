@@ -12,7 +12,7 @@ pip install suql
 
 1. Run `python -m spacy download en_core_web_sm`;
 
-2. Install `faiss` by `conda install faiss`.
+2. Install `faiss` by `conda install -c conda-forge faiss-gpu`. We recommend the GPU version for accelerated indexing speed. 
 
 # Entry point:
 
@@ -26,9 +26,9 @@ See documentation for its specific usage. Now, let's set up your database and 2 
 
 1. Follow the instruction there to install a postgreSQL database. For instance, if you are installing on Ubuntu, then follow section `PostgreSQL Apt Repository` at https://www.postgresql.org/download/linux/ubuntu/.
 
-2. After that, the SUQL compiler needs to make use of python functions within postgreSQL. This is done via the `postgresql-plpython3` language. If you are using Ubuntu, simply run `sudo apt-get install postgresql-plpython3-15`.
+2. After that, the SUQL compiler needs to make use of python functions within postgreSQL. This is done via the `postgresql-plpython3` language. If you are using Ubuntu, simply run `sudo apt-get install postgresql-plpython3-<your_psql_version>`.
 
-3. Then, in your database's command line (incurred via `psql your_database_name`), do `CREATE EXTENSION plpython3u;`. This loads this language into the current db.
+3. Then, in your database's command line (incurred via `psql <your_database_name>`), do `CREATE EXTENSION plpython3u;`. This loads this language into the current db. 
 
 # Preparations for database and servers
 
@@ -87,7 +87,7 @@ from suql.free_text_fcns_server import start_free_text_fncs_server
 
 host = "127.0.0.1"
 port = 8500
-start_free_text_fncs_server(host = host, port = port)
+start_free_text_fncs_server(host=host, port=port)
 ```
 
 # Test with the entry point

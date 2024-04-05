@@ -24,7 +24,7 @@
 
 # What is SUQL
 
-SUQL stands for Structured and Unstructured Query Language. It augments SQL with several important free text primitives for a precise, succinct, and expressive representation. It can be used to build chatbots for relational data sources that contain both structured and unstructured information. Similar to how text-to-SQL has seen [great success](https://python.langchain.com/docs/use_cases/qa_structured/sql), SUQL can be uses as the semantic parsing target language for hybrid databases, for instance, for:
+SUQL stands for Structured and Unstructured Query Language. It augments SQL with several important free text primitives for a precise, succinct, and expressive representation. It can be used to build chatbots for relational data sources that contain both structured and unstructured information. Similar to how text-to-SQL has seen [great success](https://python.langchain.com/docs/use_cases/qa_structured/sql), SUQL can be used as the semantic parsing target language for hybrid databases, for instance, for:
 
 ![An example restaurant relational database](https://github.com/stanford-oval/suql/blob/main/figures/figure1.png?raw=true)
 
@@ -59,11 +59,11 @@ Ideal for using this repo to build a SUQL-powered conversational interface to yo
 
 ## Agent tutorial
 
-Check out [conv_agent.md](https://github.com/stanford-oval/suql/blob/main/docs/conv_agent.md) for more information on best practices of using SUQL to power your conversational agent.
+Check out [conv_agent.md](https://github.com/stanford-oval/suql/blob/main/docs/conv_agent.md) for more information on best practices for using SUQL to power your conversational agent.
 
 # Bugs / Contribution
 
-If you encounter a problem, first checkout [known_issues.md](https://github.com/stanford-oval/suql/blob/main/docs/known_issues.md). If it is not listed there, we welcome Issues and/or PRs!
+If you encounter a problem, first check [known_issues.md](https://github.com/stanford-oval/suql/blob/main/docs/known_issues.md). If it is not listed there, we welcome Issues and/or PRs!
 
 # Paper results
 
@@ -71,7 +71,7 @@ To replicate our results on HybridQA and restaurants in our paper, see [paper_re
 
 # Citation
 
-If you find this work to be useful to your, please consider citing us. This helps us immensely.
+If you find this work to be useful to you, please consider citing us. This helps us immensely.
 
 ```
 @misc{liu2024suql,
