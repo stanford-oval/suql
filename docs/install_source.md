@@ -11,15 +11,17 @@ git clone https://github.com/stanford-oval/suql.git
 
 1. Follow the instruction there to install a postgreSQL database. For instance, if you are installing on Ubuntu, then follow section `PostgreSQL Apt Repository` at https://www.postgresql.org/download/linux/ubuntu/.
 
-2. After that, the SUQL compiler needs to make use of python functions within postgreSQL. This is done via the `postgresql-plpython3` language. If you are using Ubuntu, simply run `sudo apt-get install postgresql-plpython3-15`.
+2. After that, the SUQL compiler needs to make use of python functions within postgreSQL. This is done via the `postgresql-plpython3` language. If you are using Ubuntu, simply run `sudo apt-get install postgresql-plpython3-<your_psql_version>`.
 
-3. Then, in your database's command line (incurred via `psql your_database_name`), do `CREATE EXTENSION plpython3u;`. This loads this language into the current db.
+3. Then, in your database's command line (incurred via `psql <your_database_name>`), do `CREATE EXTENSION plpython3u;`. This loads this language into the current db.
 
 # Installing python dependencies of SUQL
 
 1. Install dependencies via `conda env create -f conda_env.yml`;
 
-2. Run `python -m spacy download en_core_web_sm`;
+2. Install `faiss` by `conda install -c conda-forge faiss-gpu`. We recommend the GPU version for accelerated indexing speed. 
+
+3. Run `python -m spacy download en_core_web_sm`;
 
 # How to set up SUQL on your PostgreSQL database step-by-step.
 

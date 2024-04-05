@@ -14,7 +14,6 @@ pip install suql
 
 2. Install `faiss` by `conda install -c conda-forge faiss-gpu`. We recommend the GPU version for accelerated indexing speed. 
 
-3. Run `export OPENAI_API_KEY=[your OpenAI API key here]` in the terminal
 # Entry point:
 
 The main entry point to the SUQL compiler is simply:
