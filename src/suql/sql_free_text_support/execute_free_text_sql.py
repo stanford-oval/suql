@@ -29,7 +29,7 @@ SET_FREE_TEXT_FCNS = ["answer"]
 verified_res = {}
 
 # Embedding server address
-EMBEDDING_SERVER_ADDRESS = "http://127.0.0.1:8509"
+EMBEDDING_SERVER_ADDRESS = "http://127.0.0.1:8501"
 # This denotes the model used by the SUQL compiler for all verification purposes
 MODEL = "gpt-3.5-turbo-0613"
 # This denotes whether to attempt verify against all columns
