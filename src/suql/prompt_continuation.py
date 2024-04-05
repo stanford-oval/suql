@@ -17,7 +17,6 @@ import traceback
 from functools import partial
 from threading import Thread
 
-import pymongo
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from suql.utils import num_tokens_from_string
@@ -42,8 +41,12 @@ openai.api_type == "open_ai"
 # openai.api_base = "https://ovalopenairesource.openai.azure.com/"
 # openai.api_version = "2023-05-15"
 
-mongo_client = pymongo.MongoClient("localhost", 27017)
-prompt_cache_db = mongo_client["open_ai_prompts"]["caches"]
+ENABLE_CACHING = False
+
+if ENABLE_CACHING:
+    import pymongo
+    mongo_client = pymongo.MongoClient("localhost", 27017)
+    prompt_cache_db = mongo_client["open_ai_prompts"]["caches"]
 
 # inference_cost_per_1000_tokens = {'ada': 0.0004, 'babbage': 0.0005, 'curie': 0.002, 'davinci': 0.02, 'turbo': 0.003, 'gpt-4': 0.03} # for Azure
 inference_input_cost_per_1000_tokens = {
@@ -268,20 +271,21 @@ def llm_generate(
     if filled_prompt is None:
         filled_prompt = _fill_template(template_file, prompt_parameter_values)
 
-    cache_res = prompt_cache_db.find_one(
-        {
-            "model": engine,
-            "prompt": filled_prompt,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "stop_tokens": stop_tokens,
-            "top_p": top_p,
-            "frequency_penalty": frequency_penalty,
-            "presence_penalty": presence_penalty,
-        }
-    )
-    if cache_res:
-        return cache_res["res"], 0
+    if ENABLE_CACHING:
+        cache_res = prompt_cache_db.find_one(
+            {
+                "model": engine,
+                "prompt": filled_prompt,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stop_tokens": stop_tokens,
+                "top_p": top_p,
+                "frequency_penalty": frequency_penalty,
+                "presence_penalty": presence_penalty,
+            }
+        )
+        if cache_res:
+            return cache_res["res"], 0
 
     # We have experiences very long latency from time to time from both Azure's and OpenAI's chatGPT response time
     # Here is a heuristics-based, dynamically-calculated max wait time, before we cancel the last request and re-issue a new one
@@ -293,7 +297,6 @@ def llm_generate(
     final_result = None
 
     for attempt in range(attempts):
-        print(f"Attempt {attempt + 1} of {attempts}")
         success, result = call_with_timeout(
             _generate,
             max_wait_time,
@@ -312,8 +315,6 @@ def llm_generate(
         if success:
             final_result = result
             break
-        else:
-            print("Retrying...")
 
     if final_result is None:
         final_result = _generate(
@@ -333,19 +334,20 @@ def llm_generate(
     end_time = time.time()
     elapsed_time = end_time - start_time
 
-    prompt_cache_db.insert_one(
-        {
-            "model": engine,
-            "prompt": filled_prompt,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "stop_tokens": stop_tokens,
-            "top_p": top_p,
-            "frequency_penalty": frequency_penalty,
-            "presence_penalty": presence_penalty,
-            "res": final_result,
-        }
-    )
+    if ENABLE_CACHING:
+        prompt_cache_db.insert_one(
+            {
+                "model": engine,
+                "prompt": filled_prompt,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stop_tokens": stop_tokens,
+                "top_p": top_p,
+                "frequency_penalty": frequency_penalty,
+                "presence_penalty": presence_penalty,
+                "res": final_result,
+            }
+        )
 
     return final_result, elapsed_time
 

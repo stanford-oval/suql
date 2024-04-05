@@ -57,7 +57,7 @@ def start_free_text_fncs_server(
             "result" (str): answer function result
         }
         """
-        from prompt_continuation import llm_generate
+        from suql.prompt_continuation import llm_generate
 
         data = request.get_json()
 
@@ -123,7 +123,7 @@ def start_free_text_fncs_server(
         }
         """
         print(k)
-        from prompt_continuation import llm_generate
+        from suql.prompt_continuation import llm_generate
 
         data = request.get_json()
 
