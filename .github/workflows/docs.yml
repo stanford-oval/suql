@@ -2,8 +2,9 @@ name: website
 
 # build the documentation whenever there are new commits on main
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main
 
 # security: restrict permissions for CI jobs.
 permissions:
