@@ -14,14 +14,6 @@ pip install suql
 
 2. Install `faiss` by `conda install -c conda-forge faiss-gpu`. We recommend the GPU version for accelerated indexing speed. 
 
-# Entry point:
-
-The main entry point to the SUQL compiler is simply:
-```python
-from suql import suql_execute
-```
-See documentation for its specific usage. Now, let's set up your database and 2 servers to enable SUQL access on your db!
-
 # Installing [PostgreSQL database](https://www.postgresql.org/)
 
 1. Follow the instruction there to install a postgreSQL database. For instance, if you are installing on Ubuntu, then follow section `PostgreSQL Apt Repository` at https://www.postgresql.org/download/linux/ubuntu/.
