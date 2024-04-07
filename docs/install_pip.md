@@ -90,5 +90,11 @@ You should be good to go! In a separate terminal, run `export OPENAI_API_KEY=[yo
 from suql import suql_execute
 # e.g. suql = "SELECT * FROM restaurants WHERE answer(reviews, 'is this a family-friendly restaurant?') = 'Yes' AND rating = 4;"
 suql = "Your favorite SUQL"
-suql_execute(suql)
+
+# e.g. table_w_ids = {"restaurants": "_id"}
+table_w_ids = "mapping between table name -> unique ID column name"
+
+suql_execute(suql, table_w_ids)
 ```
+
+Check out [API documentation](https://stanford-oval.github.io/suql/suql/sql_free_text_support/execute_free_text_sql.html) for details.
