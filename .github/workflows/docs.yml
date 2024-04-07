@@ -27,7 +27,7 @@ jobs:
       - run: python -m spacy download en_core_web_sm
       # ADJUST THIS: build your documentation into docs/.
       # We use a custom build script for pdoc itself, ideally you just run `pdoc -o docs/ ...` here.
-      - run: pdoc -o docs_pdocs/ suql.sql_free_text_support.execute_free_text_sql
+      - run: pdoc -o docs_pdocs/ suql.sql_free_text_support.execute_free_text_sql --html
 
       - uses: actions/upload-pages-artifact@v3
         with:
