@@ -180,7 +180,33 @@ def get_hours_request_extracted(hours_request):
 
 
 def get_restaurant_hours_extracted(restaurant_hours):
-    from suql.agent import handle_opening_hours
+    def handle_opening_hours(input_dict):
+        """
+        Custom function to convert opening hours into LLM-readable formats.
+        """
+        order = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ]
+
+        def get_order_index(x):
+            try:
+                return order.index(x["day_of_the_week"])
+            except ValueError:
+                return len(order)  # or any default value
+
+        res = []
+        input_dict = sorted(input_dict, key=lambda x: get_order_index(x))
+        for i in input_dict:
+            res.append(
+                f'open from {i["open_time"]} to {i["close_time"]} on {i["day_of_the_week"]}'
+            )
+        return res
 
     restaurant_hours = json.loads(restaurant_hours)
     restaurant_hours = handle_opening_hours(restaurant_hours)
