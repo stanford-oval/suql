@@ -1534,8 +1534,8 @@ def suql_execute(
     """
     Main entry point to the SUQL Python-based compiler.
 
-    ### Parameters:
-    `suql` (str): The to-be-executed suql query,
+    # Parameters:
+    `suql` (str): The to-be-executed suql query.
     
     `table_w_ids` (dict): A dictionary where each key is a table name, and each value is the corresponding
         unique ID column name in this table, e.g., `table_w_ids = {"restaurants": "_id"}`, meaning that the
@@ -1566,14 +1566,14 @@ def suql_execute(
     
     `create_userpswd` (str, optional): above user's password with create privilege in db. Defaults to "creator_role".
 
-    ### Returns:
+    # Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
     
     `column_names` (List[str]): A list of database column names in the same order as `results`.
     
     `cache` (Dict()): Debugging information from the SUQL compiler.
 
-    ### Example:
+    # Example:
     ```
     suql_execute(
         "SELECT * FROM restaurants WHERE answer(reviews, 'is this restaurant family-friendly?') = 'yes'",
