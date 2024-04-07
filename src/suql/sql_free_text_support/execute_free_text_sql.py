@@ -1534,33 +1534,46 @@ def suql_execute(
     """
     Main entry point to the SUQL Python-based compiler.
 
-    Parameters:
+    ### Parameters:
     `suql` (str): The to-be-executed suql query,
+    
     `table_w_ids` (dict): A dictionary where each key is a table name, and each value is the corresponding
         unique ID column name in this table, e.g., `table_w_ids = {"restaurants": "_id"}`, meaning that the
         relevant tables to the SUQL compiler include only the `restaurants` table, which has unique ID column `_id`.
+        
     `fts_fields` (List[str], optional): Fields that should use PostgreSQL's Full Text Search (FTS) operators;
         The SUQL compiler would change certain string operators like "=" to use PostgreSQL's FTS operators.
         It uses `websearch_to_tsquery` and the `@@` operator to match against these fields.
+        
     `llm_model_name` (str, optional): The LLM to be used by the SUQL compiler.
         Defaults to `gpt-3.5-turbo-0125`.
+        
     `max_verify` (str): For each LIMIT x clause, `max_verify * x` results will be retrieved together from
         the embedding model for LLM to verify. Defaults to 20.
+        
     `loggings` (str, optional): Prefix for error case loggings. Errors are written to a "_suql_error_log.txt"
         file by default.
-    `disable_try_catch` (bool, optional): whether to disable try-catch (errors would directly propagate to caller)
-    `embedding_server_address` (str, optional): the embedding server address. Defaults to 'http://127.0.0.1:8501'
+        
+    `disable_try_catch` (bool, optional): whether to disable try-catch (errors would directly propagate to caller).
+    
+    `embedding_server_address` (str, optional): the embedding server address. Defaults to 'http://127.0.0.1:8501'.
+    
     `select_username` (str, optional): user name with select privilege in db. Defaults to "select_user".
+    
     `select_userpswd` (str, optional): above user's password with select privilege in db. Defaults to "select_user".
+    
     `create_username` (str, optional): user name with create privilege in db. Defaults to "creator_role".
+    
     `create_userpswd` (str, optional): above user's password with create privilege in db. Defaults to "creator_role".
 
-    Returns:
-    `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result
-    `column_names` (List[str]): A list of database column names in the same order as `results`
-    `cache` (Dict()): Debugging information from the SUQL compiler
+    ### Returns:
+    `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
+    
+    `column_names` (List[str]): A list of database column names in the same order as `results`.
+    
+    `cache` (Dict()): Debugging information from the SUQL compiler.
 
-    Example:
+    ### Example:
     ```
     suql_execute(
         "SELECT * FROM restaurants WHERE answer(reviews, 'is this restaurant family-friendly?') = 'yes'",
