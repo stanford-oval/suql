@@ -242,7 +242,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file="prompts/parser_suql.p
 
     suql_execute_start_time = time.time()
     final_res, column_names, cache = suql_execute(
-        postprocessed_suql, fts_fields=[("restaurants", "name")]
+        postprocessed_suql, {"restaurants": "_id"}, fts_fields=[("restaurants", "name")]
     )
     suql_execute_end_time = time.time()
 
