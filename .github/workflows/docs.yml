@@ -15,10 +15,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       # ADJUST THIS: install all dependencies (including pdoc)
       - run: pip install pdoc3
@@ -27,9 +27,9 @@ jobs:
       - run: python -m spacy download en_core_web_sm
       # ADJUST THIS: build your documentation into docs/.
       # We use a custom build script for pdoc itself, ideally you just run `pdoc -o docs/ ...` here.
-      - run: pdoc -o docs_pdocs/ suql.sql_free_text_support.execute_free_text_sql
+      - run: pdoc -o docs_pdocs/ suql.sql_free_text_support.execute_free_text_sql.py
 
-      - uses: actions/upload-pages-artifact@v1
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: docs_pdocs/
 
@@ -46,4 +46,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4
