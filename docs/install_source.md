@@ -17,7 +17,7 @@ git clone https://github.com/stanford-oval/suql.git
 
 # Installing python dependencies of SUQL
 
-1. Install dependencies via `conda env create -f conda_env.yml`;
+1. Install dependencies via `conda create -n suql python=<any one of 3.8,3.9,3.10,3.11>; conda activate suql; conda env update -f conda_env.yml`;
 
 2. Install `faiss` by `conda install -c conda-forge faiss-gpu`. We recommend the GPU version for accelerated indexing speed. 
 
