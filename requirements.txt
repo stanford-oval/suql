@@ -4,7 +4,6 @@ Flask==2.3.2
 Flask-Cors==4.0.0
 Flask-RESTful==0.3.10
 transformers==4.38.2
-torch==2.0.1
 requests==2.31.0
 spacy==3.7.4
 tiktoken==0.4.0
