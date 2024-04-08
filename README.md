@@ -8,6 +8,9 @@
         <a href="https://github.com/stanford-oval/suql/stargazers">
             <img src="https://img.shields.io/github/stars/stanford-oval/suql?style=social" alt="Github Stars">
         </a>
+        <a href="https://pypi.org/project/suql/">
+            <img alt="PyPI version" src="https://img.shields.io/pypi/v/suql.svg"/>
+        </a>
     </h1>
 </p>
 <p align="center">
