@@ -73,7 +73,7 @@ under `if __name__ == "__main__":` to match your database with its column names.
    - For instance, this line instructs the SUQL compiler to set up an embedding server for the `restaurants` database, which has `_id` column as the unique row identifier, for the `popular_dishes` column (such column need to be of type `TEXT` or `TEXT[]`, or other fixed-length strings/list of strings) under table `restaurants`. This is executed with user privilege `user="select_user"` and `password="select_user"`;
    - By default, this will be set up on port 8501, which is then called by `src/suql/execute_free_text_sql.py`. In case you need to use another port, please change both addresses.
 
-5. Set up the backend server for the `answer`, `summary` functions. In a separate terminal, first set up OpenAI API key with `export OPENAI_API_KEY=[your OpenAI API key here]`. Then, run `python src/suql/free_text_fcns_server.py`.
+5. Set up the backend server for the `answer`, `summary` functions. In a separate terminal, first set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Then, run `python src/suql/free_text_fcns_server.py`.
    - As you probably noticed, the code in `custom_functions.sql` is just making queries to this server, which handles the LLM API calls. If you changed the address in `custom_functions.sql`, then also update the address under `if __name__ == "__main__":`.
 
 ## Write 2 few-shot prompts
@@ -88,7 +88,7 @@ We are very close to a fully-working LLM-powered agent!
    - If you decide to keep this, then modify the examples to match your domain;
    - If you decide to delete this, then simply set the line `enable_classifier=True` to be `enable_classifier=False`.
 
-8. In a separate terminal from the two servers above, run `export OPENAI_API_KEY=[your OpenAI API key here]`. Test with `python src/suql/agent.py`. You should be able to interact with your agent on your CLI!
+8. In a separate terminal from the two servers above, set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Test with `python src/suql/agent.py`. You should be able to interact with your agent on your CLI!
 
 # Set up with Chainlit
 
