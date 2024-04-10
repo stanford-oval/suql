@@ -73,7 +73,7 @@ embedding_store.start_embedding_server(host = host, port = port)
     - You can add more columns as needed using ``embedding_store.add()`;
     - This will be set up on port 8501, which matches the default keyword argument `embedding_server_address` in `suql_execute`. Make sure both addresses match if you modify it.
 
-5. Set up the backend server for the `answer`, `summary` functions. In a separate terminal, first set up OpenAI API key with `export OPENAI_API_KEY=[your OpenAI API key here]`. Write the following content into a Python script and execute in that terminal:
+5. Set up the backend server for the `answer`, `summary` functions. In a separate terminal, first set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Write the following content into a Python script and execute in that terminal:
 ```python
 from suql.free_text_fcns_server import start_free_text_fncs_server
 
@@ -84,7 +84,7 @@ start_free_text_fncs_server(host=host, port=port)
 
 # Test with the entry point
 
-You should be good to go! In a separate terminal, run `export OPENAI_API_KEY=[your OpenAI API key here]`, and test with
+You should be good to go! In a separate terminal, set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`), and test with
 
 ```python
 >>> from suql import suql_execute

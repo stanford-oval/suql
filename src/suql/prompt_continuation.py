@@ -7,9 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import List
 
-import openai
-from openai import OpenAI
-
 import os
 import time
 import traceback
@@ -19,6 +16,8 @@ from threading import Thread
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from suql.utils import num_tokens_from_string
+from litellm import completion, completion_cost
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -41,55 +40,17 @@ if ENABLE_CACHING:
     mongo_client = pymongo.MongoClient("localhost", 27017)
     prompt_cache_db = mongo_client["open_ai_prompts"]["caches"]
 
-# inference_cost_per_1000_tokens = {'ada': 0.0004, 'babbage': 0.0005, 'curie': 0.002, 'davinci': 0.02, 'turbo': 0.003, 'gpt-4': 0.03} # for Azure
-inference_input_cost_per_1000_tokens = {
-    "gpt-4": 0.03,
-    "gpt-3.5-turbo-0613": 0.0010,
-    "gpt-3.5-turbo-1106": 0.0010,
-    "gpt-4-1106-preview": 0.01,
-}  # for OpenAI
-inference_output_cost_per_1000_tokens = {
-    "gpt-4": 0.06,
-    "gpt-3.5-turbo-0613": 0.0010,
-    "gpt-3.5-turbo-1106": 0.0020,
-    "gpt-4-1106-preview": 0.03,
-}  # for OpenAI
+
 total_cost = 0  # in USD
-
-
 def get_total_cost():
     global total_cost
     return total_cost
 
 
-def _model_name_to_cost(model_name: str) -> float:
-    if (
-        model_name in inference_input_cost_per_1000_tokens
-        and model_name in inference_output_cost_per_1000_tokens
-    ):
-        return (
-            inference_input_cost_per_1000_tokens[model_name],
-            inference_output_cost_per_1000_tokens[model_name],
-        )
-    raise ValueError("Did not recognize GPT model name %s" % model_name)
-
-
-def openai_chat_completion_with_backoff(**kwargs):
-    client = OpenAI()
-    # # uncomment if using Azure OpenAI
-    openai.api_type == "open_ai"
-    # openai.api_type = "azure"
-    # openai.api_base = "https://ovalopenairesource.openai.azure.com/"
-    # openai.api_version = "2023-05-15"
+def chat_completion_with_backoff(**kwargs):
     global total_cost
-    ret = client.chat.completions.create(**kwargs)
-    num_prompt_tokens = ret.usage.prompt_tokens
-    num_completion_tokens = ret.usage.completion_tokens
-    prompt_cost, completion_cost = _model_name_to_cost(kwargs["model"])
-    total_cost += (
-        num_prompt_tokens / 1000 * prompt_cost
-        + num_completion_tokens / 1000 * completion_cost
-    )  # TODO: update this
+    ret = completion(**kwargs)
+    total_cost += completion_cost(ret)
     return ret.choices[0].message.content
 
 
@@ -126,6 +87,7 @@ def _generate(
         no_line_break_start = ""
         no_line_break_length = 0
         kwargs = {
+            "model": engine,
             "messages": [
                 {"role": "system", "content": filled_prompt + no_line_break_start}
             ],
@@ -136,28 +98,8 @@ def _generate(
             "presence_penalty": presence_penalty,
             "stop": stop_tokens,
         }
-        if openai.api_type == "azure":
-            kwargs.update({"engine": engine})
-        else:
-            engine_model_map = {
-                "gpt-4": "gpt-4",
-                "gpt-35-turbo": "gpt-3.5-turbo-1106",
-                "gpt-3.5-turbo": "gpt-3.5-turbo-1106",
-                "gpt-4-turbo": "gpt-4-1106-preview",
-            }
-            # https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models
-            # https://platform.openai.com/docs/models/model-endpoint-compatibility
-            kwargs.update(
-                {
-                    "model": (
-                        engine_model_map[engine]
-                        if engine in engine_model_map
-                        else engine
-                    )
-                }
-            )
 
-        generation_output = openai_chat_completion_with_backoff(**kwargs)
+        generation_output = chat_completion_with_backoff(**kwargs)
         generation_output = no_line_break_start + generation_output
         logger.info("LLM output = %s", generation_output)
 
