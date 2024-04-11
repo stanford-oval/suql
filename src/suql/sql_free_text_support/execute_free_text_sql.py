@@ -1555,6 +1555,8 @@ def suql_execute(
         
     `loggings` (str, optional): Prefix for error case loggings. Errors are written to a "_suql_error_log.txt"
         file by default.
+
+    `log_filename` (str, optional): Logging file name for the SUQL compiler. If not provided, logging is disabled.
         
     `disable_try_catch` (bool, optional): whether to disable try-catch (errors would directly propagate to caller).
     
