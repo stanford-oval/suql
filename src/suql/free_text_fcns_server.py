@@ -2,7 +2,7 @@ from flask import request, Flask
 import json
 from utils import num_tokens_from_string, handle_opening_hours
 import re
-from sql_free_text_support.faiss_embedding import compute_top_similarity_documents
+from suql.faiss_embedding import compute_top_similarity_documents
     
 # Set the server address
 host = "127.0.0.1"

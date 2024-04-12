@@ -299,6 +299,8 @@ if __name__ == "__main__":
     embedding_store = MultipleEmbeddingStore()
     embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="reviews", db_name="restaurants")
     embedding_store.add(table_name="restaurants", primary_key_field_name="_id", free_text_field_name="popular_dishes", db_name="restaurants")
+    embedding_store.add(table_name="courses", primary_key_field_name="course_id", free_text_field_name="description", db_name="course_assistant")
+    embedding_store.add(table_name="ratings", primary_key_field_name="rating_id", free_text_field_name="reviews", db_name="course_assistant")
 
     app = Flask(__name__)
     @app.route('/search', methods=['POST'])

@@ -1,6 +1,6 @@
 import chainlit as cl
 from chainlit.types import ThreadDict
-from yelp_loop import *
+from suql.agent import *
 from pymongo import MongoClient, ASCENDING
 import argparse
 from typing import Dict, Optional
