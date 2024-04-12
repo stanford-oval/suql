@@ -176,14 +176,10 @@ def call_with_timeout(func, timeout_sec, *args, **kwargs):
     func_thread.join(timeout_sec)
 
     if func_thread.is_alive():
-        print(f"Function timed out after {timeout_sec} seconds.")
         return False, None
     elif func_thread.exception:
-        print(f"Function raised an exception: {func_thread.exception}")
-        print(func_thread.traceback_str)
         return False, None
     else:
-        print("Function finished successfully.")
         return True, func_thread.return_value
 
 

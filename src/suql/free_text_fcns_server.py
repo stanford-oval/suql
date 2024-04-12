@@ -102,7 +102,6 @@ def start_free_text_fncs_server(
         )
 
         res = {"result": continuation}
-        print(res)
         return res
 
     @app.route("/summary", methods=["POST"])
@@ -122,7 +121,6 @@ def start_free_text_fncs_server(
             "result" (str): summary function result
         }
         """
-        print(k)
         from suql.prompt_continuation import llm_generate
 
         data = request.get_json()
@@ -154,7 +152,6 @@ def start_free_text_fncs_server(
         )
 
         res = {"result": continuation}
-        print(res)
         return res
 
     # start Flask server

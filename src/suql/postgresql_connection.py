@@ -77,7 +77,6 @@ def execute_sql_with_column_info(
     password="select_user",
     unprotected=False,
 ):
-    start_time = time.time()
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
         database=database,
@@ -95,7 +94,6 @@ def execute_sql_with_column_info(
     conn.commit()
 
     try:
-        print("executing SQL {}".format(sql_query))
         # Execute the SQL query
         cursor.execute(sql_query)
 
@@ -128,21 +126,8 @@ def execute_sql_with_column_info(
     # Close the cursor and connection
     cursor.close()
     conn.close()
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(elapsed_time)
     return list(results), column_info
 
 
 if __name__ == "__main__":
     print(execute_sql("SELECT * FROM restaurants LIMIT 1;"))
-    print(
-        execute_sql(
-            "SELECT reviews FROM restaurants WHERE name ILIKE 'Bistronomie by Baumé' LIMIT 1;"
-        )
-    )
-    print(
-        execute_sql(
-            "SELECT *, summary(reviews) FROM restaurants WHERE 'chef's table' = ANY (popular_dishes) AND location = 'Palo Alto' LIMIT 1;"
-        )
-    )

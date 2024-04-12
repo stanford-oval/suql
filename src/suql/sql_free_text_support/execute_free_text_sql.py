@@ -260,6 +260,7 @@ class _SelectVisitor(Visitor):
                         user=self.create_username,
                         password=self.create_userpswd,
                         commit_in_lieu_fetch=True,
+                        no_print=True
                     )
 
             # finally, modify the existing sql with tmp_table_name
@@ -309,6 +310,7 @@ class _SelectVisitor(Visitor):
                 user=self.create_username,
                 password=self.create_userpswd,
                 commit_in_lieu_fetch=True,
+                no_print=True
             )
 
 
@@ -1672,7 +1674,7 @@ def _suql_execute_single(
         second_sql = RawStream()(root)
         cache = visitor.serialize_cache()
 
-        return execute_sql(second_sql, user=select_username, password=select_userpswd)
+        return execute_sql(second_sql, user=select_username, password=select_userpswd, no_print=True)
     else:
         try:
             visitor = _SelectVisitor(
@@ -1692,7 +1694,7 @@ def _suql_execute_single(
             cache = visitor.serialize_cache()
 
             results, column_names, cache = execute_sql(
-                second_sql, user=select_username, password=select_userpswd
+                second_sql, user=select_username, password=select_userpswd, no_print=True
             )
         except Exception as err:
             with open("_suql_error_log.txt", "a") as file:
