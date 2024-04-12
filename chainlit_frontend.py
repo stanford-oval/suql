@@ -5,6 +5,9 @@ from pymongo import MongoClient, ASCENDING
 import argparse
 from typing import Dict, Optional
 
+# NOTE: this step logs conversations to a mongodb via
+# env variable `COSMOS_CONNECTION_STRING`.
+# You can log to a MongoDB of your choice here
 CONNECTION_STRING = os.environ.get("COSMOS_CONNECTION_STRING")
 
 class BackendConnection:
@@ -14,7 +17,7 @@ class BackendConnection:
         
         client = MongoClient(CONNECTION_STRING)
         self.db = client['yelpbot']  # the database name is yelpbot
-        self.table = self.db['dialog_turns_studies'] # the collection that stores dialog turns
+        self.table = self.db['dialog_turns_deploy'] # the collection that stores dialog turns
         self.table.create_index("$**") # necessary to build an index before we can call sort()
 
         self.greeting = greeting
