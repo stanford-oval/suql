@@ -1,8 +1,17 @@
-import psycopg2
 import time
 
-def execute_sql(sql_query, user = "select_user", password = "select_user", data = None, commit_in_lieu_fetch = False, no_print = False, database = "restaurants"):
-    
+import psycopg2
+
+
+def execute_sql(
+    sql_query,
+    database="restaurants",
+    user="select_user",
+    password="select_user",
+    data=None,
+    commit_in_lieu_fetch=False,
+    no_print=False,
+):
     start_time = time.time()
 
     if password == "":
@@ -11,7 +20,7 @@ def execute_sql(sql_query, user = "select_user", password = "select_user", data 
             user=user,
             host="/var/run/postgresql",
             port="5432",
-            options='-c statement_timeout=30000 -c client_encoding=UTF8'
+            options="-c statement_timeout=30000 -c client_encoding=UTF8",
         )
     else:
         conn = psycopg2.connect(
@@ -20,12 +29,12 @@ def execute_sql(sql_query, user = "select_user", password = "select_user", data 
             password=password,
             host="127.0.0.1",
             port="5432",
-            options='-c statement_timeout=30000 -c client_encoding=UTF8'
+            options="-c statement_timeout=30000 -c client_encoding=UTF8",
         )
 
     # Create a cursor object to execute SQL queries
     cursor = conn.cursor()
-    
+
     cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
     conn.commit()
 
@@ -60,7 +69,14 @@ def execute_sql(sql_query, user = "select_user", password = "select_user", data 
     elapsed_time = end_time - start_time
     return list(results), column_names, elapsed_time
 
-def execute_sql_with_column_info(sql_query, database = "restaurants", user = "select_user", password = "select_user", unprotected = False):
+
+def execute_sql_with_column_info(
+    sql_query,
+    database="restaurants",
+    user="select_user",
+    password="select_user",
+    unprotected=False,
+):
     start_time = time.time()
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
@@ -69,12 +85,12 @@ def execute_sql_with_column_info(sql_query, database = "restaurants", user = "se
         password=password,
         host="127.0.0.1",
         port="5432",
-        options='-c statement_timeout=30000 -c client_encoding=UTF8'
+        options="-c statement_timeout=30000 -c client_encoding=UTF8",
     )
 
     # Create a cursor object to execute SQL queries
     cursor = conn.cursor()
-    
+
     cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
     conn.commit()
 
@@ -85,21 +101,23 @@ def execute_sql_with_column_info(sql_query, database = "restaurants", user = "se
 
         # Fetch all the results
         results = cursor.fetchall()
-        
+
         column_names = [desc[0] for desc in cursor.description]
         column_type_oids = [desc[1] for desc in cursor.description]
-        
+
         type_map = {}
-        cursor.execute("SELECT oid, typname FROM pg_type WHERE oid = ANY(%s);", ([desc[1] for desc in cursor.description],))
+        cursor.execute(
+            "SELECT oid, typname FROM pg_type WHERE oid = ANY(%s);",
+            ([desc[1] for desc in cursor.description],),
+        )
         for oid, typname in cursor.fetchall():
-            if typname.startswith('_'):
+            if typname.startswith("_"):
                 type_map[oid] = typname[1:] + "[]"
             else:
                 type_map[oid] = typname
 
         column_types = [type_map[oid] for oid in column_type_oids]
         column_info = list(zip(column_names, column_types))
-
 
     except psycopg2.Error as e:
         print("Error executing SQL query:", e)
@@ -115,7 +133,16 @@ def execute_sql_with_column_info(sql_query, database = "restaurants", user = "se
     print(elapsed_time)
     return list(results), column_info
 
+
 if __name__ == "__main__":
     print(execute_sql("SELECT * FROM restaurants LIMIT 1;"))
-    print(execute_sql("SELECT reviews FROM restaurants WHERE name ILIKE 'Bistronomie by Baumé' LIMIT 1;"))
-    print(execute_sql("SELECT *, summary(reviews) FROM restaurants WHERE 'chef\'s table' = ANY (popular_dishes) AND location = 'Palo Alto' LIMIT 1;"))
+    print(
+        execute_sql(
+            "SELECT reviews FROM restaurants WHERE name ILIKE 'Bistronomie by Baumé' LIMIT 1;"
+        )
+    )
+    print(
+        execute_sql(
+            "SELECT *, summary(reviews) FROM restaurants WHERE 'chef's table' = ANY (popular_dishes) AND location = 'Palo Alto' LIMIT 1;"
+        )
+    )

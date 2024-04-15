@@ -1,0 +1,10 @@
+Answer a question based on the following text.{{ type_prompt }}
+
+Question: {{ question }}
+
+Documents:
+{% for review in reviews %}
+{{ review }}
+{% endfor %}
+
+Your Answer:
