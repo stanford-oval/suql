@@ -74,15 +74,13 @@ To replicate our results on HybridQA and restaurants in our paper, see [paper_re
 
 # Citation
 
-If you find this work to be useful to you, please consider citing us. This helps us immensely.
+If you find this work useful to you, please consider citing us.
 
 ```
-@misc{liu2024suql,
-      title={SUQL: Conversational Search over Structured and Unstructured Data with Large Language Models}, 
-      author={Shicheng Liu and Jialiang Xu and Wesley Tjangnaka and Sina J. Semnani and Chen Jie Yu and Monica S. Lam},
-      year={2024},
-      eprint={2311.09818},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@inproceedings{liu2024suql,
+    title={SUQL: Conversational Search over Structured and Unstructured Data with Large Language Models}, 
+    author={Shicheng Liu and Jialiang Xu and Wesley Tjangnaka and Sina J. Semnani and Chen Jie Yu and Monica S. Lam},
+    booktitle = {Findings of the Association for Computational Linguistics: NAACL 2024},
+    year={2024}
 }
 ```
