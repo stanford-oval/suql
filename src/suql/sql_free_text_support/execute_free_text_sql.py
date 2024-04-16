@@ -57,6 +57,44 @@ def _if_contains_free_text_fcn(node):
     return visitor.res
 
 
+def _extract_all_free_text_fcns(suql):
+    node = parse_sql(suql)
+    visitor = _ExtractAllFreeTextFncs()
+    visitor(node)
+    return visitor.res
+
+
+class _ExtractAllFreeTextFncs(Visitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self._SET_FREE_TEXT_FCNS = _SET_FREE_TEXT_FCNS
+        self.res = []
+
+    def __call__(self, node):
+        self.node = node
+        super().__call__(node)
+
+    def visit_FuncCall(self, ancestors, node: pglast.ast.FuncCall):
+        for i in node.funcname:
+            if i.sval in self._SET_FREE_TEXT_FCNS:
+                query_lst = list(
+                    filter(lambda x: isinstance(x, A_Const), node.args)
+                )
+                assert len(query_lst) == 1
+                query = query_lst[0].val.sval
+
+                field_lst = list(
+                    filter(lambda x: isinstance(x, ColumnRef), node.args)
+                )
+                assert len(field_lst) == 1
+
+                field = tuple(map(lambda x: x.sval, field_lst[0].fields))
+                    
+                self.res.append(
+                    (field, query)
+                )
+
+
 class _TypeCastAnswer(Visitor):
     def __init__(self) -> None:
         super().__init__()
