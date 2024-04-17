@@ -19,6 +19,46 @@ app = Flask(__name__)
 # engine = "gpt-3.5-turbo-0613"
 
 
+def _answer(source, query, type_prompt = None, k=5, max_input_token=3800, engine="gpt-3.5-turbo-0613"):
+    from suql.prompt_continuation import llm_generate
+    if not source:
+        return {"result": "no information"}
+
+    text_res = []
+    if isinstance(source, list):
+        documents = compute_top_similarity_documents(
+            source, query, top=k
+        )
+        for i in documents:
+            if num_tokens_from_string("\n".join(text_res + [i])) < max_input_token:
+                text_res.append(i)
+            else:
+                break
+    else:
+        text_res = [source]
+
+    type_prompt = ""
+    if type_prompt:
+        if type_prompt == "date":
+            type_prompt = f" Output in date format, for instance 2001-09-28."
+        if type_prompt == "int4":
+            type_prompt = f" Output an integer."
+
+    continuation, _ = llm_generate(
+        "prompts/answer_qa.prompt",
+        {
+            "reviews": text_res,
+            "question": query,
+            "type_prompt": type_prompt,
+        },
+        engine=engine,
+        max_tokens=200,
+        temperature=0.0,
+        stop_tokens=["\n"],
+        postprocess=False,
+    )
+    return {"result": continuation}
+
 def start_free_text_fncs_server(
     host="127.0.0.1", port=8500, k=5, max_input_token=3800, engine="gpt-3.5-turbo-0613"
 ):
@@ -64,45 +104,15 @@ def start_free_text_fncs_server(
         if "text" not in data or "question" not in data:
             return None
 
-        if not data["text"]:
-            return {"result": "no information"}
-
-        text_res = []
-        if isinstance(data["text"], list):
-            documents = compute_top_similarity_documents(
-                data["text"], data["question"], top=k
-            )
-            for i in documents:
-                if num_tokens_from_string("\n".join(text_res + [i])) < max_input_token:
-                    text_res.append(i)
-                else:
-                    break
-        else:
-            text_res = [data["text"]]
-
-        type_prompt = ""
-        if "type_prompt" in data:
-            if data["type_prompt"] == "date":
-                type_prompt = f" Output in date format, for instance 2001-09-28."
-            if data["type_prompt"] == "int4":
-                type_prompt = f" Output an integer."
-
-        continuation, _ = llm_generate(
-            "prompts/answer_qa.prompt",
-            {
-                "reviews": text_res,
-                "question": data["question"],
-                "type_prompt": type_prompt,
-            },
-            engine=engine,
-            max_tokens=200,
-            temperature=0.0,
-            stop_tokens=["\n"],
-            postprocess=False,
+        return _answer(
+            data["text"],
+            data["question"],
+            type_prompt=data["type_prompt"] if "type_prompt" in data else None,
+            k = k,
+            max_input_token = max_input_token,
+            engine = engine
         )
-
-        res = {"result": continuation}
-        return res
+    
 
     @app.route("/summary", methods=["POST"])
     def summary():

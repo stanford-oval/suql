@@ -5,6 +5,7 @@ import string
 import time
 import traceback
 import logging
+import re
 from collections import defaultdict
 from copy import deepcopy
 from typing import List, Union
@@ -24,6 +25,7 @@ from sympy.logic.boolalg import And, Not, Or, to_dnf
 from suql.postgresql_connection import execute_sql, execute_sql_with_column_info
 from suql.prompt_continuation import llm_generate
 from suql.utils import num_tokens_from_string
+from suql.free_text_fcns_server import _answer
 
 # System parameters, do not modify
 _SET_FREE_TEXT_FCNS = ["answer"]
@@ -1558,6 +1560,31 @@ def _analyze_SelectStmt(
         )
 
 
+def _parse_standalone_answer(suql):
+    # Define a regular expression pattern to match the required format
+    # \s* allows for any number of whitespaces around the parentheses
+    pattern = r"\s*answer\s*\(\s*([a-zA-Z_0-9]+)\s*,\s*['\"](.+?)['\"]\s*\)\s*"
+    
+    # Use the re.match function to check if the entire string matches the pattern
+    match = re.match(pattern, suql)
+    
+    # If a match is found, return the captured groups: source and query
+    if match:
+        return match.group(1), match.group(2)
+    else:
+        return None
+
+def _execute_standalone_answer(suql, source_file_mapping):
+    source, query = _parse_standalone_answer(suql)
+    if source not in source_file_mapping:
+        return None
+    
+    with open(source_file_mapping[source], "r") as fd:
+        source_content = fd.read()
+    
+    return _answer(source_content, query)
+    
+
 def suql_execute(
     suql,
     table_w_ids,
@@ -1572,6 +1599,7 @@ def suql_execute(
     select_userpswd="select_user",
     create_username="creator_role",
     create_userpswd="creator_role",
+    source_file_mapping={},
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -1644,6 +1672,9 @@ def suql_execute(
 
     else:
         logging.basicConfig(level=logging.CRITICAL + 1)
+
+    if _parse_standalone_answer(suql) is not None:
+        return _execute_standalone_answer(suql, source_file_mapping)
 
     results, column_names, cache = _suql_execute_single(
         suql,
