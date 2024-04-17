@@ -1674,7 +1674,7 @@ def suql_execute(
         logging.basicConfig(level=logging.CRITICAL + 1)
 
     if _parse_standalone_answer(suql) is not None:
-        return _execute_standalone_answer(suql, source_file_mapping)
+        return _execute_standalone_answer(suql, source_file_mapping), [], {}
 
     results, column_names, cache = _suql_execute_single(
         suql,
