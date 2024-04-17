@@ -20,7 +20,6 @@ from litellm import completion, completion_cost
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 # create file handler which logs even debug messages
 fh = logging.FileHandler("prompts.log")
 fh.setLevel(logging.DEBUG)

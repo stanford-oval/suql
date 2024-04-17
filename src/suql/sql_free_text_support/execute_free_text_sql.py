@@ -1638,6 +1638,12 @@ def suql_execute(
     
     `create_userpswd` (str, optional): above user's password with create privilege in db. Defaults to "creator_role".
 
+    `source_file_mapping` (Dict(str -> str), optional): Experimental feature - a dictionary mapping from variable
+    names to the file locations. This would support queries that only need a free text source, e.g.,
+    `suql = answer(yelp_general_info, 'what is your cancellation policy?')`. In this case, you can specify
+    `source_file_mapping = {"yelp_general_info": "PATH TO FILE"}` to inform the SUQL compiler where to find
+    `yelp_general_info`.
+
     # Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
     

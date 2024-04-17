@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 # Package metadata
 name = "suql"
-version = "1.1.4a2"
+version = "1.1.4a3"
 description = "Structured and Unstructured Query Language (SUQL) Python API"
 author = "Shicheng Liu"
 author_email = "shicheng@cs.stanford.edu"
@@ -22,7 +22,7 @@ install_requires = [
     'tiktoken==0.4.0',
     'psycopg2-binary==2.9.7',
     'pglast==5.3',
-    'FlagEmbedding==1.2.5',
+    'FlagEmbedding~=1.2.5',
     'litellm==1.34.34'
 ]
 
