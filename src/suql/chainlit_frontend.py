@@ -71,20 +71,6 @@ async def on_message(message: cl.Message):
     
     dlgItem = await connection.compute_next(dialog_id, user_utterance, turn_id, system_name, experiment_id)
 
-    log = {}
-    log["1st_sql"] = dlgItem.user_target
-    log["2nd_sql"] = dlgItem.temp_target
-    log["db_results"] = json.loads(dlgItem.genie_utterance) if dlgItem.genie_utterance is not None else None
-
-    def pp_time(time_statement):
-        return [
-            "First classifier: {:.2f}s".format(time_statement["first_classification"]), 
-            "Semantic parser: {:.2f}s".format(time_statement["semantic_parser"]),
-            "SUQL execution: {:.2f}s".format(time_statement["suql_execution"]),
-            "Final response: {:.2f}s".format(time_statement["final_response"])
-        ]
-
-    log["Elapsed Time"] = pp_time(dlgItem.time_statement)
 
 
 # Code below would enable a login page

@@ -518,7 +518,6 @@ async def compute_next_turn(
     if continuation.startswith("Yes"):
         first_sql, location_sql = await generate_sql(dlgHistory, user_utterance)
         results, suql_execution_time, results_for_ned = await execute_sql(location_sql)
-        dlgHistory[-1].genie_utterance = json.dumps(results, indent=4)
         dlgHistory[-1].user_target = first_sql
         dlgHistory[-1].temp_target = ""
         dlgHistory[-1].db_results = turn_db_results2name(results)

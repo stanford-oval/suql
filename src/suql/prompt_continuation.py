@@ -390,3 +390,5 @@ async def async_generate_chainlit(prompt_file, prompt_parameter_values, step, mo
         }
     )
     
+    return res
+    
