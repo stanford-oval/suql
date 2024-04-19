@@ -58,7 +58,7 @@ Ideal for integrating the SUQL compiler in a larger codebase / system. See [inst
 
 ## Install from source
 
-Ideal for using this repo to build a SUQL-powered conversational interface to your data out-of-the-box, like the one for https://yelpbot.genie.stanford.edu discussed in the paper. See [docs/install_source.md](https://github.com/stanford-oval/suql/blob/main/docs/install_source.md) for details.
+Ideal for using this repo to build a SUQL-powered conversational interface to your data out-of-the-box, like the one for https://yelpbot.genie.stanford.edu discussed in the paper. See [install_source.md](https://github.com/stanford-oval/suql/blob/main/docs/install_source.md) for details.
 
 ## Agent tutorial
 
@@ -74,15 +74,13 @@ To replicate our results on HybridQA and restaurants in our paper, see [paper_re
 
 # Citation
 
-If you find this work to be useful to you, please consider citing us. This helps us immensely.
+If you find this work useful to you, please consider citing us.
 
 ```
-@misc{liu2024suql,
-      title={SUQL: Conversational Search over Structured and Unstructured Data with Large Language Models}, 
-      author={Shicheng Liu and Jialiang Xu and Wesley Tjangnaka and Sina J. Semnani and Chen Jie Yu and Monica S. Lam},
-      year={2024},
-      eprint={2311.09818},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@inproceedings{liu2024suql,
+    title={SUQL: Conversational Search over Structured and Unstructured Data with Large Language Models}, 
+    author={Shicheng Liu and Jialiang Xu and Wesley Tjangnaka and Sina J. Semnani and Chen Jie Yu and Monica S. Lam},
+    booktitle = {Findings of the Association for Computational Linguistics: NAACL 2024},
+    year={2024}
 }
 ```

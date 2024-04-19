@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 # Package metadata
 name = "suql"
-version = "1.1.1"
+version = "1.1.4a3"
 description = "Structured and Unstructured Query Language (SUQL) Python API"
 author = "Shicheng Liu"
 author_email = "shicheng@cs.stanford.edu"
@@ -13,17 +13,16 @@ packages = find_packages(where="src")
 
 # Define your dependencies
 install_requires = [
-    'openai==1.3.2',
     'Jinja2==3.1.2',
     'Flask==2.3.2',
     'Flask-Cors==4.0.0',
     'Flask-RESTful==0.3.10',
     'requests==2.31.0',
-    'spacy==3.7.4',
+    'spacy==3.6.0',
     'tiktoken==0.4.0',
     'psycopg2-binary==2.9.7',
     'pglast==5.3',
-    'FlagEmbedding==1.2.5',
+    'FlagEmbedding~=1.2.5',
     'litellm==1.34.34'
 ]
 

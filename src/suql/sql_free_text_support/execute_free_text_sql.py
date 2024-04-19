@@ -1154,6 +1154,7 @@ import string
 import time
 import traceback
 import logging
+import re
 from collections import defaultdict
 from copy import deepcopy
 from typing import List, Union
@@ -1173,6 +1174,7 @@ from sympy.logic.boolalg import And, Not, Or, to_dnf
 from suql.postgresql_connection import execute_sql, execute_sql_with_column_info
 from suql.prompt_continuation import llm_generate
 from suql.utils import num_tokens_from_string
+from suql.free_text_fcns_server import _answer
 
 # System parameters, do not modify
 _SET_FREE_TEXT_FCNS = ["answer"]
@@ -1204,6 +1206,44 @@ def _if_contains_free_text_fcn(node):
     visitor = _FreeTextFcnVisitor()
     visitor(node)
     return visitor.res
+
+
+def _extract_all_free_text_fcns(suql):
+    node = parse_sql(suql)
+    visitor = _ExtractAllFreeTextFncs()
+    visitor(node)
+    return visitor.res
+
+
+class _ExtractAllFreeTextFncs(Visitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self._SET_FREE_TEXT_FCNS = _SET_FREE_TEXT_FCNS
+        self.res = []
+
+    def __call__(self, node):
+        self.node = node
+        super().__call__(node)
+
+    def visit_FuncCall(self, ancestors, node: pglast.ast.FuncCall):
+        for i in node.funcname:
+            if i.sval in self._SET_FREE_TEXT_FCNS:
+                query_lst = list(
+                    filter(lambda x: isinstance(x, A_Const), node.args)
+                )
+                assert len(query_lst) == 1
+                query = query_lst[0].val.sval
+
+                field_lst = list(
+                    filter(lambda x: isinstance(x, ColumnRef), node.args)
+                )
+                assert len(field_lst) == 1
+
+                field = tuple(map(lambda x: x.sval, field_lst[0].fields))
+                    
+                self.res.append(
+                    (field, query)
+                )
 
 
 class _TypeCastAnswer(Visitor):
@@ -1409,6 +1449,7 @@ class _SelectVisitor(Visitor):
                         user=self.create_username,
                         password=self.create_userpswd,
                         commit_in_lieu_fetch=True,
+                        no_print=True
                     )
 
             # finally, modify the existing sql with tmp_table_name
@@ -1458,6 +1499,7 @@ class _SelectVisitor(Visitor):
                 user=self.create_username,
                 password=self.create_userpswd,
                 commit_in_lieu_fetch=True,
+                no_print=True
             )
 
 
@@ -2667,6 +2709,31 @@ def _analyze_SelectStmt(
         )
 
 
+def _parse_standalone_answer(suql):
+    # Define a regular expression pattern to match the required format
+    # \s* allows for any number of whitespaces around the parentheses
+    pattern = r"\s*answer\s*\(\s*([a-zA-Z_0-9]+)\s*,\s*['\"](.+?)['\"]\s*\)\s*"
+    
+    # Use the re.match function to check if the entire string matches the pattern
+    match = re.match(pattern, suql)
+    
+    # If a match is found, return the captured groups: source and query
+    if match:
+        return match.group(1), match.group(2)
+    else:
+        return None
+
+def _execute_standalone_answer(suql, source_file_mapping):
+    source, query = _parse_standalone_answer(suql)
+    if source not in source_file_mapping:
+        return None
+    
+    with open(source_file_mapping[source], "r") as fd:
+        source_content = fd.read()
+    
+    return _answer(source_content, query)
+    
+
 def suql_execute(
     suql,
     table_w_ids,
@@ -2681,6 +2748,7 @@ def suql_execute(
     select_userpswd="select_user",
     create_username="creator_role",
     create_userpswd="creator_role",
+    source_file_mapping={},
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -2719,6 +2787,12 @@ def suql_execute(
     
     `create_userpswd` (str, optional): above user's password with create privilege in db. Defaults to "creator_role".
 
+    `source_file_mapping` (Dict(str -> str), optional): Experimental feature - a dictionary mapping from variable
+    names to the file locations. This would support queries that only need a free text source, e.g.,
+    `suql = answer(yelp_general_info, 'what is your cancellation policy?')`. In this case, you can specify
+    `source_file_mapping = {"yelp_general_info": "PATH TO FILE"}` to inform the SUQL compiler where to find
+    `yelp_general_info`.
+
     # Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
     
@@ -2753,6 +2827,9 @@ def suql_execute(
 
     else:
         logging.basicConfig(level=logging.CRITICAL + 1)
+
+    if _parse_standalone_answer(suql) is not None:
+        return _execute_standalone_answer(suql, source_file_mapping), [], {}
 
     results, column_names, cache = _suql_execute_single(
         suql,
@@ -2821,7 +2898,7 @@ def _suql_execute_single(
         second_sql = RawStream()(root)
         cache = visitor.serialize_cache()
 
-        return execute_sql(second_sql, user=select_username, password=select_userpswd)
+        return execute_sql(second_sql, user=select_username, password=select_userpswd, no_print=True)
     else:
         try:
             visitor = _SelectVisitor(
@@ -2841,7 +2918,7 @@ def _suql_execute_single(
             cache = visitor.serialize_cache()
 
             results, column_names, cache = execute_sql(
-                second_sql, user=select_username, password=select_userpswd
+                second_sql, user=select_username, password=select_userpswd, no_print=True
             )
         except Exception as err:
             with open("_suql_error_log.txt", "a") as file:

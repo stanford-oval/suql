@@ -56,6 +56,10 @@ ALTER ROLE creator_role LOGIN;
       - You would need to create a user with the privilege to **CREATE** tables under your database, and change `creator_role` to match that user and password.
       - This user appears once in `src/suql/sql_free_text_support/execute_free_text_sql.py` under function `suql_execute` of the SUQL compiler.
 
+## Export `src/suql` folder to `PYTHONPATH`
+
+In all future terminals, run `export PYTHONPATH="${PYTHONPATH}:<path to and including src/suql">"`, e.g. `export PYTHONPATH="${PYTHONPATH}:~/suql/src/suql"`.
+
 ## Initialize two SUQL servers
 
 4. Set up an embedding server for the SUQL compiler to query. Go to `src/suql/faiss_embedding.py`, and modify the lines
@@ -69,11 +73,11 @@ embedding_store.add(
    password="select_user"
 )
 ```
-under `if __name__ == "__main__":` to match your database with its column names. 
+under `if __name__ == "__main__":` to match your database with its column names. Then, run `python suql/faiss_embedding.py` under the `src` folder.
    - For instance, this line instructs the SUQL compiler to set up an embedding server for the `restaurants` database, which has `_id` column as the unique row identifier, for the `popular_dishes` column (such column need to be of type `TEXT` or `TEXT[]`, or other fixed-length strings/list of strings) under table `restaurants`. This is executed with user privilege `user="select_user"` and `password="select_user"`;
    - By default, this will be set up on port 8501, which is then called by `src/suql/execute_free_text_sql.py`. In case you need to use another port, please change both addresses.
 
-5. Set up the backend server for the `answer`, `summary` functions. In a separate terminal, first set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Then, run `python src/suql/free_text_fcns_server.py`.
+5. Set up the backend server for the `answer`, `summary` functions. In a separate terminal, first set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Then, run `python suql/free_text_fcns_server.py` under the `src` folder.
    - As you probably noticed, the code in `custom_functions.sql` is just making queries to this server, which handles the LLM API calls. If you changed the address in `custom_functions.sql`, then also update the address under `if __name__ == "__main__":`.
 
 ## Write 2 few-shot prompts
@@ -88,8 +92,4 @@ We are very close to a fully-working LLM-powered agent!
    - If you decide to keep this, then modify the examples to match your domain;
    - If you decide to delete this, then simply set the line `enable_classifier=True` to be `enable_classifier=False`.
 
-8. In a separate terminal from the two servers above, set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Test with `python src/suql/agent.py`. You should be able to interact with your agent on your CLI!
-
-# Set up with Chainlit
-
-Code to set up a front-end powered by [Chainlit](https://github.com/Chainlit/chainlit) is on `wip/chainlit`.
+8. In a separate terminal from the two servers above, set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Test with `python suql/agent.py` under the `src` folder. You should be able to interact with your agent on your CLI!
