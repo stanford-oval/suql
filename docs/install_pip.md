@@ -88,13 +88,16 @@ You should be good to go! In a separate terminal, set up your LLM API key enviro
 
 ```python
 >>> from suql import suql_execute
-# e.g. suql = "SELECT * FROM restaurants WHERE answer(reviews, 'is this a family-friendly restaurant?') = 'Yes' AND rating = 4;"
+# e.g. suql = "SELECT * FROM restaurants WHERE answer(reviews, 'is this a family-friendly restaurant?') = 'Yes' AND rating = 4 LIMIT 3;"
 >>> suql = "Your favorite SUQL"
 
 # e.g. table_w_ids = {"restaurants": "_id"}
 >>> table_w_ids = "mapping between table name -> unique ID column name"
 
->>> suql_execute(suql, table_w_ids)
+# e.g. database = "restaurants"
+>>> database = "your postgres database name"
+
+>>> suql_execute(suql, table_w_ids, database)
 ```
 
 Check out [API documentation](https://stanford-oval.github.io/suql/suql/sql_free_text_support/execute_free_text_sql.html) for details.
