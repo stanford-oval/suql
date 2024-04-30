@@ -72,6 +72,7 @@ embedding_store.start_embedding_server(host = host, port = port)
     - Make sure to modify the keyword arguments `select_username` and `select_userpswd` if you changed this user in Step 2 above;
     - You can add more columns as needed using ``embedding_store.add()`;
     - This will be set up on port 8501, which matches the default keyword argument `embedding_server_address` in `suql_execute`. Make sure both addresses match if you modify it.
+- Check [API documentation](https://stanford-oval.github.io/suql/suql/faiss_embedding.html#suql.faiss_embedding.MultipleEmbeddingStore.add) on more details, including options to disable caching.
 
 5. Set up the backend server for the `answer`, `summary` functions. In a separate terminal, first set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Write the following content into a Python script and execute in that terminal:
 ```python
