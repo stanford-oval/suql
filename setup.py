@@ -23,7 +23,8 @@ install_requires = [
     'psycopg2-binary==2.9.7',
     'pglast==5.3',
     'FlagEmbedding~=1.2.5',
-    'litellm==1.34.34'
+    'litellm==1.34.34',
+    'platformdirs>=4.0.0'
 ]
 
 # Additional package information
