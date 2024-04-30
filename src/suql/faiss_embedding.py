@@ -147,6 +147,8 @@ class EmbeddingStore:
         self.psql_row_ids = []
         self.all_free_text = []
         self.embeddings = None
+        
+        assert chunking_param >= 0
         self.chunking_param = chunking_param
         self.chunked_text = []
 
@@ -406,16 +408,50 @@ class MultipleEmbeddingStore:
 
     def add(
         self,
-        table_name,
-        primary_key_field_name,
-        free_text_field_name,
-        db_name,
+        table_name: str,
+        primary_key_field_name: str,
+        free_text_field_name: str,
+        db_name: str,
         user="select_user",
         password="select_user",
         chunking_param=0,
         cache_embedding=True,
         force_recompute=False
     ):
+        """
+        Add a free text field to the SUQL embedding store to make it
+        available to the compiler.
+
+        # Parameters:
+
+        `table_name` (str): Table name of the free text field.
+        
+        `primary_key_field_name` (str): Primary key field name of the table `table_name`.
+        
+        `free_text_field_name` (str): Free text field name to be embedded.
+        
+        `db_name` (str): PostgreSQL database name of the table `table_name`.
+        
+        `user` (str, optional): User name with `SELECT` privilege on the table `table_name`.
+        Defaults to "select_user".
+        
+        `password` (str, optional): Password for the above user with `SELECT` privilege
+        on the table `table_name`. Defaults to "select_user".
+        
+        `chunking_param` (int, optional): Chunking parameter for embedding.
+        It denotes how many tokens (determined by `en_core_web_sm`) to chunk to for each
+        free text value. Defaults to 0, which denotes no chunking.
+        
+        `cache_embedding` (bool, optional): Whether to cache embeddings to disk. If cached,
+        this file computes a hash of the free text values. If the database values remains
+        unchanged, this file will directly use the cached embeddings. If there are changes
+        to the underlying values, this file will recompute the embeddings.
+        Defaults to True.
+        
+        `force_recompute` (bool, optional): Whether to force recomputing embeddings.
+        If set to True, this file will re-compute the embedding even if a cache exists
+        for the underlying values. Defaults to False.
+        """
         if (
             table_name in self.mapping
             and free_text_field_name in self.mapping[table_name]
