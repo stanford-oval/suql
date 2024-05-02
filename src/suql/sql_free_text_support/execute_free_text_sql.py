@@ -1730,7 +1730,12 @@ def _check_required_params(suql, required_params_mapping):
     
     `missing_params` (Dict(str -> List[str]): a mapping from table names to a list of required missing parameters.
     """
-    root = parse_sql(suql)
+    # try except handles stand alone answer functions and other parsing exceptions
+    try:
+        root = parse_sql(suql)
+    except Exception:
+        return False, required_params_mapping
+    
     visitor = _RequiredParamMappingVisitor(required_params_mapping)
     visitor(root)
     
