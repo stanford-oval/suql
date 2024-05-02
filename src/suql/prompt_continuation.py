@@ -335,24 +335,24 @@ async def async_generate_chainlit(prompt_file, prompt_parameter_values, step, mo
             max_tokens, temperature, stop, top_p=0.9, frequency_penalty=0, presence_penalty=0):
     
     filled_template = _fill_template(prompt_file, prompt_parameter_values)
-    cache_res = prompt_cache_db.find_one(
-        {
-            "model": model,
-            "prompt": filled_template,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "stop_tokens": stop,
-            "top_p": top_p,
-            "frequency_penalty": frequency_penalty,
-            "presence_penalty": presence_penalty,
-        }
-    )
-    if cache_res:
-        if hasattr(step, "output"):
-            step.output = cache_res["res"]
-        else:
-            step.content = cache_res["res"]
-        return cache_res["res"]
+    # cache_res = prompt_cache_db.find_one(
+    #     {
+    #         "model": model,
+    #         "prompt": filled_template,
+    #         "max_tokens": max_tokens,
+    #         "temperature": temperature,
+    #         "stop_tokens": stop,
+    #         "top_p": top_p,
+    #         "frequency_penalty": frequency_penalty,
+    #         "presence_penalty": presence_penalty,
+    #     }
+    # )
+    # if cache_res:
+    #     if hasattr(step, "output"):
+    #         step.output = cache_res["res"]
+    #     else:
+    #         step.content = cache_res["res"]
+    #     return cache_res["res"]
     
     stream_resp = await acompletion(
         messages=[{"role": "system", "content": _fill_template(

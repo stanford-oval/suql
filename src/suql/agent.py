@@ -492,13 +492,6 @@ def postprocess_suql(suql_query):
     suql_query = process_query_opening_hours(suql_query)
     return suql_query
 
-def turn_db_results2name(db_results):
-    res = []
-    for i in db_results:
-        if "name" in i:
-            res.append(i["name"])
-    return res
-
 async def compute_next_turn(
     dlgHistory : List[DialogueTurn],
     user_utterance: str):
@@ -520,7 +513,7 @@ async def compute_next_turn(
         results, suql_execution_time, results_for_ned = await execute_sql(location_sql)
         dlgHistory[-1].user_target = first_sql
         dlgHistory[-1].temp_target = ""
-        dlgHistory[-1].db_results = turn_db_results2name(results)
+        dlgHistory[-1].db_results = json.dumps(results, indent=4)
         dlgHistory[-1].results_for_ned = results_for_ned
 
         # cut it out if no response returned
