@@ -5,7 +5,7 @@ import psycopg2
 
 def execute_sql(
     sql_query,
-    database="restaurants",
+    database,
     user="select_user",
     password="select_user",
     data=None,
@@ -72,7 +72,7 @@ def execute_sql(
 
 def execute_sql_with_column_info(
     sql_query,
-    database="restaurants",
+    database,
     user="select_user",
     password="select_user",
     unprotected=False,

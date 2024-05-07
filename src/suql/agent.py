@@ -352,6 +352,7 @@ async def execute_sql(sql):
         final_res, column_names, cache = suql_execute(
             sql,
             {"restaurants": "_id"},
+            "restaurants",
             fts_fields=[("restaurants", "name")],
             # NOTE: different from default 8501, this is due to set up on our VM
             embedding_server_address="http://127.0.0.1:8509"

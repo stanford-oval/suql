@@ -64,6 +64,10 @@ Ideal for using this repo to build a SUQL-powered conversational interface to yo
 
 Check out [conv_agent.md](https://github.com/stanford-oval/suql/blob/main/docs/conv_agent.md) for more information on best practices for using SUQL to power your conversational agent.
 
+# Release notes
+
+Check [release_notes.md](https://github.com/stanford-oval/suql/blob/main/docs/release_notes.md) for new release notes.
+
 # Bugs / Contribution
 
 If you encounter a problem, first check [known_issues.md](https://github.com/stanford-oval/suql/blob/main/docs/known_issues.md). If it is not listed there, we welcome Issues and/or PRs!

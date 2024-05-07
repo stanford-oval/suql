@@ -1,10 +1,14 @@
 import hashlib
 from collections import OrderedDict
 
+import os
 import faiss
+import hashlib
+import pickle
 from FlagEmbedding import FlagModel
 from flask import Flask, request
 from tqdm import tqdm
+from platformdirs import user_cache_dir
 
 from suql.postgresql_connection import execute_sql
 from suql.utils import chunk_text
@@ -45,6 +49,13 @@ def embed_documents(documents):
 
 def compute_sha256(text):
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def consistent_tuple_hash(tuple_input):
+    # Serialize the tuple to bytes using pickle
+    tuple_bytes = pickle.dumps(tuple_input, protocol=pickle.HIGHEST_PROTOCOL)
+    # Return the SHA-256 hash of the serialized bytes
+    return hashlib.sha256(tuple_bytes).hexdigest()
 
 
 # A set that also preserves insertion order
@@ -125,6 +136,8 @@ class EmbeddingStore:
         user="select_user",
         password="select_user",
         chunking_param=0,
+        cache_embedding=True,
+        force_recompute=False
     ) -> None:
         # stores three lists:
         # 1. PSQL primary key for each row
@@ -133,6 +146,8 @@ class EmbeddingStore:
         self.psql_row_ids = []
         self.all_free_text = []
         self.embeddings = None
+        
+        assert chunking_param >= 0
         self.chunking_param = chunking_param
         self.chunked_text = []
 
@@ -146,10 +161,17 @@ class EmbeddingStore:
         # stores PSQL login credentails
         self.user = user
         self.password = password
+        
+        # store caching flag
+        assert type(cache_embedding) == bool
+        self.cache_embedding = cache_embedding
+        assert type(force_recompute) == bool
+        self.force_recompute = force_recompute
 
         self.initialize_from_sql(
             table_name, primary_key_field_name, free_text_field_name, db_name
         )
+        print(f"initializing embeddings for DB: {db_name}; TABLE: {table_name}; FREE_TEXT_FIELD: {free_text_field_name}")
         self.initialize_embedding()
 
     def initialize_from_sql(
@@ -216,10 +238,36 @@ class EmbeddingStore:
             else:
                 raise ValueError("Expecting type Str")
 
+    def compute_hash(self):
+        # Convert lists to tuples for hashing
+        psql_row_ids_tuple = tuple(self.psql_row_ids)
+        all_free_text_tuple = tuple(self.all_free_text)
+        
+        # Create a combined tuple of all objects
+        combined_data = (psql_row_ids_tuple, all_free_text_tuple, self.chunking_param)
+        
+        # Compute and return the hash of the combined tuple
+        return consistent_tuple_hash(combined_data)
+
     def initialize_embedding(self):
-        print("initializing embeddings for all documents")
+        hash = self.compute_hash()
+        _user_cache_dir = user_cache_dir('suql')
+        faiss_cache_location = os.path.join(_user_cache_dir, f'{hash}.faiss_index')
+        if (os.path.exists(faiss_cache_location) and not self.force_recompute):
+            try:
+                print(f"initializing from existing faiss embedding index at {faiss_cache_location}")
+                self.embeddings = faiss.read_index(faiss_cache_location)
+                return
+            except Exception:
+                print(f"reading {faiss_cache_location} failed. Re-computing embeddings")
+        
         self.embeddings = faiss.IndexFlatIP(EMBEDDING_DIMENSION)
-        self.embeddings.add(embed_documents(self.chunked_text))
+        indexs = embed_documents(self.chunked_text)
+        self.embeddings.add(indexs)
+        
+        print(f"writing computed faiss embedding to {faiss_cache_location}")
+        os.makedirs(_user_cache_dir, exist_ok=True)
+        faiss.write_index(self.embeddings, faiss_cache_location)
 
     def dot_product(self, id_list, query, top, individual_id_list=[]):
         # given a list of id and a particular query, return the top ids and documents according to similarity score ranking
@@ -359,14 +407,50 @@ class MultipleEmbeddingStore:
 
     def add(
         self,
-        table_name,
-        primary_key_field_name,
-        free_text_field_name,
-        db_name,
+        table_name: str,
+        primary_key_field_name: str,
+        free_text_field_name: str,
+        db_name: str,
         user="select_user",
         password="select_user",
         chunking_param=0,
+        cache_embedding=True,
+        force_recompute=False
     ):
+        """
+        Add a free text field to the SUQL embedding store to make it
+        available to the compiler.
+
+        # Parameters:
+
+        `table_name` (str): Table name of the free text field.
+        
+        `primary_key_field_name` (str): Primary key field name of the table `table_name`.
+        
+        `free_text_field_name` (str): Free text field name to be embedded.
+        
+        `db_name` (str): PostgreSQL database name of the table `table_name`.
+        
+        `user` (str, optional): User name with `SELECT` privilege on the table `table_name`.
+        Defaults to "select_user".
+        
+        `password` (str, optional): Password for the above user with `SELECT` privilege
+        on the table `table_name`. Defaults to "select_user".
+        
+        `chunking_param` (int, optional): Chunking parameter for embedding.
+        It denotes how many tokens (determined by `en_core_web_sm`) to chunk to for each
+        free text value. Defaults to 0, which denotes no chunking.
+        
+        `cache_embedding` (bool, optional): Whether to cache embeddings to disk. If cached,
+        this file computes a hash of the free text values. If the database values remains
+        unchanged, this file will directly use the cached embeddings. If there are changes
+        to the underlying values, this file will recompute the embeddings.
+        Defaults to True.
+        
+        `force_recompute` (bool, optional): Whether to force recomputing embeddings.
+        If set to True, this file will re-compute the embedding even if a cache exists
+        for the underlying values. Defaults to False.
+        """
         if (
             table_name in self.mapping
             and free_text_field_name in self.mapping[table_name]
@@ -387,6 +471,8 @@ class MultipleEmbeddingStore:
             user=user,
             password=password,
             chunking_param=chunking_param,
+            cache_embedding=cache_embedding,
+            force_recompute=force_recompute
         )
 
     def retrieve(self, table_name, free_text_field_name):

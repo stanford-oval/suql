@@ -76,6 +76,8 @@ embedding_store.add(
 under `if __name__ == "__main__":` to match your database with its column names. Then, run `python suql/faiss_embedding.py` under the `src` folder.
    - For instance, this line instructs the SUQL compiler to set up an embedding server for the `restaurants` database, which has `_id` column as the unique row identifier, for the `popular_dishes` column (such column need to be of type `TEXT` or `TEXT[]`, or other fixed-length strings/list of strings) under table `restaurants`. This is executed with user privilege `user="select_user"` and `password="select_user"`;
    - By default, this will be set up on port 8501, which is then called by `src/suql/execute_free_text_sql.py`. In case you need to use another port, please change both addresses.
+   - Check [API documentation](https://stanford-oval.github.io/suql/suql/faiss_embedding.html#suql.faiss_embedding.MultipleEmbeddingStore.add) on more details, including options to disable caching.
+
 
 5. Set up the backend server for the `answer`, `summary` functions. In a separate terminal, first set up your LLM API key environment variable following [the litellm provider doc](https://docs.litellm.ai/docs/providers) (e.g., for OpenAI, run `export OPENAI_API_KEY=[your OpenAI API key here]`). Then, run `python suql/free_text_fcns_server.py` under the `src` folder.
    - As you probably noticed, the code in `custom_functions.sql` is just making queries to this server, which handles the LLM API calls. If you changed the address in `custom_functions.sql`, then also update the address under `if __name__ == "__main__":`.
