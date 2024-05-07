@@ -106,7 +106,7 @@ def compute_top_similarity_documents(documents, query, chunking_param=0, top=3):
     embeddings.add(chunked_documents_embeddings)
 
     _, I = embeddings.search(embed_query(query), len(chunked_documents_embeddings))
-    # attempt to re-construct the top queries, keeping going untill we actually get all top
+    # attempt to re-construct the top queries, keeping going until we actually get all top
     iter_chunk = top * 2
     doc_ids = OrderedSet()
     for i in range(0, len(I[0]), iter_chunk):
