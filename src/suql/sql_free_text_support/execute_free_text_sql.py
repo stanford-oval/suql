@@ -939,7 +939,8 @@ class _StructuralClassification(Visitor):
         # change projection to include everything
         to_execute_node.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(),))),)
         # set limit to 1, to see if there are results
-        to_execute_node.limitCount = Integer(ival=1)
+        to_execute_node.limitCount = A_Const(val=Integer(ival=1))
+        to_execute_node.limitOption = pglast.enums.nodes.LimitOption.LIMIT_OPTION_COUNT
         # change predicates
         to_execute_node.whereClause = node
         # reset any groupby clause
@@ -1121,6 +1122,9 @@ class _Replace_Original_Target_Visitor(Visitor):
         if len(list(map(lambda x: x.sval, node.fields))) > 1:
             assert len(list(map(lambda x: x.sval, node.fields))) == 2
             node.fields = (String(sval="^".join(map(lambda x: x.sval, node.fields))),)
+        elif "^" in node.fields[0].sval:
+            # this means that it has already been replaced
+            pass
         else:
             res = None
             for table_name, columns in self.table_column_mapping.items():
@@ -1142,6 +1146,7 @@ def _execute_structural_sql(
     select_userpswd: str,
     llm_model_name: str
 ):
+    _ = RawStream()(original_node) # RawStream takes care of some issue, to investigate
     node = deepcopy(original_node)
     # change projection to include everything
     # there are a couple of cases here
@@ -1154,15 +1159,11 @@ def _execute_structural_sql(
         table_column_mapping = {}
         for table in [node.fromClause[0].larg, node.fromClause[0].rarg]:
             # find out what columns this table has
-            _, columns = _execute_structural_sql(
-                SelectStmt(fromClause=(table,)),
+            _, columns = execute_sql_with_column_info(
+                RawStream()(SelectStmt(fromClause=(table,), targetList=(ResTarget(val=ColumnRef(fields=(A_Star(),))),))),
                 database,
-                None,
-                cache,
-                fts_fields,
                 select_username,
                 select_userpswd,
-                llm_model_name
             )
             # give the projection fields new names
             projection_table_name = (
@@ -1195,15 +1196,11 @@ def _execute_structural_sql(
         all_projection_fields = []
         for table in node.fromClause:
             # find out what columns this table has
-            _, columns = _execute_structural_sql(
-                SelectStmt(fromClause=(table,)),
+            _, columns = execute_sql_with_column_info(
+                RawStream()(SelectStmt(fromClause=(table,), targetList=(ResTarget(val=ColumnRef(fields=(A_Star(),))),))),
                 database,
-                None,
-                cache,
-                fts_fields,
                 select_username,
                 select_userpswd,
-                llm_model_name
             )
             # give the projection fields new names
             projection_table_name = (
