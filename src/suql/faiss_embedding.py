@@ -301,6 +301,8 @@ class EmbeddingStore:
                 params=faiss.SearchParametersIVF(sel=sel),
             )
         else:
+            if top > self.embeddings.ntotal:
+                top = self.embeddings.ntotal
             D, I = self.embeddings.search(
                 query_embedding, top, params=faiss.SearchParametersIVF(sel=sel)
             )
