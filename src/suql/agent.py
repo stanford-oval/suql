@@ -370,7 +370,7 @@ def postprocess_suql(suql_query):
             )
             return response
 
-        pattern = r"'([^']*)'\s*=\s*ANY\(CAST opening_hours AS ARRAY\)"
+        pattern = r"'([^']*)'\s*=\s*opening_hours"
 
         def replacer(match):
             opening_hours_query = match.group(0).split(" = ")[0]
