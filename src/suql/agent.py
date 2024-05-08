@@ -370,10 +370,11 @@ def postprocess_suql(suql_query):
             )
             return response
 
-        pattern = r"'([^']*)'\s*=\s*opening_hours"
+        pattern_1 = r"'([^']*)'\s*=\s*opening_hours"
+        pattern_2 = r"opening_hours\s*=\s*'([^']*)'"
 
-        def replacer(match):
-            opening_hours_query = match.group(0).split(" = ")[0]
+        def replacer(match, pattern):
+            opening_hours_query = match.group(0).split("=")[pattern]
             opening_hours_translated = convert_opening_hours_query(opening_hours_query)
             return (
                 'search_by_opening_hours("opening_hours", '
@@ -382,7 +383,8 @@ def postprocess_suql(suql_query):
                 + "')"
             )
 
-        return re.sub(pattern, replacer, suql_query_)
+        res = re.sub(pattern_1, lambda x: replacer(x, 0), suql_query_)
+        return re.sub(pattern_2, lambda x: replacer(x, 1), res)
 
     suql_query = process_query_location(suql_query)
     suql_query = process_query_opening_hours(suql_query)
