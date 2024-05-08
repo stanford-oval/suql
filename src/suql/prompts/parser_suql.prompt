@@ -16,6 +16,7 @@ CREATE TABLE restaurants (
 
 Do not generate fields beyond the given fields. The `answer` function can be used on FREE_TEXT fields. 
 Use `location = 'some place'` to search restaurants that are geographically close, don't use other operations on the location field.
+Use `'some string' = opening_hours` to search restaurants open at certain time, don't use other operations on the opening_hours field.
 
 {# Basic example #}
 User: Where is Burguer King?
