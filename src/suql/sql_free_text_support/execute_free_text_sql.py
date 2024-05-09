@@ -723,10 +723,13 @@ def _retrieve_and_verify(
             enforce_ordering=True if node.sortClause is not None else False,
         )
     else:
-        id_res = []
+        id_res = set()
         for each_res in parsed_result:
             if _verify_single_res(each_res, field_query_list, llm_model_name):
-                id_res.append(each_res[0])
+                if isinstance(each_res[0], list):
+                    id_res.update(each_res[0])
+                else:
+                    id_res.add(each_res[0])
 
     end_time = time.time()
     logging.info("retrieve + verification time {}s".format(end_time - start_time))
