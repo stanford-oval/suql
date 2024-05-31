@@ -285,11 +285,12 @@ class EmbeddingStore:
                 for sublist in map(lambda x: self.id2document[x], individual_id_list)
                 for item in sublist
             ]
-        embedding_indices = [
+        # remove potential duplicates here
+        embedding_indices = list(dict.fromkeys([
             item
             for sublist in map(lambda x: self.document2embedding[x], document_indices)
             for item in sublist
-        ]
+        ]))
 
         query_embedding = embed_query(query)
 
@@ -301,8 +302,8 @@ class EmbeddingStore:
                 params=faiss.SearchParametersIVF(sel=sel),
             )
         else:
-            if top > self.embeddings.ntotal:
-                top = self.embeddings.ntotal
+            if top > min(self.embeddings.ntotal, len(embedding_indices)):
+                top = min(self.embeddings.ntotal, len(embedding_indices))
             D, I = self.embeddings.search(
                 query_embedding, top, params=faiss.SearchParametersIVF(sel=sel)
             )
