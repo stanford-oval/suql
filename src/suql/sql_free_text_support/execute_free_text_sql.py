@@ -876,8 +876,8 @@ class _StructuralClassification(Visitor):
     def visit_A_Expr(self, ancestors: Ancestor, node: A_Expr):
         # TODO: handle containment clauses
         if isinstance(node.name[0], String) and node.name[0].sval in ["@>", "<@"]:
-            parsed_res = True
-            _replace_a_expr_field(node, ancestors, parsed_res)
+            # parsed_res = True
+            # _replace_a_expr_field(node, ancestors, parsed_res)
             return
 
         # if this appears in projection, disregard
