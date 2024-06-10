@@ -19,7 +19,14 @@ app = Flask(__name__)
 # engine = "gpt-3.5-turbo-0613"
 
 
-def _answer(source, query, type_prompt = None, k=5, max_input_token=3800, engine="gpt-3.5-turbo-0613"):
+def _answer(
+    source,
+    query,
+    type_prompt = None,
+    k=5,
+    max_input_token=10000,
+    engine="gpt-3.5-turbo-0125"
+):
     from suql.prompt_continuation import llm_generate
     if not source:
         return {"result": "no information"}
@@ -52,9 +59,9 @@ def _answer(source, query, type_prompt = None, k=5, max_input_token=3800, engine
             "type_prompt": type_prompt,
         },
         engine=engine,
-        max_tokens=200,
+        max_tokens=1000,
         temperature=0.0,
-        stop_tokens=["\n"],
+        stop_tokens=[],
         postprocess=False,
     )
     return {"result": continuation}
