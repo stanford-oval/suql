@@ -47,7 +47,6 @@ setup(
     author=author,
     author_email=author_email,
     packages=packages,
-    package_dir={"": "src"},
     install_requires=install_requires,
     url=url,
     classifiers=classifiers,
