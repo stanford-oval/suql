@@ -78,4 +78,26 @@ To replicate our results on HybridQA and restaurants in our paper, see [paper_re
 
 # Citation
 
-If you find this work useful to you, please consider citing us. Different citation formats can be found on [the ACL anthology paper website](https://aclanthology.org/2024.findings-naacl.283/).
+If you find this work useful to you, please consider citing us.
+```
+@inproceedings{liu-etal-2024-suql,
+    title = "{SUQL}: Conversational Search over Structured and Unstructured Data with Large Language Models",
+    author = "Liu, Shicheng  and
+      Xu, Jialiang  and
+      Tjangnaka, Wesley  and
+      Semnani, Sina  and
+      Yu, Chen  and
+      Lam, Monica",
+    editor = "Duh, Kevin  and
+      Gomez, Helena  and
+      Bethard, Steven",
+    booktitle = "Findings of the Association for Computational Linguistics: NAACL 2024",
+    month = jun,
+    year = "2024",
+    address = "Mexico City, Mexico",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2024.findings-naacl.283",
+    pages = "4535--4555",
+    abstract = "While most conversational agents are grounded on either free-text or structured knowledge, many knowledge corpora consist of hybrid sources.This paper presents the first conversational agent that supports the full generality of hybrid data access for large knowledge corpora, through a language we developed called SUQL ($\textbf{S}$tructured and $\textbf{U}$nstructured $\textbf{Q}$uery $\textbf{L}$anguage). Specifically, SUQL extends SQL with free-text primitives (${\small \text{SUMMARY}}$ and ${\small \text{ANSWER}}$), so information retrieval can be composed with structured data accesses arbitrarily in a formal, succinct, precise, and interpretable notation. With SUQL, we propose the first semantic parser, an LLM with in-context learning, that can handle hybrid data sources.Our in-context learning-based approach, when applied to the HybridQA dataset, comes within 8.9{\%} Exact Match and 7.1{\%} F1 of the SOTA, which was trained on 62K data samples. More significantly, unlike previous approaches, our technique is applicable to large databases and free-text corpora. We introduce a dataset consisting of crowdsourced questions and conversations on Yelp, a large, real restaurant knowledge base with structured and unstructured data. We show that our few-shot conversational agent based on SUQL finds an entity satisfying all user requirements 90.3{\%} of the time, compared to 63.4{\%} for a baseline based on linearization.",
+}
+```
