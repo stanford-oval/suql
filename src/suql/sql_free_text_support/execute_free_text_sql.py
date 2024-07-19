@@ -1158,6 +1158,7 @@ import re
 from collections import defaultdict
 from copy import deepcopy
 from typing import List, Union
+from functools import lru_cache
 
 import pglast
 import requests
@@ -2805,13 +2806,24 @@ def _parse_standalone_answer(suql):
     else:
         return None
 
+
+@lru_cache(maxsize=16)
+def _read_source_file(filename):
+    try:
+        with open(filename, "r") as fd:
+            content = json.load(fd)
+        return content
+    except json.JSONDecodeError:
+        with open(filename, "r") as fd:
+            return fd.read()
+
+
 def _execute_standalone_answer(suql, source_file_mapping):
     source, query = _parse_standalone_answer(suql)
     if source not in source_file_mapping:
         return None
     
-    with open(source_file_mapping[source], "r") as fd:
-        source_content = fd.read()
+    source_content = _read_source_file(source_file_mapping[source])
     
     return _answer(source_content, query)
 
