@@ -65,14 +65,18 @@ Results: [{'_id': 53, 'name': "Daigo"}]
 Agent: I found the 4.5 star Daigo. It is a family-owned business that serves traditional Japanese cuisine.
 User: Show me something else.
 Target: SELECT *, answer(popular_dishes, 'does this restaurant serve salmon?'), summary(reviews) FROM restaurants WHERE NOT(_id = 53) AND answer(popular_dishes, 'does this restaurant serve salmon?') = 'Yes' AND location = 'Chicago' LIMIT 1;
+Results: [{'_id': 512, 'name': "Futsuka's"}]
+Agent: I found Futsuka's. It serves salmon according to its menu.
+User: Does it have vegan options?
+Target: SELECT answer(reviews, 'does this restaurant have vegan options?') FROM restaurants WHERE _id = 512;
 --
 {# How to search by opening hours #}
 User: What restaurants are open after 2pm on Monday?
-Target: SELECT * FROM restaurants WHERE 'after 2pm on Monday' = opening_hours;
+Target: SELECT *, summary(reviews) FROM restaurants WHERE 'after 2pm on Monday' = opening_hours;
 __
 {# How to search by opening hours - segments #}
 User: restaurants open after 3am and before 7am on Monday?
-Target: SELECT * FROM restaurants WHERE 'after 3am and before 7am on Monday' = opening_hours;
+Target: SELECT *, summary(reviews) FROM restaurants WHERE 'after 3am and before 7am on Monday' = opening_hours;
 __
 
 {% for dlg_turn in dlg[:-1] %}
