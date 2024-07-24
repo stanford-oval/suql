@@ -1794,6 +1794,7 @@ def suql_execute(
     loggings="",
     log_filename=None,
     disable_try_catch=False,
+    disable_try_catch_all_sql=False,
     embedding_server_address="http://127.0.0.1:8501",
     select_username="select_user",
     select_userpswd="select_user",
@@ -1894,6 +1895,7 @@ def suql_execute(
         embedding_server_address,
         loggings,
         disable_try_catch,
+        disable_try_catch_all_sql,
         select_username,
         select_userpswd,
         create_username,
@@ -1927,6 +1929,7 @@ def _suql_execute_single(
     embedding_server_address,
     loggings,
     disable_try_catch,
+    disable_try_catch_sql,
     select_username,
     select_userpswd,
     create_username,
@@ -1936,7 +1939,7 @@ def _suql_execute_single(
     column_names = []
     cache = {}
 
-    if disable_try_catch:
+    try:
         visitor = _SelectVisitor(
             fts_fields,
             database,
@@ -1954,52 +1957,48 @@ def _suql_execute_single(
         second_sql = RawStream()(root)
         cache = visitor.serialize_cache()
 
-        return execute_sql(
+        results, column_names, cache = execute_sql(
             second_sql,
             database,
             user=select_username,
             password=select_userpswd,
-            no_print=True
+            no_print=True,
+            unprotected=disable_try_catch_sql
         )
-    else:
-        try:
-            visitor = _SelectVisitor(
-                fts_fields,
-                database,
-                embedding_server_address,
-                select_username,
-                select_userpswd,
-                create_username,
-                create_userpswd,
-                table_w_ids,
-                llm_model_name,
-                max_verify
-            )
-            root = parse_sql(suql)
-            visitor(root)
-            second_sql = RawStream()(root)
-            cache = visitor.serialize_cache()
-
-            results, column_names, cache = execute_sql(
-                second_sql,
-                database,
-                user=select_username,
-                password=select_userpswd,
-                no_print=True
-            )
-        except Exception as err:
-            with open("_suql_error_log.txt", "a") as file:
-                file.write(f"==============\n")
-                file.write(f"{loggings}\n")
-                file.write(f"{suql}\n")
-                file.write(f"{str(err)}\n")
-                traceback.print_exc(file=file)
-        finally:
-            visitor.drop_tmp_tables()
-            return results, column_names, cache
+    except Exception as err:
+        if disable_try_catch:
+            raise err
+        with open("_suql_error_log.txt", "a") as file:
+            file.write(f"==============\n")
+            file.write(f"{loggings}\n")
+            file.write(f"{suql}\n")
+            file.write(f"{str(err)}\n")
+            traceback.print_exc(file=file)
+    finally:
+        visitor.drop_tmp_tables()
+    return results, column_names, cache
 
 
 if __name__ == "__main__":
+    results, column_names, _ = suql_execute(
+        """SELECT course_ids FROM courses;""",
+        {
+            "courses": "course_id",
+            "ratings": "rating_id",
+            "offerings": "course_id",
+            "programs": "program_id",
+        },
+        "course_assistant",
+        embedding_server_address="http://127.0.0.1:8509",
+        # source_file_mapping={
+        #     "yelp_general_info": "/home/harshit/DialogueForms/src/genie/domains/yelpbot/yelp_general_info.txt"
+        # },
+        disable_try_catch=True,
+        disable_try_catch_all_sql=True
+    )
+    
+    print(results)
+    exit(0)
     # print(suql_execute(sql, disable_try_catch=True, fts_fields=[("restaurants", "name")] )[0])
     database = "restaurants"
     with open("sql_free_text_support/test_cases.txt", "r") as fd:

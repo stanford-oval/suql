@@ -11,6 +11,7 @@ def execute_sql(
     data=None,
     commit_in_lieu_fetch=False,
     no_print=False,
+    unprotected=False
 ):
     start_time = time.time()
 
@@ -38,7 +39,7 @@ def execute_sql(
     cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
     conn.commit()
 
-    try:
+    def sql_unprotected():
         if not no_print:
             print("executing SQL {}".format(sql_query))
         # Execute the SQL query
@@ -55,9 +56,16 @@ def execute_sql(
         else:
             results = cursor.fetchall()
             column_names = [desc[0] for desc in cursor.description]
+            
+        return results, column_names
+
+    try:
+        results, column_names = sql_unprotected()
 
     except psycopg2.Error as e:
         print("Error executing SQL query:", e)
+        if unprotected:
+            raise e
         end_time = time.time()
         elapsed_time = end_time - start_time
         return [], [], elapsed_time
@@ -93,7 +101,7 @@ def execute_sql_with_column_info(
     cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
     conn.commit()
 
-    try:
+    def sql_unprotected():
         # Execute the SQL query
         cursor.execute(sql_query)
 
@@ -116,7 +124,11 @@ def execute_sql_with_column_info(
 
         column_types = [type_map[oid] for oid in column_type_oids]
         column_info = list(zip(column_names, column_types))
+        
+        return results, column_info
 
+    try:
+        results, column_info = sql_unprotected()
     except psycopg2.Error as e:
         print("Error executing SQL query:", e)
         if unprotected:
