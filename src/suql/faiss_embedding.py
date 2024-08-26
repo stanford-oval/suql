@@ -177,7 +177,7 @@ class EmbeddingStore:
     def initialize_from_sql(
         self, table_name, primary_key_field_name, free_text_field_name, db_name
     ):
-        sql = "SELECT {}, {} FROM {}".format(
+        sql = 'SELECT "{}", "{}" FROM "{}"'.format(
             primary_key_field_name, free_text_field_name, table_name
         )
         if db_name == "":
