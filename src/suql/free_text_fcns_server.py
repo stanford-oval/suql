@@ -67,7 +67,7 @@ def _answer(
     return {"result": continuation}
 
 def start_free_text_fncs_server(
-    host="127.0.0.1", port=8500, k=5, max_input_token=3800, engine="gpt-3.5-turbo-0613"
+    host="127.0.0.1", port=8500, k=5, max_input_token=3800, engine="gpt-4o-mini"
 ):
     """
     Set up a free text functions server for the free text
