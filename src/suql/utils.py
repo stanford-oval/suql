@@ -1,6 +1,3 @@
-import spacy
-
-nlp = spacy.load("en_core_web_sm")
 import hashlib
 
 import tiktoken
@@ -52,6 +49,9 @@ def chunk_text(text, k, use_spacy=True):
         if text == "":
             return [""]
         # in case of using spacy, k is the minimum number of words per chunk
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+        
         chunks = [i.text for i in nlp(text).sents]
         res = []
         carryover = ""

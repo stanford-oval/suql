@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 # Package metadata
 name = "suql"
-version = "1.1.7a7"
+version = "1.1.7a8"
 description = "Structured and Unstructured Query Language (SUQL) Python API"
 author = "Shicheng Liu"
 author_email = "shicheng@cs.stanford.edu"
@@ -18,13 +18,16 @@ install_requires = [
     'Flask-Cors==4.0.0',
     'Flask-RESTful==0.3.10',
     'requests==2.31.0',
-    'spacy==3.6.0',
     'tiktoken==0.4.0',
     'psycopg2-binary==2.9.7',
     'pglast==5.3',
-    'FlagEmbedding~=1.2.5',
     'litellm==1.34.34',
     'platformdirs>=4.0.0'
+]
+
+install_dev_requires = [
+    'spacy==3.6.0',
+    'FlagEmbedding~=1.2.5',
 ]
 
 # Additional package information
@@ -49,6 +52,9 @@ setup(
     packages=packages,
     package_dir={"": "src"},
     install_requires=install_requires,
+    extra_requires={
+        "dev": install_dev_requires
+    },
     url=url,
     classifiers=classifiers,
     package_data={
