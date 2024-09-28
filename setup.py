@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 # Package metadata
 name = "suql"
-version = "1.1.7a9"
+version = "1.1.7a10"
 description = "Structured and Unstructured Query Language (SUQL) Python API"
 author = "Shicheng Liu"
 author_email = "shicheng@cs.stanford.edu"
@@ -22,7 +22,8 @@ install_requires = [
     'psycopg2-binary==2.9.7',
     'pglast==5.3',
     'litellm==1.34.34',
-    'platformdirs>=4.0.0'
+    'platformdirs>=4.0.0',
+    'sqlparse~=0.5.0'
 ]
 
 install_dev_requires = [
