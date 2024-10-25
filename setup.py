@@ -20,7 +20,7 @@ install_requires = [
     'requests==2.31.0',
     'tiktoken>=0.4.0',
     'pglast==5.3',
-    'litellm==1.34.34',
+    'litellm>=1.34.34',
     'platformdirs>=4.0.0',
     'sqlparse~=0.5.0'
 ]
