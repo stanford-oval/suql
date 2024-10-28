@@ -22,20 +22,21 @@ app = Flask(__name__)
 def _answer(
     source,
     query,
-    type_prompt = None,
+    type_prompt=None,
     k=5,
     max_input_token=10000,
-    engine="gpt-3.5-turbo-0125"
+    engine="gpt-3.5-turbo-0125",
+    api_base=None,
+    api_version=None,
 ):
     from suql.prompt_continuation import llm_generate
+
     if not source:
         return {"result": "no information"}
 
     text_res = []
     if isinstance(source, list):
-        documents = compute_top_similarity_documents(
-            source, query, top=k
-        )
+        documents = compute_top_similarity_documents(source, query, top=k)
         for i in documents:
             if num_tokens_from_string("\n".join(text_res + [i])) < max_input_token:
                 text_res.append(i)
@@ -63,11 +64,20 @@ def _answer(
         temperature=0.0,
         stop_tokens=[],
         postprocess=False,
+        api_base=api_base,
+        api_version=api_version,
     )
     return {"result": continuation}
 
+
 def start_free_text_fncs_server(
-    host="127.0.0.1", port=8500, k=5, max_input_token=3800, engine="gpt-4o-mini"
+    host="127.0.0.1",
+    port=8500,
+    k=5,
+    max_input_token=3800,
+    engine="gpt-4o-mini",
+    api_base=None,
+    api_version=None,
 ):
     """
     Set up a free text functions server for the free text
@@ -115,11 +125,12 @@ def start_free_text_fncs_server(
             data["text"],
             data["question"],
             type_prompt=data["type_prompt"] if "type_prompt" in data else None,
-            k = k,
-            max_input_token = max_input_token,
-            engine = engine
+            k=k,
+            max_input_token=max_input_token,
+            engine=engine,
+            api_base=api_base,
+            api_version=api_version,
         )
-    
 
     @app.route("/summary", methods=["POST"])
     def summary():
@@ -166,6 +177,8 @@ def start_free_text_fncs_server(
             temperature=0.0,
             stop_tokens=["\n"],
             postprocess=False,
+            api_base=api_base,
+            api_version=api_version,
         )
 
         res = {"result": continuation}
