@@ -4,6 +4,7 @@ import re
 from flask import Flask, request
 
 from suql.faiss_embedding import compute_top_similarity_documents
+from suql.prompt_continuation import llm_generate
 from suql.utils import num_tokens_from_string
 
 app = Flask(__name__)
@@ -27,7 +28,6 @@ def _answer(
     max_input_token=10000,
     engine="gpt-3.5-turbo-0125"
 ):
-    from suql.prompt_continuation import llm_generate
     if not source:
         return {"result": "no information"}
 
@@ -65,6 +65,28 @@ def _answer(
         postprocess=False,
     )
     return {"result": continuation}
+
+def _get_relevance_check_subqueries(
+    original_query: str,
+    context: str = "",
+    engine="gpt-3.5-turbo-0125"
+):
+    continuation, _ = llm_generate(
+        "prompts/log_relevance_check_question_generation.prompt",
+        {
+            "question": original_query,
+            "context": context
+        },
+        engine=engine,
+        max_tokens=200,
+        temperature=0.0,
+        stop_tokens=[],
+        postprocess=False,
+    )
+
+    subqueries = continuation.split('\n')
+
+    return subqueries
 
 def start_free_text_fncs_server(
     host="127.0.0.1", port=8500, k=5, max_input_token=3800, engine="gpt-4o-mini"
@@ -104,8 +126,6 @@ def start_free_text_fncs_server(
             "result" (str): answer function result
         }
         """
-        from suql.prompt_continuation import llm_generate
-
         data = request.get_json()
 
         if "text" not in data or "question" not in data:
@@ -138,8 +158,6 @@ def start_free_text_fncs_server(
             "result" (str): summary function result
         }
         """
-        from suql.prompt_continuation import llm_generate
-
         data = request.get_json()
 
         if "text" not in data:
@@ -170,6 +188,46 @@ def start_free_text_fncs_server(
 
         res = {"result": continuation}
         return res
+
+    @app.route("/is_relevant", methods=["POST"])
+    # TODO(fuhuxiao): Finish impl. of this standalone API call
+    def is_relevant():
+        """
+        LLM-based relevance check function, set up as a server for PSQL to call.
+
+        Expected input params in request.get_json():
+
+        data["text"] (str or List[str]): text to find relevance for
+        data["question"] (str): question to find the text's relevance to
+
+        Returns:
+        {
+            "result" (str): relevance check result
+        }
+        """
+        data = request.get_json()
+
+        if ("text" not in data or not data["text"] or "question" not in data
+                or not data["question"]):
+            return None
+
+        subqueries = _get_relevance_check_subqueries(
+            data["question"],
+            engine=engine
+        )
+
+        text_res = []
+        if isinstance(data["text"], list):
+            for i in data["text"]:
+                if num_tokens_from_string("\n".join(text_res +
+                                                    [i])) < max_input_token:
+                    text_res.append(i)
+                else:
+                    break
+        else:
+            text_res = [data["text"]]
+
+        return text_res
 
     # start Flask server
     app.run(host=host, port=port)

@@ -78,3 +78,39 @@ CREATE OR REPLACE FUNCTION try_cast(_in text, INOUT _out anyelement)
     -- do nothing: _out already carries default
  END
 $function$;
+
+CREATE OR REPLACE FUNCTION is_relevant (source TEXT[], question TEXT, type_prompt TEXT DEFAULT '')
+  RETURNS TEXT
+AS $$
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/is_relevant"
+
+response = requests.post(url=URL, data=json.dumps({
+    "text" : source,
+    "question": question,
+    "type_prompt": type_prompt
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+return parsed_result["result"]
+$$ LANGUAGE plpython3u;
+
+CREATE OR REPLACE FUNCTION is_relevant (source TEXT, question TEXT, type_prompt TEXT DEFAULT '')
+  RETURNS TEXT
+AS $$
+import requests
+import json
+
+URL = "http://127.0.0.1:8500/is_relevant"
+
+response = requests.post(url=URL, data=json.dumps({
+    "text" : source,
+    "question": question,
+    "type_prompt": type_prompt
+}), headers={'Content-Type': 'application/json'})
+response.raise_for_status()  # Raise an exception if the request was not successful
+parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
+return parsed_result["result"]
+$$ LANGUAGE plpython3u;
