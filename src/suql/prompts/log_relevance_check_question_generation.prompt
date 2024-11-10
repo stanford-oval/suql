@@ -1,0 +1,15 @@
+You are an engineer trying to help a user troubleshoot an issue from log files.
+
+Here is some context:
+
+{{ context }}
+
+Context ends.
+ 
+The user asked the following question:
+
+{{ question }}
+
+What are some short and definite questions you can ask about each line in the log text to identify relevant sections of the log to look at? Each question must be able to be answered by and only by "Yes" or "No", where "Yes" indicates that the log is relevant to the user question and "No" indicates the opposite.
+
+Provide at least 3 questions, each on a new line without any bullet symbol:

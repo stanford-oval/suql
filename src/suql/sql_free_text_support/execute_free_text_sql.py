@@ -12,6 +12,7 @@ from typing import List, Union
 from functools import lru_cache
 
 import pglast
+import pglast.printers
 import requests
 from pglast import parse_sql
 from pglast.ast import *
@@ -26,10 +27,12 @@ from sympy.logic.boolalg import And, Not, Or, to_dnf
 from suql.postgresql_connection import execute_sql, execute_sql_with_column_info
 from suql.prompt_continuation import llm_generate
 from suql.utils import num_tokens_from_string
-from suql.free_text_fcns_server import _answer
+from suql.free_text_fcns_server import _answer, _get_relevance_check_subqueries
 
 # System parameters, do not modify
-_SET_FREE_TEXT_FCNS = ["answer"]
+_ANSWER_FCN_NAME = "answer"
+_IS_RELEVANT_FCN_NAME = "is_relevant"
+_SET_FREE_TEXT_FCNS = [_ANSWER_FCN_NAME, _IS_RELEVANT_FCN_NAME]
 _verified_res = {}
 
 def _generate_random_string(length=12):
@@ -53,11 +56,64 @@ class _FreeTextFcnVisitor(Visitor):
                 self.res = True
                 return
 
-
 def _if_contains_free_text_fcn(node):
     visitor = _FreeTextFcnVisitor()
     visitor(node)
     return visitor.res
+
+class _IsRelevantFcnVisitor(Visitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self._IS_RELEVANT_FCN_NAME = _IS_RELEVANT_FCN_NAME
+        self.ir_nodes = []
+
+    def __call__(self, node):
+        super().__call__(node)
+
+    def visit_FuncCall(self, ancestors, node: pglast.ast.FuncCall):
+        for i in node.funcname:
+            if i.sval == self._IS_RELEVANT_FCN_NAME:
+                self.ir_nodes.append(node)
+                return
+
+    # TODO(fuhuxiao): current design is to convert is_relevant to a list of OR
+    # statements, i.e. the entry will be selected if any subquery evaluates
+    # to True. Maybe this criteria is too loose. Try AND if it performs poorly.
+    def replace_is_relevant_node(
+        self,
+        root: Node,
+        query_to_subqueries,
+    ):
+        # Base case
+        if (isinstance(root, FuncCall) and root.funcname[0].sval == _IS_RELEVANT_FCN_NAME):
+            if root.args[1].val.sval in query_to_subqueries:
+                answer_predicates = []
+                for subquery in query_to_subqueries[root.args[1].val.sval]:
+                    answer_func_call = FuncCall(
+                        (String(_ANSWER_FCN_NAME),),
+                        (root.args[0],
+                        A_Const(isnull=False, val=(String(subquery))))
+                    )
+                    answer_predicate = A_Expr(
+                        A_Expr_Kind.AEXPR_OP,
+                        (String('='), ),
+                        lexpr=answer_func_call,
+                        rexpr=A_Const(isnull=False, val=(String('Yes'))),
+                    )
+                    answer_predicates.append(answer_predicate)
+                new_node = BoolExpr(BoolExprType.OR_EXPR, tuple(answer_predicates))
+                return new_node
+            else:
+                return root
+
+        # Recursion
+        if isinstance(root, BoolExpr):
+            new_args = []
+            for node in root.args:
+                new_args.append(self.replace_is_relevant_node(node, query_to_subqueries))
+            root.args = tuple(new_args)
+
+        return root
 
 
 def _extract_all_free_text_fcns(suql):
@@ -257,6 +313,15 @@ class _SelectVisitor(Visitor):
             tmp_table_name = "temp_table_{}".format(_generate_random_string())
             self.tmp_tables.append(tmp_table_name)
 
+            # Convert each is_relevant() function call into a BOOL_EXPR with
+            # predicates of answer() function calls
+            print("Original:\n", pglast.prettify(RawStream()(node)))
+
+            num_is_relevant_fcn = _convert_is_relevant_fcn_calls(node)
+            print("Converted {} is_relevant() function calls to answer()".format(num_is_relevant_fcn))
+
+            print("Processed:\n", pglast.prettify(RawStream()(node)))
+            
             # main entry point for SUQL compiler optimization
             results, column_info = _analyze_SelectStmt(
                 node,
@@ -1549,6 +1614,21 @@ def _execute_and(
                 max_verify
             )
 
+def _convert_is_relevant_fcn_calls(node: SelectStmt):
+    visitor = _IsRelevantFcnVisitor()
+    visitor(node.whereClause)
+
+    query_to_subqueries = dict()
+    for i, ir_node in enumerate(visitor.ir_nodes):
+        query = ir_node.args[1].val.sval
+        subqueries = _get_relevance_check_subqueries(query)
+        query_to_subqueries[query] = subqueries
+    # TODO(fuhuxiao/xiyuanw): Check and filter out similar questions,
+    # potentially using an embedding function and set a configurable threshold.
+
+    node.whereClause = visitor.replace_is_relevant_node(node.whereClause, query_to_subqueries)
+
+    return len(visitor.ir_nodes)
 
 def _analyze_SelectStmt(
     node: SelectStmt,

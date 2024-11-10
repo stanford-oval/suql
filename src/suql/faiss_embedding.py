@@ -398,7 +398,7 @@ class EmbeddingStore:
                     dot_product,
                     [self.all_free_text[self.embedding2document[indice]]],
                 )
-                for indice, dot_product in zip(embedding_indices, dot_products)
+                for indice, dot_product in zip(embedding_indices, dot_products) if indice >= 0
                 for individual_id in individual2id_list_mapping[
                     self.document2id[self.embedding2document[indice]]
                 ]
