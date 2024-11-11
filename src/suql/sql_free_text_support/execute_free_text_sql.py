@@ -204,6 +204,8 @@ class _SelectVisitor(Visitor):
         max_verify,
         api_base=None,
         api_version=None,
+        host="127.0.0.1",
+        port="5432",
     ) -> None:
         super().__init__()
         self.tmp_tables = []
@@ -231,6 +233,8 @@ class _SelectVisitor(Visitor):
 
         # store database
         self.database = database
+        self.host = host
+        self.port = port
 
     def __call__(self, node):
         super().__call__(node)
@@ -286,6 +290,8 @@ class _SelectVisitor(Visitor):
                 password=self.create_userpswd,
                 commit_in_lieu_fetch=True,
                 no_print=True,
+                host=self.host,
+                port=self.port,
             )
 
             if results:
@@ -311,6 +317,8 @@ class _SelectVisitor(Visitor):
                         password=self.create_userpswd,
                         commit_in_lieu_fetch=True,
                         no_print=True,
+                        host=self.host,
+                        port=self.port,
                     )
 
             # finally, modify the existing sql with tmp_table_name
@@ -363,6 +371,8 @@ class _SelectVisitor(Visitor):
                 password=self.create_userpswd,
                 commit_in_lieu_fetch=True,
                 no_print=True,
+                host=self.host,
+                port=self.port,
             )
 
 
@@ -999,6 +1009,8 @@ class _StructuralClassification(Visitor):
                 unprotected=True,
                 user=self.select_username,
                 password=self.select_userpswd,
+                host=self.host,
+                port=self.port,
             )
             # it is possible if there is a type error
             # e.g. "Passengers ( 2017 )" = '490,000', but "Passengers ( 2017 )" is actually of type int
@@ -1011,6 +1023,8 @@ class _StructuralClassification(Visitor):
                     self.database,
                     user=self.select_username,
                     password=self.select_userpswd,
+                    host=self.host,
+                    port=self.port,
                 )
         except psyconpg2Error:
             logging.info(
@@ -1093,6 +1107,8 @@ class _StructuralClassification(Visitor):
                     self.database,
                     user=self.select_username,
                     password=self.select_userpswd,
+                    host=self.host,
+                    port=self.port,
                 )
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x: x[0], field_value_choices))
@@ -1219,6 +1235,8 @@ def _execute_structural_sql(
     llm_model_name: str,
     api_base=None,
     api_version=None,
+    host="127.0.0.1",
+    port="5432",
 ):
     _ = RawStream()(original_node)  # RawStream takes care of some issue, to investigate
     node = deepcopy(original_node)
@@ -1243,6 +1261,8 @@ def _execute_structural_sql(
                 database,
                 select_username,
                 select_userpswd,
+                host=host,
+                port=port,
             )
             # give the projection fields new names
             projection_table_name = (
@@ -1287,6 +1307,8 @@ def _execute_structural_sql(
                 database,
                 select_username,
                 select_userpswd,
+                host=host,
+                port=port,
             )
             # give the projection fields new names
             projection_table_name = (
@@ -1343,7 +1365,12 @@ def _execute_structural_sql(
 
     sql = RawStream()(node)
     return execute_sql_with_column_info(
-        sql, database, user=select_username, password=select_userpswd
+        sql,
+        database,
+        user=select_username,
+        password=select_userpswd,
+        host=host,
+        port=port,
     )
 
 
@@ -1521,6 +1548,8 @@ def _execute_and(
     max_verify,
     api_base=None,
     api_version=None,
+    host="127.0.0.1",
+    port="5432",
 ):
     # there should not exist any OR expression inside sql_dnf_predicates
 
@@ -1551,8 +1580,9 @@ def _execute_and(
             select_username,
             select_userpswd,
             llm_model_name,
-            api_base,
             api_version,
+            host=host,
+            port=port,
         )
 
         free_text_predicates = tuple(
@@ -1608,6 +1638,8 @@ def _execute_and(
                 llm_model_name,
                 api_base,
                 api_version,
+                host=host,
+                port=port,
             )
             return _execute_free_text_queries(
                 node,
@@ -1782,7 +1814,6 @@ class _RequiredParamMappingVisitor(Visitor):
         self.missing_params = defaultdict(set)
 
     def visit_SelectStmt(self, ancestors, node: SelectStmt):
-
         def check_a_expr_or_and_expr(_dnf_predicate, _field):
             if isinstance(_dnf_predicate, A_Expr):
                 return _check_predicate_exist(_dnf_predicate, _field)
@@ -1890,6 +1921,8 @@ def suql_execute(
     create_username="creator_role",
     create_userpswd="creator_role",
     source_file_mapping={},
+    host="127.0.0.1",
+    port="5432",
     # used for azure openai
     api_base=None,
     api_version=None,
@@ -1991,8 +2024,10 @@ def suql_execute(
         select_userpswd,
         create_username,
         create_userpswd,
-        api_base,
-        api_version,
+        host=host,
+        port=port,
+        api_base=api_base,
+        api_version=api_version,
     )
     if results == []:
         return results, column_names, cache
@@ -2027,6 +2062,8 @@ def _suql_execute_single(
     select_userpswd,
     create_username,
     create_userpswd,
+    host="127.0.0.1",
+    port="5432",
     api_base=None,
     api_version=None,
 ):
@@ -2046,8 +2083,10 @@ def _suql_execute_single(
             table_w_ids,
             llm_model_name,
             max_verify,
-            api_base,
-            api_version,
+            api_base=api_base,
+            api_version=api_version,
+            host=host,
+            port=port,
         )
         root = parse_sql(suql)
         visitor(root)
@@ -2061,12 +2100,14 @@ def _suql_execute_single(
             password=select_userpswd,
             no_print=True,
             unprotected=disable_try_catch_sql,
+            host=host,
+            port=port,
         )
     except Exception as err:
         if disable_try_catch:
             raise err
         with open("_suql_error_log.txt", "a") as file:
-            file.write(f"==============\n")
+            file.write("==============\n")
             file.write(f"{loggings}\n")
             file.write(f"{suql}\n")
             file.write(f"{str(err)}\n")
