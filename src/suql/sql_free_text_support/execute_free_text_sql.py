@@ -335,6 +335,10 @@ class _SelectVisitor(Visitor):
                 self.select_username,
                 self.select_userpswd,
                 self.llm_model_name,
+                self.api_base,
+                self.api_version,
+                self.host,
+                self.port,
             )
 
     def serialize_cache(self):
@@ -907,6 +911,8 @@ class _StructuralClassification(Visitor):
         llm_model_name,
         api_base=None,
         api_version=None,
+        host=None,
+        port=None,
     ) -> None:
         super().__init__()
         self.node = node
@@ -918,6 +924,8 @@ class _StructuralClassification(Visitor):
         self.llm_model_name = llm_model_name
         self.api_base = api_base
         self.api_version = api_version
+        self.host = host
+        self.port = port
 
     def __call__(self, node):
         super().__call__(node)
@@ -1157,6 +1165,8 @@ def _classify_db_fields(
     llm_model_name: str,
     api_base=None,
     api_version=None,
+    host="127.0.0.1",
+    port="5432",
 ):
     # we expect all atomic predicates under `predicate` to only involve stru fields
     # (no `answer` function)
@@ -1172,6 +1182,8 @@ def _classify_db_fields(
         llm_model_name,
         api_base,
         api_version,
+        host,
+        port,
     )
     visitor(node)
 
@@ -1358,9 +1370,10 @@ def _execute_structural_sql(
         fts_fields,
         select_username,
         select_userpswd,
-        llm_model_name,
         api_base,
         api_version,
+        host,
+        port,
     )
 
     sql = RawStream()(node)
