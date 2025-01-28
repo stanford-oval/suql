@@ -17,7 +17,7 @@ install_requires = [
     "Flask==2.3.2",
     "Flask-Cors==4.0.0",
     "Flask-RESTful==0.3.10",
-    "requests==2.31.0",
+    "requests>=2.31.0",
     "tiktoken>=0.4.0",
     "pglast>=6.10",
     "litellm>=1.34.34",
