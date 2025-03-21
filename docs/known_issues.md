@@ -12,3 +12,5 @@ if max_wait_time is None:
 This says that if a call to `llm_generate` does not set a `max_wait_time`, then it is dynamically calculated based on this linear function of `total_token`. This is imperfect, and we are erroring on the side of waiting longer (e.g., for an input with `1000` tokens, this would wait for 6 seconds, which might be too long). You can set a custom wait time, or disable this feature or together by setting `attempts = 0`.
 
 3. The SUQL compiler right now uses the special character `^` when handling certain join-related optimizations. Please do not include this character `^` in your column names. (This restriction could be lifted in the future.)
+
+4. When installing in python 3.10, encountered `ImportError: /home/oval/.conda/envs/.../lib/python3.10/site-packages/torch/lib/../../nvidia/cusparse/lib/libcusparse.so.12: undefined symbol: __nvJitLinkAddData_12_1, version libnvJitLink.so.12` (higher torch version could be from other packages in the env). Solved with `pip install torch==2.0.1`.
