@@ -1550,6 +1550,52 @@ def _execute_and(
             )
 
 
+class _FindTableAliasVisitor(Visitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.alias_mapping = {}
+        
+    def __call__(self, node):
+        super().__call__(node)
+        
+    def visit_RangeVar(self, ancestors: Ancestor, node: RangeVar):
+        if node.alias and isinstance(node.alias, Alias) and node.alias.aliasname:
+            self.alias_mapping[node.alias.aliasname] = node.relname
+            
+            # and now replace alias by disabling it
+            node.alias = None
+
+
+class _ReplaceTableAliasVisitor(Visitor):
+    def __init__(self, alias_mapping) -> None:
+        super().__init__()
+        self.alias_mapping = alias_mapping
+
+    def __call__(self, node):
+        super().__call__(node)
+
+    def visit_ColumnRef(self, ancestors: Ancestor, node: ColumnRef):
+        if len(list(map(lambda x: x.sval, node.fields))) > 1 and \
+            node.fields[0].sval in self.alias_mapping:
+            
+            node.fields[0].sval = self.alias_mapping[node.fields[0].sval]
+            
+
+def _replace_table_aliases(
+    node: SelectStmt
+):
+    """
+        Replaces all table aliases to their original names.
+        
+        Assume here that there is no subqueries.
+    """
+    visitor = _FindTableAliasVisitor()
+    visitor(node)
+    replace_visitor = _ReplaceTableAliasVisitor(visitor.alias_mapping)
+    replace_visitor(node)
+    
+
+
 def _analyze_SelectStmt(
     node: SelectStmt,
     database: str,
@@ -1562,6 +1608,9 @@ def _analyze_SelectStmt(
     llm_model_name: str,
     max_verify: str
 ):
+    # first, replace all table aliases
+    _replace_table_aliases(node)
+    
     limit = node.limitCount.val.ival if node.limitCount else -1
     sql_dnf_predicates = _convert2dnf(node.whereClause)
 
@@ -1980,16 +2029,23 @@ def _suql_execute_single(
 
 
 if __name__ == "__main__":
+    test_sql = """SELECT c.course_id, c.course_codes, c.title, r.average_rating FROM courses AS c JOIN ratings r ON c.course_id = r.course_id WHERE answer(c.description, 'is this an AI course?') = 'Yes' ORDER BY r.average_rating DESC LIMIT 5;"""
+    table_w_ids =  {
+        "courses": "course_id",
+        "ratings": "rating_id",
+        "offerings": "course_id",
+        "programs": "program_id",
+    }
+    database = "course_assistant"
+    embedding_server_address = "http://127.0.0.1:8509"
+    disable_try_catch = True
+    disable_try_catch_all_sql = True
+    
     results, column_names, _ = suql_execute(
-        """SELECT course_ids FROM courses;""",
-        {
-            "courses": "course_id",
-            "ratings": "rating_id",
-            "offerings": "course_id",
-            "programs": "program_id",
-        },
-        "course_assistant",
-        embedding_server_address="http://127.0.0.1:8509",
+        test_sql,
+        table_w_ids,
+        database,
+        embedding_server_address=embedding_server_address,
         # source_file_mapping={
         #     "yelp_general_info": "/home/harshit/DialogueForms/src/genie/domains/yelpbot/yelp_general_info.txt"
         # },
@@ -1998,15 +2054,19 @@ if __name__ == "__main__":
     )
     
     print(results)
-    exit(0)
-    # print(suql_execute(sql, disable_try_catch=True, fts_fields=[("restaurants", "name")] )[0])
-    database = "restaurants"
+    # exit(0)
     with open("sql_free_text_support/test_cases.txt", "r") as fd:
         test_cases = fd.readlines()
     res = []
     for sql in test_cases:
         sql = sql.strip()
-        i_res = suql_execute(sql, database, disable_try_catch=True)[0]
+        i_res = suql_execute(
+            sql,
+            table_w_ids,
+            database,
+            embedding_server_address=embedding_server_address,
+            disable_try_catch=disable_try_catch,
+            disable_try_catch_all_sql=disable_try_catch_all_sql)[0]
         res.append(i_res)
         with open("sql_free_text_support/test_cases_res.txt", "w") as fd:
             for i_res in res:
