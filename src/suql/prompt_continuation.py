@@ -3,21 +3,18 @@ Functionality to work with .prompt files
 """
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
-from typing import List
-
 import os
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from threading import Thread
+from typing import List
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-
-from suql.utils import num_tokens_from_string
 from litellm import completion, completion_cost
 
+from suql.utils import num_tokens_from_string
 
 logger = logging.getLogger(__name__)
 # create file handler which logs even debug messages
@@ -36,11 +33,14 @@ jinja_environment = Environment(
 ENABLE_CACHING = False
 if ENABLE_CACHING:
     import pymongo
+
     mongo_client = pymongo.MongoClient("localhost", 27017)
     prompt_cache_db = mongo_client["open_ai_prompts"]["caches"]
 
 
 total_cost = 0  # in USD
+
+
 def get_total_cost():
     global total_cost
     return total_cost
@@ -75,6 +75,8 @@ def _generate(
     postprocess,
     max_tries,
     ban_line_break_start,
+    api_base=None,
+    api_version=None,
 ):
     # don't try multiple times if the temperature is 0, because the results will be the same
     if max_tries > 1 and temperature == 0:
@@ -96,6 +98,8 @@ def _generate(
             "frequency_penalty": frequency_penalty,
             "presence_penalty": presence_penalty,
             "stop": stop_tokens,
+            "api_base": api_base,
+            "api_version": api_version,
         }
 
         generation_output = chat_completion_with_backoff(**kwargs)
@@ -198,6 +202,8 @@ def llm_generate(
     filled_prompt=None,
     attempts=2,
     max_wait_time=None,
+    api_base=None,
+    api_version=None,
 ):
     """
     filled_prompt gives direct access to the underlying model, without having to load a prompt template from a .prompt file. Used for testing.
@@ -247,6 +253,8 @@ def llm_generate(
             postprocess,
             max_tries,
             ban_line_break_start,
+            api_base,
+            api_version,
         )
         if success:
             final_result = result
@@ -265,6 +273,8 @@ def llm_generate(
             postprocess,
             max_tries,
             ban_line_break_start,
+            api_version,
+            api_base,
         )
 
     end_time = time.time()
