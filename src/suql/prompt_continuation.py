@@ -77,6 +77,7 @@ def _generate(
     ban_line_break_start,
     api_base=None,
     api_version=None,
+    api_key=None,
 ):
     # don't try multiple times if the temperature is 0, because the results will be the same
     if max_tries > 1 and temperature == 0:
@@ -100,6 +101,7 @@ def _generate(
             "stop": stop_tokens,
             "api_base": api_base,
             "api_version": api_version,
+            "api_key": api_key,
         }
 
         generation_output = chat_completion_with_backoff(**kwargs)
@@ -204,6 +206,7 @@ def llm_generate(
     max_wait_time=None,
     api_base=None,
     api_version=None,
+    api_key=None,
 ):
     """
     filled_prompt gives direct access to the underlying model, without having to load a prompt template from a .prompt file. Used for testing.
@@ -255,6 +258,7 @@ def llm_generate(
             ban_line_break_start,
             api_base,
             api_version,
+            api_key,
         )
         if success:
             final_result = result
@@ -273,8 +277,9 @@ def llm_generate(
             postprocess,
             max_tries,
             ban_line_break_start,
-            api_version,
             api_base,
+            api_version,
+            api_key,
         )
 
     end_time = time.time()
@@ -312,6 +317,9 @@ def batch_llm_generate(
     max_tries=1,
     ban_line_break_start=False,
     max_num_threads=10,
+    api_base=None,
+    api_version=None,
+    api_key=None,
 ):
     """
     We use multithreading here (instead of multiprocessing) because this method is I/O-bound, mostly waiting for an HTTP response to come back.
@@ -330,6 +338,9 @@ def batch_llm_generate(
         postprocess=postprocess,
         max_tries=max_tries,
         ban_line_break_start=ban_line_break_start,
+        api_base=api_base,
+        api_version=api_version,
+        api_key=api_key,
     )
 
     with ThreadPoolExecutor(max_num_threads) as executor:

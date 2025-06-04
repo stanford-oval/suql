@@ -204,6 +204,7 @@ class _SelectVisitor(Visitor):
         max_verify,
         api_base=None,
         api_version=None,
+        api_key=None,
         host="127.0.0.1",
         port="5432",
     ) -> None:
@@ -227,6 +228,7 @@ class _SelectVisitor(Visitor):
         self.llm_model_name = llm_model_name
         self.api_base = api_base
         self.api_version = api_version
+        self.api_key = api_key
 
         # store max verify param
         self.max_verify = max_verify
@@ -275,6 +277,7 @@ class _SelectVisitor(Visitor):
                 self.max_verify,
                 self.api_base,
                 self.api_version,
+                self.api_key,
             )
 
             # based on results and column_info, insert a temporary table
@@ -337,6 +340,7 @@ class _SelectVisitor(Visitor):
                 self.llm_model_name,
                 self.api_base,
                 self.api_version,
+                self.api_key,
                 self.host,
                 self.port,
             )
@@ -451,6 +455,7 @@ def _verify(
     llm_model_name,
     api_base=None,
     api_version=None,
+    api_key=None,
 ):
     if (document, field, query, operator, value) in _verified_res:
         return _verified_res[(document, field, query, operator, value)]
@@ -476,6 +481,7 @@ def _verify(
         postprocess=False,
         api_base=api_base,
         api_version=api_version,
+        api_key=api_key,
     )[0]
 
     if "the answer is correct" in res.lower():
@@ -487,7 +493,7 @@ def _verify(
 
 
 def _verify_single_res(
-    doc, field_query_list, llm_model_name, api_base=None, api_version=None
+    doc, field_query_list, llm_model_name, api_base=None, api_version=None, api_key=None
 ):
     # verify for each stmt, if any stmt fails to verify, exclude it
     all_found = True
@@ -510,6 +516,7 @@ def _verify_single_res(
                     llm_model_name,
                     api_base,
                     api_version,
+                    api_key,
                 )
             # otherwise it is a list. Go over the list until if one verifies
             else:
@@ -524,6 +531,7 @@ def _verify_single_res(
                         llm_model_name,
                         api_base,
                         api_version,
+                        api_key,
                     ):
                         res = True
                         break
@@ -569,6 +577,7 @@ def _verify_single_res(
                 llm_model_name,
                 api_base,
                 api_version,
+                api_key,
             ):
                 all_found = False
                 break
@@ -644,6 +653,7 @@ def _retrieve_and_verify(
     max_verify,
     api_base=None,
     api_version=None,
+    api_key=None,
     parallel=True,
     fetch_all=False,
 ):
@@ -763,7 +773,7 @@ def _retrieve_and_verify(
         # parallelize verification calls
         id_res = _parallel_filtering(
             lambda x: _verify_single_res(
-                x, field_query_list, llm_model_name, api_base, api_version
+                x, field_query_list, llm_model_name, api_base, api_version, api_key
             ),
             parsed_result,
             limit,
@@ -773,7 +783,7 @@ def _retrieve_and_verify(
         id_res = set()
         for each_res in parsed_result:
             if _verify_single_res(
-                each_res, field_query_list, llm_model_name, api_base, api_version
+                each_res, field_query_list, llm_model_name, api_base, api_version, api_key
             ):
                 if isinstance(each_res[0], list):
                     id_res.update(each_res[0])
@@ -911,6 +921,7 @@ class _StructuralClassification(Visitor):
         llm_model_name,
         api_base=None,
         api_version=None,
+        api_key=None,
         host=None,
         port=None,
     ) -> None:
@@ -924,6 +935,7 @@ class _StructuralClassification(Visitor):
         self.llm_model_name = llm_model_name
         self.api_base = api_base
         self.api_version = api_version
+        self.api_key = api_key
         self.host = host
         self.port = port
 
@@ -1140,6 +1152,7 @@ class _StructuralClassification(Visitor):
                         postprocess=False,
                         api_base=self.api_base,
                         api_version=self.api_version,
+                        api_key=self.api_key,
                     )[0]
                     if res in field_value_choices:
                         _replace_a_expr_field(node, ancestors, String(sval=(res)))
@@ -1165,6 +1178,7 @@ def _classify_db_fields(
     llm_model_name: str,
     api_base=None,
     api_version=None,
+    api_key=None,
     host="127.0.0.1",
     port="5432",
 ):
@@ -1182,6 +1196,7 @@ def _classify_db_fields(
         llm_model_name,
         api_base,
         api_version,
+        api_key,
         host,
         port,
     )
@@ -1247,6 +1262,7 @@ def _execute_structural_sql(
     llm_model_name: str,
     api_base=None,
     api_version=None,
+    api_key=None,
     host="127.0.0.1",
     port="5432",
 ):
@@ -1399,6 +1415,7 @@ def _execute_free_text_queries(
     max_verify,
     api_base,
     api_version,
+    api_key,
 ):
     # the predicate should only contain an atomic unstructural query
     # or an AND of multiple unstructural query (NOT of an unstructural query is considered to be atmoic)
@@ -1512,6 +1529,7 @@ def _execute_free_text_queries(
                 max_verify,
                 api_base,
                 api_version,
+                api_key,
             ),
             column_info,
         )
@@ -1534,6 +1552,7 @@ def _execute_free_text_queries(
                 max_verify,
                 api_base,
                 api_version,
+                api_key,
             ),
             column_info,
         )
@@ -1561,6 +1580,7 @@ def _execute_and(
     max_verify,
     api_base=None,
     api_version=None,
+    api_key=None,
     host="127.0.0.1",
     port="5432",
 ):
@@ -1593,7 +1613,9 @@ def _execute_and(
             select_username,
             select_userpswd,
             llm_model_name,
+            api_base,
             api_version,
+            api_key,
             host=host,
             port=port,
         )
@@ -1620,6 +1642,7 @@ def _execute_and(
             max_verify,
             api_base,
             api_version,
+            api_key,
         )
 
     elif isinstance(sql_dnf_predicates, A_Expr) or (
@@ -1638,6 +1661,7 @@ def _execute_and(
                 llm_model_name,
                 api_base,
                 api_version,
+                api_key,
             )
         else:
             all_results, column_info = _execute_structural_sql(
@@ -1651,6 +1675,7 @@ def _execute_and(
                 llm_model_name,
                 api_base,
                 api_version,
+                api_key,
                 host=host,
                 port=port,
             )
@@ -1666,6 +1691,7 @@ def _execute_and(
                 max_verify,
                 api_base,
                 api_version,
+                api_key,
             )
 
 
@@ -1728,6 +1754,7 @@ def _analyze_SelectStmt(
     max_verify: str,
     api_base=None,
     api_version=None,
+    api_key=None,
 ):
     # first, replace all table aliases
     _replace_table_aliases(node)
@@ -1761,6 +1788,7 @@ def _analyze_SelectStmt(
                 max_verify,
                 api_base,
                 api_version,
+                api_key,
             )
             res.extend(choice_res)
 
@@ -1789,6 +1817,7 @@ def _analyze_SelectStmt(
             max_verify,
             api_base,
             api_version,
+            api_key,
         )
 
     elif isinstance(sql_dnf_predicates, A_Expr) or (
@@ -1810,6 +1839,7 @@ def _analyze_SelectStmt(
             max_verify,
             api_base,
             api_version,
+            api_key,
         )
     else:
         raise ValueError(
@@ -1988,6 +2018,7 @@ def suql_execute(
     # used for azure openai
     api_base=None,
     api_version=None,
+    api_key=None,
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -2090,6 +2121,7 @@ def suql_execute(
         port=port,
         api_base=api_base,
         api_version=api_version,
+        api_key=api_key,
     )
     if results == []:
         return results, column_names, cache
@@ -2128,6 +2160,7 @@ def _suql_execute_single(
     port="5432",
     api_base=None,
     api_version=None,
+    api_key=None,
 ):
     results = []
     column_names = []
@@ -2147,6 +2180,7 @@ def _suql_execute_single(
             max_verify,
             api_base=api_base,
             api_version=api_version,
+            api_key=api_key,
             host=host,
             port=port,
         )

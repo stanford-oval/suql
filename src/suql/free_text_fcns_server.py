@@ -28,6 +28,7 @@ def _answer(
     engine="gpt-3.5-turbo-0125",
     api_base=None,
     api_version=None,
+    api_key=None,
 ):
     from suql.prompt_continuation import llm_generate
 
@@ -66,6 +67,7 @@ def _answer(
         postprocess=False,
         api_base=api_base,
         api_version=api_version,
+        api_key=api_key,
     )
     return {"result": continuation}
 
@@ -78,6 +80,7 @@ def start_free_text_fncs_server(
     engine="gpt-4o-mini",
     api_base=None,
     api_version=None,
+    api_key=None,
 ):
     """
     Set up a free text functions server for the free text
@@ -130,6 +133,7 @@ def start_free_text_fncs_server(
             engine=engine,
             api_base=api_base,
             api_version=api_version,
+            api_key=api_key,
         )
 
     @app.route("/summary", methods=["POST"])
@@ -179,6 +183,7 @@ def start_free_text_fncs_server(
             postprocess=False,
             api_base=api_base,
             api_version=api_version,
+            api_key=api_key,
         )
 
         res = {"result": continuation}
