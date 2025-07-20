@@ -9,3 +9,4 @@ psycopg2-binary>=2.9.10
 psycopg2>=2.9.10
 litellm>=1.34.34
 platformdirs>=4.0.0
+sympy>=1.14.0

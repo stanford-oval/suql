@@ -25,6 +25,7 @@ install_requires = [
     "sqlparse~=0.5.0",
     "psycopg2-binary>=2.9.10",
     "psycopg2>=2.9.10",
+    "sympy>=1.14.0",
 ]
 
 install_dev_requires = [
