@@ -1,15 +1,15 @@
 import concurrent.futures
 import json
+import logging
 import random
+import re
 import string
 import time
 import traceback
-import logging
-import re
 from collections import defaultdict
 from copy import deepcopy
-from typing import List, Union
 from functools import lru_cache
+from typing import List, Union
 
 import pglast
 import requests
@@ -23,14 +23,15 @@ from psycopg2 import Error as psyconpg2Error
 from sympy import Symbol, symbols
 from sympy.logic.boolalg import And, Not, Or, to_dnf
 
+from suql.free_text_fcns_server import _answer
 from suql.postgresql_connection import execute_sql, execute_sql_with_column_info
 from suql.prompt_continuation import llm_generate
 from suql.utils import num_tokens_from_string
-from suql.free_text_fcns_server import _answer
 
 # System parameters, do not modify
 _SET_FREE_TEXT_FCNS = ["answer"]
 _verified_res = {}
+
 
 def _generate_random_string(length=12):
     characters = string.ascii_lowercase + string.digits
@@ -80,22 +81,16 @@ class _ExtractAllFreeTextFncs(Visitor):
     def visit_FuncCall(self, ancestors, node: pglast.ast.FuncCall):
         for i in node.funcname:
             if i.sval in self._SET_FREE_TEXT_FCNS:
-                query_lst = list(
-                    filter(lambda x: isinstance(x, A_Const), node.args)
-                )
+                query_lst = list(filter(lambda x: isinstance(x, A_Const), node.args))
                 assert len(query_lst) == 1
                 query = query_lst[0].val.sval
 
-                field_lst = list(
-                    filter(lambda x: isinstance(x, ColumnRef), node.args)
-                )
+                field_lst = list(filter(lambda x: isinstance(x, ColumnRef), node.args))
                 assert len(field_lst) == 1
 
                 field = tuple(map(lambda x: x.sval, field_lst[0].fields))
-                    
-                self.res.append(
-                    (field, query)
-                )
+
+                self.res.append((field, query))
 
 
 class _TypeCastAnswer(Visitor):
@@ -136,7 +131,8 @@ class _IfAllStructural(Visitor):
         def is_structural(expr):
             if (
                 isinstance(expr, FuncCall)
-                and ".".join(map(lambda x: x.sval, expr.funcname)) in _SET_FREE_TEXT_FCNS
+                and ".".join(map(lambda x: x.sval, expr.funcname))
+                in _SET_FREE_TEXT_FCNS
             ):
                 return False
             return True
@@ -205,7 +201,12 @@ class _SelectVisitor(Visitor):
         create_userpswd,
         table_w_ids,
         llm_model_name,
-        max_verify
+        max_verify,
+        api_base=None,
+        api_version=None,
+        api_key=None,
+        host="127.0.0.1",
+        port="5432",
     ) -> None:
         super().__init__()
         self.tmp_tables = []
@@ -219,18 +220,23 @@ class _SelectVisitor(Visitor):
         self.select_userpswd = select_userpswd
         self.create_username = create_username
         self.create_userpswd = create_userpswd
-        
+
         # store table_w_ids
         self.table_w_ids = table_w_ids
-        
+
         # store default LLM
         self.llm_model_name = llm_model_name
-        
+        self.api_base = api_base
+        self.api_version = api_version
+        self.api_key = api_key
+
         # store max verify param
         self.max_verify = max_verify
-        
+
         # store database
         self.database = database
+        self.host = host
+        self.port = port
 
     def __call__(self, node):
         super().__call__(node)
@@ -268,7 +274,10 @@ class _SelectVisitor(Visitor):
                 self.select_userpswd,
                 self.table_w_ids,
                 self.llm_model_name,
-                self.max_verify
+                self.max_verify,
+                self.api_base,
+                self.api_version,
+                self.api_key,
             )
 
             # based on results and column_info, insert a temporary table
@@ -284,6 +293,8 @@ class _SelectVisitor(Visitor):
                 password=self.create_userpswd,
                 commit_in_lieu_fetch=True,
                 no_print=True,
+                host=self.host,
+                port=self.port,
             )
 
             if results:
@@ -308,7 +319,9 @@ class _SelectVisitor(Visitor):
                         user=self.create_username,
                         password=self.create_userpswd,
                         commit_in_lieu_fetch=True,
-                        no_print=True
+                        no_print=True,
+                        host=self.host,
+                        port=self.port,
                     )
 
             # finally, modify the existing sql with tmp_table_name
@@ -324,7 +337,12 @@ class _SelectVisitor(Visitor):
                 self.fts_fields,
                 self.select_username,
                 self.select_userpswd,
-                self.llm_model_name
+                self.llm_model_name,
+                self.api_base,
+                self.api_version,
+                self.api_key,
+                self.host,
+                self.port,
             )
 
     def serialize_cache(self):
@@ -360,7 +378,9 @@ class _SelectVisitor(Visitor):
                 user=self.create_username,
                 password=self.create_userpswd,
                 commit_in_lieu_fetch=True,
-                no_print=True
+                no_print=True,
+                host=self.host,
+                port=self.port,
             )
 
 
@@ -426,7 +446,17 @@ def _convert2dnf(predicate):
         return sql_expr
 
 
-def _verify(document, field, query, operator, value, llm_model_name):
+def _verify(
+    document,
+    field,
+    query,
+    operator,
+    value,
+    llm_model_name,
+    api_base=None,
+    api_version=None,
+    api_key=None,
+):
     if (document, field, query, operator, value) in _verified_res:
         return _verified_res[(document, field, query, operator, value)]
 
@@ -449,6 +479,9 @@ def _verify(document, field, query, operator, value, llm_model_name):
         stop_tokens=["\n"],
         max_tokens=30,
         postprocess=False,
+        api_base=api_base,
+        api_version=api_version,
+        api_key=api_key,
     )[0]
 
     if "the answer is correct" in res.lower():
@@ -459,7 +492,9 @@ def _verify(document, field, query, operator, value, llm_model_name):
     return res
 
 
-def _verify_single_res(doc, field_query_list, llm_model_name):
+def _verify_single_res(
+    doc, field_query_list, llm_model_name, api_base=None, api_version=None, api_key=None
+):
     # verify for each stmt, if any stmt fails to verify, exclude it
     all_found = True
     found_stmt = []
@@ -478,7 +513,10 @@ def _verify_single_res(doc, field_query_list, llm_model_name):
                     query,
                     operator,
                     value,
-                    llm_model_name
+                    llm_model_name,
+                    api_base,
+                    api_version,
+                    api_key,
                 )
             # otherwise it is a list. Go over the list until if one verifies
             else:
@@ -490,7 +528,10 @@ def _verify_single_res(doc, field_query_list, llm_model_name):
                         query,
                         operator,
                         value,
-                        llm_model_name
+                        llm_model_name,
+                        api_base,
+                        api_version,
+                        api_key,
                     ):
                         res = True
                         break
@@ -527,7 +568,17 @@ def _verify_single_res(doc, field_query_list, llm_model_name):
                     break
 
         else:
-            if not _verify(doc[1][i], field, query, operator, value, llm_model_name):
+            if not _verify(
+                doc[1][i],
+                field,
+                query,
+                operator,
+                value,
+                llm_model_name,
+                api_base,
+                api_version,
+                api_key,
+            ):
                 all_found = False
                 break
             else:
@@ -600,6 +651,9 @@ def _retrieve_and_verify(
     table_w_ids,
     llm_model_name,
     max_verify,
+    api_base=None,
+    api_version=None,
+    api_key=None,
     parallel=True,
     fetch_all=False,
 ):
@@ -718,7 +772,9 @@ def _retrieve_and_verify(
     if parallel:
         # parallelize verification calls
         id_res = _parallel_filtering(
-            lambda x: _verify_single_res(x, field_query_list, llm_model_name),
+            lambda x: _verify_single_res(
+                x, field_query_list, llm_model_name, api_base, api_version, api_key
+            ),
             parsed_result,
             limit,
             enforce_ordering=True if node.sortClause is not None else False,
@@ -726,7 +782,9 @@ def _retrieve_and_verify(
     else:
         id_res = set()
         for each_res in parsed_result:
-            if _verify_single_res(each_res, field_query_list, llm_model_name):
+            if _verify_single_res(
+                each_res, field_query_list, llm_model_name, api_base, api_version, api_key
+            ):
                 if isinstance(each_res[0], list):
                     id_res.update(each_res[0])
                 else:
@@ -860,7 +918,12 @@ class _StructuralClassification(Visitor):
         fts_fields,
         select_username,
         select_userpswd,
-        llm_model_name
+        llm_model_name,
+        api_base=None,
+        api_version=None,
+        api_key=None,
+        host=None,
+        port=None,
     ) -> None:
         super().__init__()
         self.node = node
@@ -870,6 +933,11 @@ class _StructuralClassification(Visitor):
         self.select_username = select_username
         self.select_userpswd = select_userpswd
         self.llm_model_name = llm_model_name
+        self.api_base = api_base
+        self.api_version = api_version
+        self.api_key = api_key
+        self.host = host
+        self.port = port
 
     def __call__(self, node):
         super().__call__(node)
@@ -917,7 +985,9 @@ class _StructuralClassification(Visitor):
                 and isinstance(self.node.fromClause[0], RangeVar)
                 and node.name[0].sval in ["~~", "~~*", "="]
             ):
-                n_field_name, n_value_name = _get_a_expr_field_value(node, no_check=True)
+                n_field_name, n_value_name = _get_a_expr_field_value(
+                    node, no_check=True
+                )
                 if (
                     table_name == self.node.fromClause[0].relname
                     and field_name == n_field_name
@@ -959,6 +1029,8 @@ class _StructuralClassification(Visitor):
                 unprotected=True,
                 user=self.select_username,
                 password=self.select_userpswd,
+                host=self.host,
+                port=self.port,
             )
             # it is possible if there is a type error
             # e.g. "Passengers ( 2017 )" = '490,000', but "Passengers ( 2017 )" is actually of type int
@@ -971,6 +1043,8 @@ class _StructuralClassification(Visitor):
                     self.database,
                     user=self.select_username,
                     password=self.select_userpswd,
+                    host=self.host,
+                    port=self.port,
                 )
         except psyconpg2Error:
             logging.info(
@@ -1053,6 +1127,8 @@ class _StructuralClassification(Visitor):
                     self.database,
                     user=self.select_username,
                     password=self.select_userpswd,
+                    host=self.host,
+                    port=self.port,
                 )
                 # TODO deal with list problems?
                 field_value_choices = list(map(lambda x: x[0], field_value_choices))
@@ -1074,6 +1150,9 @@ class _StructuralClassification(Visitor):
                         stop_tokens=["\n"],
                         max_tokens=100,
                         postprocess=False,
+                        api_base=self.api_base,
+                        api_version=self.api_version,
+                        api_key=self.api_key,
                     )[0]
                     if res in field_value_choices:
                         _replace_a_expr_field(node, ancestors, String(sval=(res)))
@@ -1096,7 +1175,12 @@ def _classify_db_fields(
     fts_fields: List,
     select_username: str,
     select_userpswd: str,
-    llm_model_name: str
+    llm_model_name: str,
+    api_base=None,
+    api_version=None,
+    api_key=None,
+    host="127.0.0.1",
+    port="5432",
 ):
     # we expect all atomic predicates under `predicate` to only involve stru fields
     # (no `answer` function)
@@ -1109,7 +1193,12 @@ def _classify_db_fields(
         fts_fields,
         select_username,
         select_userpswd,
-        llm_model_name
+        llm_model_name,
+        api_base,
+        api_version,
+        api_key,
+        host,
+        port,
     )
     visitor(node)
 
@@ -1137,14 +1226,13 @@ class _Replace_Original_Target_Visitor(Visitor):
                         # the same field appears twice, this means that the original syntax is problematic
                         break
                     res = (String(sval=f"{table_name}^{node.fields[0].sval}"),)
-            
+
             # do not replace if None, b/c this should be an aliased field
             if res is not None:
                 node.fields = res
 
-def _extract_recursive_joins(
-    fromClause: JoinExpr
-):
+
+def _extract_recursive_joins(fromClause: JoinExpr):
     """
     A FROM clause of a SelectStmt could have multiple joins.
     This functions searilizes the joins and returns them as a list.
@@ -1154,14 +1242,14 @@ def _extract_recursive_joins(
         res.append(fromClause.larg)
     if isinstance(fromClause.rarg, RangeVar):
         res.append(fromClause.rarg)
-        
+
     if isinstance(fromClause.larg, JoinExpr):
         res.extend(_extract_recursive_joins(fromClause.larg))
     if isinstance(fromClause.rarg, JoinExpr):
         res.extend(_extract_recursive_joins(fromClause.rarg))
-    
+
     return res
-    
+
 
 def _execute_structural_sql(
     original_node: SelectStmt,
@@ -1171,9 +1259,14 @@ def _execute_structural_sql(
     fts_fields: List,
     select_username: str,
     select_userpswd: str,
-    llm_model_name: str
+    llm_model_name: str,
+    api_base=None,
+    api_version=None,
+    api_key=None,
+    host="127.0.0.1",
+    port="5432",
 ):
-    _ = RawStream()(original_node) # RawStream takes care of some issue, to investigate
+    _ = RawStream()(original_node)  # RawStream takes care of some issue, to investigate
     node = deepcopy(original_node)
     # change projection to include everything
     # there are a couple of cases here
@@ -1187,10 +1280,17 @@ def _execute_structural_sql(
         for table in _extract_recursive_joins(node.fromClause[0]):
             # find out what columns this table has
             _, columns = execute_sql_with_column_info(
-                RawStream()(SelectStmt(fromClause=(table,), targetList=(ResTarget(val=ColumnRef(fields=(A_Star(),))),))),
+                RawStream()(
+                    SelectStmt(
+                        fromClause=(table,),
+                        targetList=(ResTarget(val=ColumnRef(fields=(A_Star(),))),),
+                    )
+                ),
                 database,
                 select_username,
                 select_userpswd,
+                host=host,
+                port=port,
             )
             # give the projection fields new names
             projection_table_name = (
@@ -1226,10 +1326,17 @@ def _execute_structural_sql(
         for table in node.fromClause:
             # find out what columns this table has
             _, columns = execute_sql_with_column_info(
-                RawStream()(SelectStmt(fromClause=(table,), targetList=(ResTarget(val=ColumnRef(fields=(A_Star(),))),))),
+                RawStream()(
+                    SelectStmt(
+                        fromClause=(table,),
+                        targetList=(ResTarget(val=ColumnRef(fields=(A_Star(),))),),
+                    )
+                ),
                 database,
                 select_username,
                 select_userpswd,
+                host=host,
+                port=port,
             )
             # give the projection fields new names
             projection_table_name = (
@@ -1279,15 +1386,20 @@ def _execute_structural_sql(
         fts_fields,
         select_username,
         select_userpswd,
-        llm_model_name
+        api_base,
+        api_version,
+        host,
+        port,
     )
 
     sql = RawStream()(node)
     return execute_sql_with_column_info(
-        sql, 
+        sql,
         database,
         user=select_username,
-        password=select_userpswd
+        password=select_userpswd,
+        host=host,
+        port=port,
     )
 
 
@@ -1300,7 +1412,10 @@ def _execute_free_text_queries(
     embedding_server_address,
     table_w_ids,
     llm_model_name,
-    max_verify
+    max_verify,
+    api_base,
+    api_version,
+    api_key,
 ):
     # the predicate should only contain an atomic unstructural query
     # or an AND of multiple unstructural query (NOT of an unstructural query is considered to be atmoic)
@@ -1329,9 +1444,9 @@ def _execute_free_text_queries(
         return tuple(res)
 
     def breakdown_unstructural_query(predicate: A_Expr):
-        assert _if_contains_free_text_fcn(predicate.lexpr) or _if_contains_free_text_fcn(
-            predicate.rexpr
-        )
+        assert _if_contains_free_text_fcn(
+            predicate.lexpr
+        ) or _if_contains_free_text_fcn(predicate.rexpr)
         if _if_contains_free_text_fcn(predicate.lexpr) and _if_contains_free_text_fcn(
             predicate.rexpr
         ):
@@ -1411,7 +1526,10 @@ def _execute_free_text_queries(
                 embedding_server_address,
                 table_w_ids,
                 llm_model_name,
-                max_verify
+                max_verify,
+                api_base,
+                api_version,
+                api_key,
             ),
             column_info,
         )
@@ -1431,7 +1549,10 @@ def _execute_free_text_queries(
                 embedding_server_address,
                 table_w_ids,
                 llm_model_name,
-                max_verify
+                max_verify,
+                api_base,
+                api_version,
+                api_key,
             ),
             column_info,
         )
@@ -1456,7 +1577,12 @@ def _execute_and(
     select_userpswd,
     table_w_ids,
     llm_model_name,
-    max_verify
+    max_verify,
+    api_base=None,
+    api_version=None,
+    api_key=None,
+    host="127.0.0.1",
+    port="5432",
 ):
     # there should not exist any OR expression inside sql_dnf_predicates
 
@@ -1486,7 +1612,12 @@ def _execute_and(
             fts_fields,
             select_username,
             select_userpswd,
-            llm_model_name
+            llm_model_name,
+            api_base,
+            api_version,
+            api_key,
+            host=host,
+            port=port,
         )
 
         free_text_predicates = tuple(
@@ -1508,7 +1639,10 @@ def _execute_and(
             embedding_server_address,
             table_w_ids,
             llm_model_name,
-            max_verify
+            max_verify,
+            api_base,
+            api_version,
+            api_key,
         )
 
     elif isinstance(sql_dnf_predicates, A_Expr) or (
@@ -1524,7 +1658,10 @@ def _execute_and(
                 fts_fields,
                 select_username,
                 select_userpswd,
-                llm_model_name
+                llm_model_name,
+                api_base,
+                api_version,
+                api_key,
             )
         else:
             all_results, column_info = _execute_structural_sql(
@@ -1535,7 +1672,12 @@ def _execute_and(
                 fts_fields,
                 select_username,
                 select_userpswd,
-                llm_model_name
+                llm_model_name,
+                api_base,
+                api_version,
+                api_key,
+                host=host,
+                port=port,
             )
             return _execute_free_text_queries(
                 node,
@@ -1546,7 +1688,10 @@ def _execute_and(
                 embedding_server_address,
                 table_w_ids,
                 llm_model_name,
-                max_verify
+                max_verify,
+                api_base,
+                api_version,
+                api_key,
             )
 
 
@@ -1606,7 +1751,10 @@ def _analyze_SelectStmt(
     select_userpswd: str,
     table_w_ids: dict,
     llm_model_name: str,
-    max_verify: str
+    max_verify: str,
+    api_base=None,
+    api_version=None,
+    api_key=None,
 ):
     # first, replace all table aliases
     _replace_table_aliases(node)
@@ -1637,7 +1785,10 @@ def _analyze_SelectStmt(
                 select_userpswd,
                 table_w_ids,
                 llm_model_name,
-                max_verify
+                max_verify,
+                api_base,
+                api_version,
+                api_key,
             )
             res.extend(choice_res)
 
@@ -1663,7 +1814,10 @@ def _analyze_SelectStmt(
             select_userpswd,
             table_w_ids,
             llm_model_name,
-            max_verify
+            max_verify,
+            api_base,
+            api_version,
+            api_key,
         )
 
     elif isinstance(sql_dnf_predicates, A_Expr) or (
@@ -1682,7 +1836,10 @@ def _analyze_SelectStmt(
             select_userpswd,
             table_w_ids,
             llm_model_name,
-            max_verify
+            max_verify,
+            api_base,
+            api_version,
+            api_key,
         )
     else:
         raise ValueError(
@@ -1696,10 +1853,10 @@ def _parse_standalone_answer(suql):
     # Define a regular expression pattern to match the required format
     # \s* allows for any number of whitespaces around the parentheses
     pattern = r"\s*answer\s*\(\s*([a-zA-Z_0-9]+)\s*,\s*['\"](.+?)['\"]\s*\)\s*"
-    
+
     # Use the re.match function to check if the entire string matches the pattern
     match = re.match(pattern, suql)
-    
+
     # If a match is found, return the captured groups: source and query
     if match:
         return match.group(1), match.group(2)
@@ -1722,36 +1879,33 @@ def _execute_standalone_answer(suql, source_file_mapping):
     source, query = _parse_standalone_answer(suql)
     if source not in source_file_mapping:
         return None
-    
+
     source_content = _read_source_file(source_file_mapping[source])
-    
+
     return _answer(source_content, query)
+
 
 def _check_predicate_exist(a_expr: A_Expr, field_name: str):
     if isinstance(a_expr.lexpr, ColumnRef):
         for i in a_expr.lexpr.fields:
             if isinstance(i, String) and i.sval == field_name:
                 return True
-        
+
     if isinstance(a_expr.rexpr, ColumnRef):
         for i in a_expr.rexpr.fields:
             if isinstance(i, String) and i.sval == field_name:
                 return True
-    
+
     return False
 
 
 class _RequiredParamMappingVisitor(Visitor):
-    def __init__(
-        self,
-        required_params_mapping
-    ) -> None:
+    def __init__(self, required_params_mapping) -> None:
         super().__init__()
         self.required_params_mapping = required_params_mapping
-        self.missing_params = defaultdict(set)        
-     
-    def visit_SelectStmt(self, ancestors, node: SelectStmt):
+        self.missing_params = defaultdict(set)
 
+    def visit_SelectStmt(self, ancestors, node: SelectStmt):
         def check_a_expr_or_and_expr(_dnf_predicate, _field):
             if isinstance(_dnf_predicate, A_Expr):
                 return _check_predicate_exist(_dnf_predicate, _field)
@@ -1766,20 +1920,24 @@ class _RequiredParamMappingVisitor(Visitor):
                         if _check_predicate_exist(i, _field):
                             found = True
                             break
-                        
+
                 return found
-            
+
             return False
-        
-        
+
         for table in node.fromClause:
-            if isinstance(table, RangeVar) and table.relname in self.required_params_mapping:
+            if (
+                isinstance(table, RangeVar)
+                and table.relname in self.required_params_mapping
+            ):
                 assert type(self.required_params_mapping[table.relname]) == list
-                
+
                 if not node.whereClause:
-                    self.missing_params[table.relname].update(self.required_params_mapping[table.relname])
+                    self.missing_params[table.relname].update(
+                        self.required_params_mapping[table.relname]
+                    )
                     continue
-                
+
                 dnf_predicate = _convert2dnf(node.whereClause)
 
                 if (
@@ -1787,7 +1945,10 @@ class _RequiredParamMappingVisitor(Visitor):
                     and dnf_predicate.boolop == BoolExprType.OR_EXPR
                 ):
                     for field in self.required_params_mapping[table.relname]:
-                        if not all(check_a_expr_or_and_expr(i, field) for i in dnf_predicate.args):
+                        if not all(
+                            check_a_expr_or_and_expr(i, field)
+                            for i in dnf_predicate.args
+                        ):
                             self.missing_params[table.relname].add(field)
                 else:
                     # target condition:
@@ -1799,23 +1960,23 @@ class _RequiredParamMappingVisitor(Visitor):
                     for field in self.required_params_mapping[table.relname]:
                         if not check_a_expr_or_and_expr(dnf_predicate, field):
                             self.missing_params[table.relname].add(field)
-                    
+
 
 def _check_required_params(suql, required_params_mapping):
     """
     Check whether all required parameters exist in the `suql`.
-    
+
     # Parameters:
     `suql` (str): The to-be-executed suql query.
-    
+
     `required_params_mapping` (Dict(str -> List[str]), optional): *Experimental feature*: a dictionary mapping
     from table names to a list of "required" parameters for the tables. The SUQL compiler will check whether the
     SUQL query contains all required parameters (i.e., whether for each such table there exists a `WHERE` clause
     with the required parameter).
-    
+
     # Returns:
     `if_all_exist` (bool): whether all required parameters exist.
-    
+
     `missing_params` (Dict(str -> List[str]): a mapping from table names to a list of required missing parameters.
     """
     # try except handles stand alone answer functions and other parsing exceptions
@@ -1823,15 +1984,17 @@ def _check_required_params(suql, required_params_mapping):
         root = parse_sql(suql)
     except Exception:
         return False, required_params_mapping
-    
+
     visitor = _RequiredParamMappingVisitor(required_params_mapping)
     visitor(root)
-    
+
     if visitor.missing_params:
-        return False, {key: list(value) for key, value in visitor.missing_params.items()}
+        return False, {
+            key: list(value) for key, value in visitor.missing_params.items()
+        }
     else:
         return True, {}
-    
+
 
 def suql_execute(
     suql,
@@ -1850,44 +2013,50 @@ def suql_execute(
     create_username="creator_role",
     create_userpswd="creator_role",
     source_file_mapping={},
+    host="127.0.0.1",
+    port="5432",
+    # used for azure openai
+    api_base=None,
+    api_version=None,
+    api_key=None,
 ):
     """
     Main entry point to the SUQL Python-based compiler.
 
     # Parameters:
     `suql` (str): The to-be-executed suql query.
-    
+
     `table_w_ids` (dict): A dictionary where each key is a table name, and each value is the corresponding
         unique ID column name in this table, e.g., `table_w_ids = {"restaurants": "_id"}`, meaning that the
         relevant tables to the SUQL compiler include only the `restaurants` table, which has unique ID column `_id`.
-    
+
     `database` (str): The name of the PostgreSQL database to execute the query.
-    
+
     `fts_fields` (List[str], optional): Fields that should use PostgreSQL's Full Text Search (FTS) operators;
         The SUQL compiler would change certain string operators like "=" to use PostgreSQL's FTS operators.
         It uses `websearch_to_tsquery` and the `@@` operator to match against these fields.
-        
+
     `llm_model_name` (str, optional): The LLM to be used by the SUQL compiler.
         Defaults to `gpt-3.5-turbo-0125`.
-        
+
     `max_verify` (str): For each LIMIT x clause, `max_verify * x` results will be retrieved together from
         the embedding model for LLM to verify. Defaults to 20.
-        
+
     `loggings` (str, optional): Prefix for error case loggings. Errors are written to a "_suql_error_log.txt"
         file by default.
 
     `log_filename` (str, optional): Logging file name for the SUQL compiler. If not provided, logging is disabled.
-        
+
     `disable_try_catch` (bool, optional): whether to disable try-catch (errors would directly propagate to caller).
-    
+
     `embedding_server_address` (str, optional): the embedding server address. Defaults to 'http://127.0.0.1:8501'.
-    
+
     `select_username` (str, optional): user name with select privilege in db. Defaults to "select_user".
-    
+
     `select_userpswd` (str, optional): above user's password with select privilege in db. Defaults to "select_user".
-    
+
     `create_username` (str, optional): user name with create privilege in db. Defaults to "creator_role".
-    
+
     `create_userpswd` (str, optional): above user's password with create privilege in db. Defaults to "creator_role".
 
     `source_file_mapping` (Dict(str -> str), optional): *Experimental feature*: a dictionary mapping from variable
@@ -1898,9 +2067,9 @@ def suql_execute(
 
     # Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
-    
+
     `column_names` (List[str]): A list of database column names in the same order as `results`.
-    
+
     `cache` (Dict()): Debugging information from the SUQL compiler.
 
     # Example:
@@ -1920,13 +2089,12 @@ def suql_execute(
     FTS helps with such cases.
     """
     if log_filename:
-        logging.basicConfig(level=logging.INFO,
-                            format='%(asctime)s - %(levelname)s - %(message)s',
-                            datefmt='%Y-%m-%d %H:%M:%S',
-                            handlers=[
-                                logging.FileHandler(log_filename),
-                                logging.StreamHandler()
-                            ])
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            handlers=[logging.FileHandler(log_filename), logging.StreamHandler()],
+        )
 
     else:
         logging.basicConfig(level=logging.CRITICAL + 1)
@@ -1949,6 +2117,11 @@ def suql_execute(
         select_userpswd,
         create_username,
         create_userpswd,
+        host=host,
+        port=port,
+        api_base=api_base,
+        api_version=api_version,
+        api_key=api_key,
     )
     if results == []:
         return results, column_names, cache
@@ -1983,6 +2156,11 @@ def _suql_execute_single(
     select_userpswd,
     create_username,
     create_userpswd,
+    host="127.0.0.1",
+    port="5432",
+    api_base=None,
+    api_version=None,
+    api_key=None,
 ):
     results = []
     column_names = []
@@ -1999,7 +2177,12 @@ def _suql_execute_single(
             create_userpswd,
             table_w_ids,
             llm_model_name,
-            max_verify
+            max_verify,
+            api_base=api_base,
+            api_version=api_version,
+            api_key=api_key,
+            host=host,
+            port=port,
         )
         root = parse_sql(suql)
         visitor(root)
@@ -2012,13 +2195,15 @@ def _suql_execute_single(
             user=select_username,
             password=select_userpswd,
             no_print=True,
-            unprotected=disable_try_catch_sql
+            unprotected=disable_try_catch_sql,
+            host=host,
+            port=port,
         )
     except Exception as err:
         if disable_try_catch:
             raise err
         with open("_suql_error_log.txt", "a") as file:
-            file.write(f"==============\n")
+            file.write("==============\n")
             file.write(f"{loggings}\n")
             file.write(f"{suql}\n")
             file.write(f"{str(err)}\n")
@@ -2050,9 +2235,9 @@ if __name__ == "__main__":
         #     "yelp_general_info": "/home/harshit/DialogueForms/src/genie/domains/yelpbot/yelp_general_info.txt"
         # },
         disable_try_catch=True,
-        disable_try_catch_all_sql=True
+        disable_try_catch_all_sql=True,
     )
-    
+
     print(results)
     # exit(0)
     with open("sql_free_text_support/test_cases.txt", "r") as fd:

@@ -224,7 +224,7 @@ def clean_up_response(results, column_names):
     return final_res
 
 
-def parse_execute_sql(dlgHistory, user_query, prompt_file="prompts/parser_suql.prompt"):
+def parse_execute_sql(dlgHistory, user_query, prompt_file="prompts/parser_suql.prompt", api_key=None):
     """
     Call an LLM to predict a SUQL, execute it and return results.
     """
@@ -236,6 +236,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file="prompts/parser_suql.p
         temperature=0,
         prompt_parameter_values={"dlg": dlgHistory, "query": user_query},
         postprocess=False,
+        api_key=api_key,
     )
     print("directly generated SUQL query: {}".format(generated_suql))
     postprocessed_suql = postprocess_suql(generated_suql)
@@ -367,6 +368,7 @@ def postprocess_suql(suql_query):
                 temperature=0.0,
                 stop_tokens=["\n"],
                 postprocess=False,
+                api_key=api_key,
             )
             return response
 
@@ -392,7 +394,7 @@ def postprocess_suql(suql_query):
 
 
 def compute_next_turn(
-    dlgHistory: List[DialogueTurn], user_utterance: str, enable_classifier=True
+    dlgHistory: List[DialogueTurn], user_utterance: str, enable_classifier=True, api_key=None
 ):
     first_classification_time = 0
     semantic_parser_time = 0
@@ -412,6 +414,7 @@ def compute_next_turn(
             temperature=0.0,
             stop_tokens=["\n"],
             postprocess=False,
+            api_key=api_key,
         )
 
     if not enable_classifier or continuation.startswith("Yes"):
@@ -424,7 +427,7 @@ def compute_next_turn(
             cache,
             results_for_ned,
         ) = parse_execute_sql(
-            dlgHistory, user_utterance, prompt_file="prompts/parser_suql.prompt"
+            dlgHistory, user_utterance, prompt_file="prompts/parser_suql.prompt", api_key=api_key
         )
         dlgHistory[-1].db_results = json.dumps(results, indent=4)
         dlgHistory[-1].user_target = first_sql
@@ -442,6 +445,7 @@ def compute_next_turn(
                 stop_tokens=[],
                 top_p=0.5,
                 postprocess=False,
+                api_key=api_key,
             )
 
             dlgHistory[-1].agent_utterance = response
@@ -462,6 +466,7 @@ def compute_next_turn(
         stop_tokens=[],
         top_p=0.5,
         postprocess=False,
+        api_key=api_key,
     )
     dlgHistory[-1].agent_utterance = response
 
