@@ -23,6 +23,8 @@ install_requires = [
     "litellm>=1.34.34",
     "platformdirs>=4.0.0",
     "sqlparse~=0.5.0",
+    "psycopg2-binary>=2.9.10",
+    "psycopg2>=2.9.10",
 ]
 
 install_dev_requires = [
