@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 # Package metadata
 name = "suql"
-version = "1.1.8"
+version = "1.1.9b0"
 description = "Structured and Unstructured Query Language (SUQL) Python API"
 author = "Shicheng Liu"
 author_email = "shicheng@cs.stanford.edu"
@@ -13,10 +13,10 @@ packages = find_packages(where="src")
 
 # Define your dependencies
 install_requires = [
-    "Jinja2==3.1.2",
-    "Flask==2.3.2",
-    "Flask-Cors==4.0.0",
-    "Flask-RESTful==0.3.10",
+    "Jinja2>=3.1.2",
+    "Flask>=2.3.2",
+    "Flask-Cors>=4.0.0",
+    "Flask-RESTful>=0.3.10",
     "requests>=2.31.0",
     "tiktoken>=0.4.0",
     "pglast>=6.10",
