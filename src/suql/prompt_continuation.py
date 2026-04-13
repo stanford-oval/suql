@@ -110,6 +110,10 @@ def _generate(
         # If we detect gpt-5*, drop these params to avoid 500s from UnsupportedParamsError.
         model_name = str(engine) if engine is not None else ""
         if re.search(r"(^|/|-)gpt-5", model_name):
+            # gpt-5* has stricter parameter support than classic chat models.
+            # - temperature: gpt-5 requires temperature=1 (LiteLLM enforces this)
+            # - stop/top_p/presence_penalty/frequency_penalty: not supported
+            kwargs["temperature"] = 1
             kwargs.pop("top_p", None)
             kwargs.pop("frequency_penalty", None)
             kwargs.pop("presence_penalty", None)
