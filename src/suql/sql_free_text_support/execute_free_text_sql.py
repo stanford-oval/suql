@@ -436,7 +436,14 @@ def _convert2dnf(predicate):
         else:
             return predicate_mapping.retrieve_predicate(symbol_predicate)
 
-    if isinstance(predicate, A_Expr):
+    if isinstance(predicate, FuncCall) and _if_contains_free_text_fcn(predicate):
+        func_name = ".".join(f.sval for f in predicate.funcname)
+        raise SyntaxError(
+            f"Invalid SUQL syntax: '{func_name}(...)' cannot be used as a bare boolean filter. "
+            f"Wrap it in a comparison, e.g. {func_name}(...) = 'yes'."
+        )
+
+    elif isinstance(predicate, A_Expr):
         return predicate
 
     elif isinstance(predicate, BoolExpr):
@@ -1720,9 +1727,10 @@ class _ReplaceTableAliasVisitor(Visitor):
         super().__call__(node)
 
     def visit_ColumnRef(self, ancestors: Ancestor, node: ColumnRef):
-        if len(list(map(lambda x: x.sval, node.fields))) > 1 and \
+        if len(node.fields) > 1 and \
+            hasattr(node.fields[0], 'sval') and \
             node.fields[0].sval in self.alias_mapping:
-            
+
             node.fields[0].sval = self.alias_mapping[node.fields[0].sval]
             
 
