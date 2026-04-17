@@ -6,10 +6,13 @@ import json
 
 URL = "http://127.0.0.1:8500/answer"
 
+query_id = plpy.execute("SELECT current_setting('app.query_id', true) AS qid")[0]['qid'] or ''
+
 response = requests.post(url=URL, data=json.dumps({
     "text" : source,
     "question": question,
-    "type_prompt": type_prompt
+    "type_prompt": type_prompt,
+    "query_id": query_id,
 }), headers={'Content-Type': 'application/json'})
 response.raise_for_status()  # Raise an exception if the request was not successful
 parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
@@ -24,10 +27,13 @@ import json
 
 URL = "http://127.0.0.1:8500/answer"
 
+query_id = plpy.execute("SELECT current_setting('app.query_id', true) AS qid")[0]['qid'] or ''
+
 response = requests.post(url=URL, data=json.dumps({
     "text" : source,
     "question": question,
-    "type_prompt": type_prompt
+    "type_prompt": type_prompt,
+    "query_id": query_id,
 }), headers={'Content-Type': 'application/json'})
 response.raise_for_status()  # Raise an exception if the request was not successful
 parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
@@ -42,8 +48,11 @@ import json
 
 URL = "http://127.0.0.1:8500/summary"
 
+query_id = plpy.execute("SELECT current_setting('app.query_id', true) AS qid")[0]['qid'] or ''
+
 response = requests.post(url=URL, data=json.dumps({
-    "text" : source,
+    "text": source,
+    "query_id": query_id,
 }), headers={'Content-Type': 'application/json'})
 response.raise_for_status()  # Raise an exception if the request was not successful
 parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object
@@ -58,8 +67,11 @@ import json
 
 URL = "http://127.0.0.1:8500/summary"
 
+query_id = plpy.execute("SELECT current_setting('app.query_id', true) AS qid")[0]['qid'] or ''
+
 response = requests.post(url=URL, data=json.dumps({
-    "text" : source,
+    "text": source,
+    "query_id": query_id,
 }), headers={'Content-Type': 'application/json'})
 response.raise_for_status()  # Raise an exception if the request was not successful
 parsed_result = response.json()  # Assuming the response is JSON, parse it into a Python object

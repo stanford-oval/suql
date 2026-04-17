@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 
 from flask import Flask, request
 
@@ -7,6 +8,11 @@ from suql.faiss_embedding import compute_top_similarity_documents
 from suql.utils import num_tokens_from_string
 
 app = Flask(__name__)
+
+# Per-query cost/call stats accumulated by answer() calls coming from plpython3u.
+# Keyed by query_id; cleared when /stats/<query_id> is fetched.
+_query_stats: dict = {}
+_query_stats_lock = threading.Lock()
 
 # # Default top number of results to send to LLM answer function
 # # if given a list of strings
@@ -29,8 +35,9 @@ def _answer(
     api_base=None,
     api_version=None,
     api_key=None,
+    query_id=None,
 ):
-    from suql.prompt_continuation import llm_generate
+    from suql.prompt_continuation import llm_generate, make_query_tracker, set_query_tracker, _query_tracker
 
     if not source:
         return {"result": "no information"}
@@ -53,22 +60,34 @@ def _answer(
         if type_prompt == "int4":
             type_prompt = f" Output an integer."
 
-    continuation, _ = llm_generate(
-        "prompts/answer_qa.prompt",
-        {
-            "reviews": text_res,
-            "question": query,
-            "type_prompt": type_prompt,
-        },
-        engine=engine,
-        max_tokens=1000,
-        temperature=0.0,
-        stop_tokens=[],
-        postprocess=False,
-        api_base=api_base,
-        api_version=api_version,
-        api_key=api_key,
-    )
+    tracker = make_query_tracker()
+    token = set_query_tracker(tracker)
+    try:
+        continuation, _ = llm_generate(
+            "prompts/answer_qa.prompt",
+            {
+                "reviews": text_res,
+                "question": query,
+                "type_prompt": type_prompt,
+            },
+            engine=engine,
+            max_tokens=1000,
+            temperature=0.0,
+            stop_tokens=[],
+            postprocess=False,
+            api_base=api_base,
+            api_version=api_version,
+            api_key=api_key,
+        )
+    finally:
+        _query_tracker.reset(token)
+
+    if query_id:
+        with _query_stats_lock:
+            entry = _query_stats.setdefault(query_id, {"cost": 0.0, "calls": 0})
+            entry["cost"] += tracker["cost"]
+            entry["calls"] += tracker["calls"]
+
     return {"result": continuation}
 
 
@@ -134,6 +153,7 @@ def start_free_text_fncs_server(
             api_base=api_base,
             api_version=api_version,
             api_key=api_key,
+            query_id=data.get("query_id") or None,
         )
 
     @app.route("/summary", methods=["POST"])
@@ -155,6 +175,8 @@ def start_free_text_fncs_server(
         """
         from suql.prompt_continuation import llm_generate
 
+        from suql.prompt_continuation import make_query_tracker, set_query_tracker, _query_tracker
+
         data = request.get_json()
 
         if "text" not in data:
@@ -173,27 +195,45 @@ def start_free_text_fncs_server(
         else:
             text_res = [data["text"]]
 
-        continuation, _ = llm_generate(
-            "prompts/answer_qa.prompt",
-            {"reviews": text_res, "question": "what is the summary of this document?"},
-            engine=engine,
-            max_tokens=200,
-            temperature=0.0,
-            stop_tokens=["\n"],
-            postprocess=False,
-            api_base=api_base,
-            api_version=api_version,
-            api_key=api_key,
-        )
+        query_id = data.get("query_id") or None
+        tracker = make_query_tracker()
+        token = set_query_tracker(tracker)
+        try:
+            continuation, _ = llm_generate(
+                "prompts/answer_qa.prompt",
+                {"reviews": text_res, "question": "what is the summary of this document?"},
+                engine=engine,
+                max_tokens=200,
+                temperature=0.0,
+                stop_tokens=["\n"],
+                postprocess=False,
+                api_base=api_base,
+                api_version=api_version,
+                api_key=api_key,
+            )
+        finally:
+            _query_tracker.reset(token)
 
-        res = {"result": continuation}
-        return res
+        if query_id:
+            with _query_stats_lock:
+                entry = _query_stats.setdefault(query_id, {"cost": 0.0, "calls": 0})
+                entry["cost"] += tracker["cost"]
+                entry["calls"] += tracker["calls"]
+
+        return {"result": continuation}
 
     # start Flask server
     app.run(host=host, port=port)
 
 
 # Functions below are used by the restaurants application only.
+
+
+@app.route("/stats/<query_id>", methods=["GET"])
+def get_stats(query_id):
+    with _query_stats_lock:
+        stats = _query_stats.pop(query_id, {"cost": 0.0, "calls": 0})
+    return stats
 
 
 @app.route("/search_by_opening_hours", methods=["POST"])
