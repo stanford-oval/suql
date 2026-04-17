@@ -2,9 +2,11 @@
 Functionality to work with .prompt files
 """
 
+import contextvars
 import logging
 import os
 import re
+import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -41,6 +43,21 @@ if ENABLE_CACHING:
 
 total_cost = 0  # in USD
 
+# Per-query cost/call tracker. Each suql_execute() call sets this to a fresh
+# dict before running, so concurrent queries don't share state.
+_query_tracker: contextvars.ContextVar = contextvars.ContextVar(
+    "_query_tracker", default=None
+)
+
+
+def make_query_tracker() -> dict:
+    return {"cost": 0.0, "calls": 0, "_lock": threading.Lock()}
+
+
+def set_query_tracker(tracker: dict):
+    """Set the per-query tracker; returns a reset token."""
+    return _query_tracker.set(tracker)
+
 
 def get_total_cost():
     global total_cost
@@ -50,7 +67,15 @@ def get_total_cost():
 def chat_completion_with_backoff(**kwargs):
     global total_cost
     ret = completion(**kwargs)
-    total_cost += completion_cost(ret)
+    call_cost = completion_cost(ret)
+    total_cost += call_cost
+
+    tracker = _query_tracker.get()
+    if tracker is not None:
+        with tracker["_lock"]:
+            tracker["cost"] += call_cost
+            tracker["calls"] += 1
+
     return ret.choices[0].message.content
 
 
@@ -183,10 +208,14 @@ def call_with_timeout(func, timeout_sec, *args, **kwargs):
             self.return_value = None
             self.exception = None
             self.traceback_str = None
+            # Capture the calling context so the tracker ContextVar is visible
+            # inside the thread. The tracker dict is mutable, so updates inside
+            # ctx.run() are reflected in the original dict.
+            self._ctx = contextvars.copy_context()
 
         def run(self):
             try:
-                self.return_value = self.func(*self.args, **self.kwargs)
+                self.return_value = self._ctx.run(self.func, *self.args, **self.kwargs)
             except Exception as e:
                 self.exception = e
                 self.traceback_str = traceback.format_exc()

@@ -15,6 +15,8 @@ def execute_sql(
     unprotected=False,
     host="127.0.0.1",
     port="5432",
+    query_id=None,
+    statement_timeout=30000,
 ):
     start_time = time.time()
 
@@ -24,7 +26,7 @@ def execute_sql(
             user=user,
             host="/var/run/postgresql",
             port=port,
-            options="-c statement_timeout=30000 -c client_encoding=UTF8",
+            options=f"-c statement_timeout={statement_timeout} -c client_encoding=UTF8",
         )
     else:
         conn = psycopg2.connect(
@@ -33,13 +35,15 @@ def execute_sql(
             password=password,
             host=host,
             port=port,
-            options="-c statement_timeout=30000 -c client_encoding=UTF8",
+            options=f"-c statement_timeout={statement_timeout} -c client_encoding=UTF8",
         )
 
     # Create a cursor object to execute SQL queries
     cursor = conn.cursor()
 
-    cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
+    cursor.execute(f"SET statement_timeout = {statement_timeout}")
+    if query_id:
+        cursor.execute("SET \"app.query_id\" = %s", (query_id,))
     conn.commit()
 
     def sql_unprotected():
@@ -89,6 +93,7 @@ def execute_sql_with_column_info(
     unprotected=False,
     host="127.0.0.1",
     port="5432",
+    statement_timeout=30000,
 ):
     # Establish a connection to the PostgreSQL database
     conn = psycopg2.connect(
@@ -97,13 +102,13 @@ def execute_sql_with_column_info(
         password=password,
         host=host,
         port=port,
-        options="-c statement_timeout=30000 -c client_encoding=UTF8",
+        options=f"-c statement_timeout={statement_timeout} -c client_encoding=UTF8",
     )
 
     # Create a cursor object to execute SQL queries
     cursor = conn.cursor()
 
-    cursor.execute("SET statement_timeout = 30000")  # Set timeout to 60 seconds
+    cursor.execute(f"SET statement_timeout = {statement_timeout}")
     conn.commit()
 
     def sql_unprotected():
