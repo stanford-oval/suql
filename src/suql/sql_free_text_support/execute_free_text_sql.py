@@ -35,8 +35,9 @@ from suql.utils import num_tokens_from_string
 _SET_FREE_TEXT_FCNS = ["answer"]
 _verified_res = {}
 
-# Verify is a yes/no classification; a reasoning model would spend the
-# 30-token response budget on hidden reasoning and return nothing.
+# Short classification/verification tasks (verify, field classification) use a
+# non-reasoning model so their tight response budgets aren't consumed by hidden
+# reasoning tokens. A reasoning model at max_tokens=30-100 returns empty.
 _VERIFICATION_MODEL_NAME = "gpt-5.4-nano"
 
 
@@ -1162,10 +1163,10 @@ class _StructuralClassification(Visitor):
                             "field_value_choices": field_value_choices,
                             "field_name": column_name,
                         },
-                        engine=self.llm_model_name,
+                        engine=_VERIFICATION_MODEL_NAME,
                         temperature=0,
                         stop_tokens=["\n"],
-                        max_tokens=100,
+                        max_tokens=4096,
                         postprocess=False,
                         api_base=self.api_base,
                         api_version=self.api_version,

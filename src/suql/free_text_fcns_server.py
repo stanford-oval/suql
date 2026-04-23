@@ -7,6 +7,10 @@ from flask import Flask, request
 from suql.faiss_embedding import compute_top_similarity_documents
 from suql.utils import num_tokens_from_string
 
+# summary() is a short-form task; route through a non-reasoning model so the
+# response budget isn't consumed by hidden reasoning tokens.
+_SUMMARY_MODEL_NAME = "gpt-5.4-nano"
+
 app = Flask(__name__)
 
 # Per-query cost/call stats accumulated by answer() calls coming from plpython3u.
@@ -202,8 +206,8 @@ def start_free_text_fncs_server(
             continuation, _ = llm_generate(
                 "prompts/answer_qa.prompt",
                 {"reviews": text_res, "question": "what is the summary of this document?"},
-                engine=engine,
-                max_tokens=200,
+                engine=_SUMMARY_MODEL_NAME,
+                max_tokens=4096,
                 temperature=0.0,
                 stop_tokens=["\n"],
                 postprocess=False,

@@ -21,6 +21,10 @@ from suql.utils import input_user, num_tokens_from_string, print_chatbot
 
 logger = logging.getLogger(__name__)
 
+# Short yes/no classifications (e.g., "should this query hit the DB?") use a
+# non-reasoning model so tight token budgets aren't consumed by hidden reasoning.
+_CLASSIFICATION_MODEL_NAME = "gpt-5.4-nano"
+
 
 class DialogueTurn:
     def __init__(
@@ -409,8 +413,8 @@ def compute_next_turn(
         continuation, first_classification_time = llm_generate(
             template_file="prompts/if_db_classification.prompt",
             prompt_parameter_values={"dlg": dlgHistory},
-            engine="gpt-5",
-            max_tokens=50,
+            engine=_CLASSIFICATION_MODEL_NAME,
+            max_tokens=4096,
             temperature=0.0,
             stop_tokens=["\n"],
             postprocess=False,
