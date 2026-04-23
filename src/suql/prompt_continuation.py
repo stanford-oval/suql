@@ -67,7 +67,13 @@ def get_total_cost():
 def chat_completion_with_backoff(**kwargs):
     global total_cost
     ret = completion(**kwargs)
-    call_cost = completion_cost(ret)
+    # Cost tracking is best-effort: some LLM providers / model versions are not
+    # yet mapped in LiteLLM's price registry and raise here. Don't let a missing
+    # price entry kill the actual LLM call.
+    try:
+        call_cost = completion_cost(ret)
+    except Exception:
+        call_cost = 0.0
     total_cost += call_cost
 
     tracker = _query_tracker.get()
