@@ -35,6 +35,10 @@ from suql.utils import num_tokens_from_string
 _SET_FREE_TEXT_FCNS = ["answer"]
 _verified_res = {}
 
+# Verify is a yes/no classification; a reasoning model would spend the
+# 30-token response budget on hidden reasoning and return nothing.
+_VERIFICATION_MODEL_NAME = "gpt-5.4-nano"
+
 
 def _generate_random_string(length=12):
     characters = string.ascii_lowercase + string.digits
@@ -484,7 +488,7 @@ def _verify(
             "query": query,
             "answer": answer,
         },
-        engine=llm_model_name,
+        engine=_VERIFICATION_MODEL_NAME,
         temperature=0,
         stop_tokens=["\n"],
         max_tokens=30,
@@ -2015,7 +2019,7 @@ def suql_execute(
     table_w_ids,
     database,
     fts_fields=[],
-    llm_model_name="gpt-3.5-turbo-0125",
+    llm_model_name="gpt-5",
     max_verify=20,
     loggings="",
     log_filename=None,
@@ -2053,7 +2057,7 @@ def suql_execute(
         It uses `websearch_to_tsquery` and the `@@` operator to match against these fields.
 
     `llm_model_name` (str, optional): The LLM to be used by the SUQL compiler.
-        Defaults to `gpt-3.5-turbo-0125`.
+        Defaults to `gpt-5`.
 
     `max_verify` (str): For each LIMIT x clause, `max_verify * x` results will be retrieved together from
         the embedding model for LLM to verify. Defaults to 20.

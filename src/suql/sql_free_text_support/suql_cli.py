@@ -109,8 +109,8 @@ def main():
         "--llm-model-name", 
         type=str, 
         required=False, 
-        default="gpt-3.5-turbo-0125", 
-        help="Language model name (default: gpt-3.5-turbo-0125)"
+        default="gpt-5",
+        help="Language model name (default: gpt-5)"
     )
     parser.add_argument(
         "--max-verify", 

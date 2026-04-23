@@ -31,7 +31,7 @@ def _answer(
     type_prompt=None,
     k=5,
     max_input_token=10000,
-    engine="gpt-3.5-turbo-0125",
+    engine="gpt-5",
     api_base=None,
     api_version=None,
     api_key=None,
@@ -96,7 +96,7 @@ def start_free_text_fncs_server(
     port=8500,
     k=5,
     max_input_token=3800,
-    engine="gpt-4o-mini",
+    engine="gpt-5",
     api_base=None,
     api_version=None,
     api_key=None,
@@ -113,7 +113,7 @@ def start_free_text_fncs_server(
         max_input_token (int, optional): Max number of input tokens for the `summary` function.
             Defaults to 3800.
         engine (str, optional): Default LLM engine for `answer` and `summary` functions.
-            Defaults to "gpt-3.5-turbo-0613".
+            Defaults to "gpt-5".
     """
 
     @app.route("/answer", methods=["POST"])
