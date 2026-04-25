@@ -6,9 +6,7 @@ All notable changes to SUQL are documented in this file. Format loosely follows
 ## [1.1.10a2] - 2026-04-25
 
 ### Changed
-- **Default model is now `gpt-5.2` everywhere.** Previously the defaults were
-  split between `gpt-5` (main inference) and `gpt-5-nano`/`gpt-5.4-nano`
-  (verification, classification, summary). gpt-5.2 supports
+- **Default model is now `gpt-5.2` everywhere.** gpt-5.2 supports
   `reasoning_effort="none"`, which the gpt-5/gpt-5.4 family does not — in those
   models, even `reasoning_effort="minimal"` can allocate hidden reasoning tokens
   out of the response budget and cause `max_tokens=30-100` calls to return empty
@@ -16,9 +14,6 @@ All notable changes to SUQL are documented in this file. Format loosely follows
   `WHERE answer(...) = 'yes'` returned `[]`.
 - **Bumped LiteLLM lower bound** from `>=1.34.34` to `>=1.77.7` to guarantee
   full `reasoning_effort` support across the gpt-5 family.
-- **LiteLLM cost tracking made best-effort.** When LiteLLM's price table doesn't
-  know a model snapshot yet, `completion_cost(...)` no longer crashes the
-  request with HTTP 500.
 
 ### Added
 - **`debug_log` parameter on `suql_execute(...)`.** Pass `debug_log=True` (or a
