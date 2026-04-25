@@ -51,7 +51,31 @@ _query_tracker: contextvars.ContextVar = contextvars.ContextVar(
 
 
 def make_query_tracker() -> dict:
-    return {"cost": 0.0, "calls": 0, "_lock": threading.Lock()}
+    return {"cost": 0.0, "calls": 0, "_lock": threading.Lock(), "debug_log": None}
+
+
+_debug_file_lock = threading.Lock()
+
+
+def _log_llm_debug(engine, filled_prompt, output):
+    tracker = _query_tracker.get()
+    if tracker is None:
+        return
+    path = tracker.get("debug_log")
+    if not path:
+        return
+    try:
+        with _debug_file_lock, open(path, "a") as f:
+            f.write(f"=== llm_generate engine={engine} @ {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+            f.write("---- prompt ----\n")
+            f.write(filled_prompt)
+            if not filled_prompt.endswith("\n"):
+                f.write("\n")
+            f.write("---- output ----\n")
+            f.write(repr(output))
+            f.write("\n\n")
+    except Exception:
+        pass
 
 
 def set_query_tracker(tracker: dict):
@@ -67,13 +91,8 @@ def get_total_cost():
 def chat_completion_with_backoff(**kwargs):
     global total_cost
     ret = completion(**kwargs)
-    # Cost tracking is best-effort: some LLM providers / model versions are not
-    # yet mapped in LiteLLM's price registry and raise here. Don't let a missing
-    # price entry kill the actual LLM call.
-    try:
-        call_cost = completion_cost(ret)
-    except Exception:
-        call_cost = 0.0
+
+    call_cost = completion_cost(ret)
     total_cost += call_cost
 
     tracker = _query_tracker.get()
@@ -93,6 +112,50 @@ def _fill_template(template_file, prompt_parameter_values):
         [line.strip() for line in filled_prompt.split("\n")]
     )  # remove whitespace at the beginning and end of each line
     return filled_prompt
+
+
+def _lowest_reasoning_effort(model_name: str):
+    """
+    Return the lowest safe reasoning tier for GPT-5-family models.
+
+    Prefer the lowest tier documented on the current public model page. For
+    variants whose public page only exposes a coarse "Reasoning High/Higher"
+    badge, keep a conservative low/medium default instead of assuming "none".
+    """
+    normalized = model_name.split("/")[-1].lower()
+
+    exact_matches = {
+        "gpt-5": "minimal",
+        "gpt-5-nano": "minimal",
+        "gpt-5.1": "none",
+        "gpt-5.2": "none",
+        "gpt-5.3": "low",
+        "gpt-5.4": "none",
+        "gpt-5.1-codex-mini": "medium",
+        "gpt-5.1-codex-max": "low",
+        "gpt-5.2-codex": "low",
+        "gpt-5.3-codex": "low",
+        "gpt-5.4-mini": "low",
+        "gpt-5.4-nano": "low",
+    }
+    if normalized in exact_matches:
+        return exact_matches[normalized]
+
+    if normalized.startswith("gpt-5.4"):
+        return "none"
+    if normalized.startswith("gpt-5.2"):
+        return "none"
+    if normalized.startswith("gpt-5.1"):
+        return "none"
+    if "codex-mini" in normalized:
+        return "medium"
+    if "codex" in normalized:
+        return "low"
+    if normalized.startswith("gpt-5."):
+        return "low"
+    if normalized.startswith("gpt-5"):
+        return "minimal"
+    return None
 
 
 def _generate(
@@ -150,9 +213,14 @@ def _generate(
             kwargs.pop("presence_penalty", None)
             kwargs.pop("stop", None)
 
+        reasoning_effort = _lowest_reasoning_effort(model_name)
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
+
         generation_output = chat_completion_with_backoff(**kwargs)
         generation_output = no_line_break_start + generation_output
         logger.info("LLM output = %s", generation_output)
+        _log_llm_debug(engine, filled_prompt, generation_output)
 
         generation_output = generation_output.strip()
         if postprocess:
