@@ -16,13 +16,6 @@
 <p align="center">
     Conversational Search over Structured and Unstructured Data with LLMs
 </p>
-<p align="center">
-    Online demo:
-    <a href="https://yelpbot.genie.stanford.edu" target="_blank">
-        https://yelpbot.genie.stanford.edu
-    </a>
-    <br>
-</p>
 
 
 # What is SUQL
@@ -58,7 +51,7 @@ Ideal for integrating the SUQL compiler in a larger codebase / system. See [inst
 
 ## Install from source
 
-Ideal for using this repo to build a SUQL-powered conversational interface to your data out-of-the-box, like the one for https://yelpbot.genie.stanford.edu discussed in the paper. See [install_source.md](https://github.com/stanford-oval/suql/blob/main/docs/install_source.md) for details.
+Ideal for using this repo to build a SUQL-powered conversational interface to your data out-of-the-box, like the one for the Yelp agent discussed in the paper. See [install_source.md](https://github.com/stanford-oval/suql/blob/main/docs/install_source.md) for details.
 
 ## Agent tutorial
 
