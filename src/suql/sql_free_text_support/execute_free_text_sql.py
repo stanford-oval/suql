@@ -35,6 +35,13 @@ from suql.utils import num_tokens_from_string
 _SET_FREE_TEXT_FCNS = ["answer"]
 _verified_res = {}
 
+# Short classification/verification tasks (verify, field classification) use
+# gpt-5.2 with reasoning_effort="none" so the tight response budget isn't
+# consumed by hidden reasoning tokens. The gpt-5/gpt-5-nano family doesn't
+# support "none" — even "minimal" can allocate reasoning at max_tokens=30-100
+# and return empty content, silently rejecting every row.
+_VERIFICATION_MODEL_NAME = "gpt-5.2"
+
 
 def _generate_random_string(length=12):
     characters = string.ascii_lowercase + string.digits
@@ -484,7 +491,7 @@ def _verify(
             "query": query,
             "answer": answer,
         },
-        engine=llm_model_name,
+        engine=_VERIFICATION_MODEL_NAME,
         temperature=0,
         stop_tokens=["\n"],
         max_tokens=30,
@@ -1158,10 +1165,10 @@ class _StructuralClassification(Visitor):
                             "field_value_choices": field_value_choices,
                             "field_name": column_name,
                         },
-                        engine=self.llm_model_name,
+                        engine=_VERIFICATION_MODEL_NAME,
                         temperature=0,
                         stop_tokens=["\n"],
-                        max_tokens=100,
+                        max_tokens=4096,
                         postprocess=False,
                         api_base=self.api_base,
                         api_version=self.api_version,
@@ -2015,7 +2022,7 @@ def suql_execute(
     table_w_ids,
     database,
     fts_fields=[],
-    llm_model_name="gpt-3.5-turbo-0125",
+    llm_model_name="gpt-5.2",
     max_verify=20,
     loggings="",
     log_filename=None,
@@ -2035,6 +2042,7 @@ def suql_execute(
     api_base=None,
     api_version=None,
     api_key=None,
+    debug_log=None,
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -2053,7 +2061,7 @@ def suql_execute(
         It uses `websearch_to_tsquery` and the `@@` operator to match against these fields.
 
     `llm_model_name` (str, optional): The LLM to be used by the SUQL compiler.
-        Defaults to `gpt-3.5-turbo-0125`.
+        Defaults to `gpt-5.2`.
 
     `max_verify` (str): For each LIMIT x clause, `max_verify * x` results will be retrieved together from
         the embedding model for LLM to verify. Defaults to 20.
@@ -2080,6 +2088,10 @@ def suql_execute(
     `suql = answer(yelp_general_info, 'what is your cancellation policy?')`. In this case, you can specify
     `source_file_mapping = {"yelp_general_info": "PATH TO FILE"}` to inform the SUQL compiler where to find
     `yelp_general_info`. Defaults to `{}`.
+
+    `debug_log` (bool | str, optional): If truthy, log every `answer`/`summary` call's input/output
+        for this query to a file on the free-text server. `True` writes to `_suql_answer_debug.log`
+        in the server's CWD; passing a string uses that path. Defaults to `None` (off).
 
     # Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
@@ -2118,6 +2130,24 @@ def suql_execute(
     query_id = str(uuid4())
     tracker = make_query_tracker()
     token = set_query_tracker(tracker)
+
+    # Per-call I/O logging. `debug_log=True` writes to the default path;
+    # passing a string uses that path; None/False disables.
+    debug_path = None
+    if debug_log:
+        debug_path = (
+            "_suql_answer_debug.log" if debug_log is True else str(debug_log)
+        )
+        tracker["debug_log"] = debug_path
+        if free_text_server_address:
+            try:
+                requests.post(
+                    f"{free_text_server_address}/debug",
+                    json={"query_id": query_id, "log_path": debug_path},
+                    timeout=5,
+                )
+            except Exception:
+                pass
 
     try:
         if _parse_standalone_answer(suql) is not None:

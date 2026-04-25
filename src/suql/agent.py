@@ -21,6 +21,11 @@ from suql.utils import input_user, num_tokens_from_string, print_chatbot
 
 logger = logging.getLogger(__name__)
 
+# Short yes/no classifications (e.g., "should this query hit the DB?") use
+# gpt-5.2 with reasoning_effort="none" so tight token budgets aren't consumed
+# by hidden reasoning.
+_CLASSIFICATION_MODEL_NAME = "gpt-5.2"
+
 
 class DialogueTurn:
     def __init__(
@@ -230,7 +235,7 @@ def parse_execute_sql(dlgHistory, user_query, prompt_file="prompts/parser_suql.p
     """
     generated_suql, generated_sql_time = llm_generate(
         template_file=prompt_file,
-        engine="gpt-3.5-turbo-0125",
+        engine="gpt-5.2",
         stop_tokens=["Agent:"],
         max_tokens=300,
         temperature=0,
@@ -363,7 +368,7 @@ def postprocess_suql(suql_query):
             response, _ = llm_generate(
                 "prompts/opening_hours.prompt",
                 {"opening_hours_query": opening_hours_query},
-                engine="gpt-3.5-turbo-0125",
+                engine="gpt-5.2",
                 max_tokens=200,
                 temperature=0.0,
                 stop_tokens=["\n"],
@@ -409,8 +414,8 @@ def compute_next_turn(
         continuation, first_classification_time = llm_generate(
             template_file="prompts/if_db_classification.prompt",
             prompt_parameter_values={"dlg": dlgHistory},
-            engine="gpt-3.5-turbo-0125",
-            max_tokens=50,
+            engine=_CLASSIFICATION_MODEL_NAME,
+            max_tokens=4096,
             temperature=0.0,
             stop_tokens=["\n"],
             postprocess=False,
@@ -439,7 +444,7 @@ def compute_next_turn(
             response, final_response_time = llm_generate(
                 template_file="prompts/yelp_response_no_results.prompt",
                 prompt_parameter_values={"dlg": dlgHistory},
-                engine="gpt-3.5-turbo-0125",
+                engine="gpt-5.2",
                 max_tokens=400,
                 temperature=0.0,
                 stop_tokens=[],
@@ -460,7 +465,7 @@ def compute_next_turn(
     response, final_response_time = llm_generate(
         template_file="prompts/yelp_response_SQL.prompt",
         prompt_parameter_values={"dlg": dlgHistory},
-        engine="gpt-3.5-turbo-0125",
+        engine="gpt-5.2",
         max_tokens=400,
         temperature=0.0,
         stop_tokens=[],
