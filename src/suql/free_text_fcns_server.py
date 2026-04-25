@@ -1,12 +1,53 @@
 import json
 import re
+import threading
+import time
 
 from flask import Flask, request
 
 from suql.faiss_embedding import compute_top_similarity_documents
 from suql.utils import num_tokens_from_string
 
+# summary() is a short-form task. gpt-5.2 supports reasoning_effort="none",
+# so the tight response budget isn't consumed by hidden reasoning tokens.
+_SUMMARY_MODEL_NAME = "gpt-5.2"
+
 app = Flask(__name__)
+
+# Per-query cost/call stats accumulated by answer() calls coming from plpython3u.
+# Keyed by query_id; cleared when /stats/<query_id> is fetched.
+_query_stats: dict = {}
+_query_stats_lock = threading.Lock()
+
+# Per-query debug log paths. Populated by POSTs to /debug from suql_execute when
+# the caller asks for per-call I/O logging. Cleared alongside _query_stats when
+# /stats/<query_id> is fetched.
+_query_debug: dict = {}
+_query_debug_lock = threading.Lock()
+_debug_file_lock = threading.Lock()
+
+
+def _log_answer_debug(route, query_id, engine, question, sources, result):
+    if not query_id:
+        return
+    with _query_debug_lock:
+        path = _query_debug.get(query_id)
+    if not path:
+        return
+    try:
+        with _debug_file_lock, open(path, "a") as f:
+            f.write(f"=== {route} query_id={query_id} @ {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+            f.write(f"engine: {engine}\n")
+            if question is not None:
+                f.write(f"question: {question}\n")
+            f.write(f"sources ({len(sources)}):\n")
+            for i, s in enumerate(sources):
+                s = s if isinstance(s, str) else repr(s)
+                preview = s if len(s) <= 800 else s[:800] + f"... [+{len(s) - 800} chars]"
+                f.write(f"  [{i}] {preview}\n")
+            f.write(f"result: {result!r}\n\n")
+    except Exception:
+        pass
 
 # # Default top number of results to send to LLM answer function
 # # if given a list of strings
@@ -25,12 +66,13 @@ def _answer(
     type_prompt=None,
     k=5,
     max_input_token=10000,
-    engine="gpt-3.5-turbo-0125",
+    engine="gpt-5.2",
     api_base=None,
     api_version=None,
     api_key=None,
+    query_id=None,
 ):
-    from suql.prompt_continuation import llm_generate
+    from suql.prompt_continuation import llm_generate, make_query_tracker, set_query_tracker, _query_tracker
 
     if not source:
         return {"result": "no information"}
@@ -53,22 +95,36 @@ def _answer(
         if type_prompt == "int4":
             type_prompt = f" Output an integer."
 
-    continuation, _ = llm_generate(
-        "prompts/answer_qa.prompt",
-        {
-            "reviews": text_res,
-            "question": query,
-            "type_prompt": type_prompt,
-        },
-        engine=engine,
-        max_tokens=1000,
-        temperature=0.0,
-        stop_tokens=[],
-        postprocess=False,
-        api_base=api_base,
-        api_version=api_version,
-        api_key=api_key,
-    )
+    tracker = make_query_tracker()
+    token = set_query_tracker(tracker)
+    try:
+        continuation, _ = llm_generate(
+            "prompts/answer_qa.prompt",
+            {
+                "reviews": text_res,
+                "question": query,
+                "type_prompt": type_prompt,
+            },
+            engine=engine,
+            max_tokens=1000,
+            temperature=0.0,
+            stop_tokens=[],
+            postprocess=False,
+            api_base=api_base,
+            api_version=api_version,
+            api_key=api_key,
+        )
+    finally:
+        _query_tracker.reset(token)
+
+    if query_id:
+        with _query_stats_lock:
+            entry = _query_stats.setdefault(query_id, {"cost": 0.0, "calls": 0})
+            entry["cost"] += tracker["cost"]
+            entry["calls"] += tracker["calls"]
+
+    _log_answer_debug("/answer", query_id, engine, query, text_res, continuation)
+
     return {"result": continuation}
 
 
@@ -77,7 +133,7 @@ def start_free_text_fncs_server(
     port=8500,
     k=5,
     max_input_token=3800,
-    engine="gpt-4o-mini",
+    engine="gpt-5.2",
     api_base=None,
     api_version=None,
     api_key=None,
@@ -94,7 +150,7 @@ def start_free_text_fncs_server(
         max_input_token (int, optional): Max number of input tokens for the `summary` function.
             Defaults to 3800.
         engine (str, optional): Default LLM engine for `answer` and `summary` functions.
-            Defaults to "gpt-3.5-turbo-0613".
+            Defaults to "gpt-5.2".
     """
 
     @app.route("/answer", methods=["POST"])
@@ -134,6 +190,7 @@ def start_free_text_fncs_server(
             api_base=api_base,
             api_version=api_version,
             api_key=api_key,
+            query_id=data.get("query_id") or None,
         )
 
     @app.route("/summary", methods=["POST"])
@@ -155,6 +212,8 @@ def start_free_text_fncs_server(
         """
         from suql.prompt_continuation import llm_generate
 
+        from suql.prompt_continuation import make_query_tracker, set_query_tracker, _query_tracker
+
         data = request.get_json()
 
         if "text" not in data:
@@ -173,27 +232,68 @@ def start_free_text_fncs_server(
         else:
             text_res = [data["text"]]
 
-        continuation, _ = llm_generate(
-            "prompts/answer_qa.prompt",
-            {"reviews": text_res, "question": "what is the summary of this document?"},
-            engine=engine,
-            max_tokens=200,
-            temperature=0.0,
-            stop_tokens=["\n"],
-            postprocess=False,
-            api_base=api_base,
-            api_version=api_version,
-            api_key=api_key,
+        query_id = data.get("query_id") or None
+        tracker = make_query_tracker()
+        token = set_query_tracker(tracker)
+        try:
+            continuation, _ = llm_generate(
+                "prompts/answer_qa.prompt",
+                {"reviews": text_res, "question": "what is the summary of this document?"},
+                engine=_SUMMARY_MODEL_NAME,
+                max_tokens=4096,
+                temperature=0.0,
+                stop_tokens=["\n"],
+                postprocess=False,
+                api_base=api_base,
+                api_version=api_version,
+                api_key=api_key,
+            )
+        finally:
+            _query_tracker.reset(token)
+
+        if query_id:
+            with _query_stats_lock:
+                entry = _query_stats.setdefault(query_id, {"cost": 0.0, "calls": 0})
+                entry["cost"] += tracker["cost"]
+                entry["calls"] += tracker["calls"]
+
+        _log_answer_debug(
+            "/summary", query_id, _SUMMARY_MODEL_NAME, None, text_res, continuation
         )
 
-        res = {"result": continuation}
-        return res
+        return {"result": continuation}
 
     # start Flask server
     app.run(host=host, port=port)
 
 
 # Functions below are used by the restaurants application only.
+
+
+@app.route("/stats/<query_id>", methods=["GET"])
+def get_stats(query_id):
+    with _query_stats_lock:
+        stats = _query_stats.pop(query_id, {"cost": 0.0, "calls": 0})
+    with _query_debug_lock:
+        _query_debug.pop(query_id, None)
+    return stats
+
+
+@app.route("/debug", methods=["POST"])
+def register_debug():
+    """
+    Enable per-call I/O logging for a specific query_id.
+    Body: {"query_id": "...", "log_path": "..."}.
+    Cleared automatically when /stats/<query_id> is fetched.
+    """
+    data = request.get_json() or {}
+    query_id = data.get("query_id")
+    log_path = data.get("log_path")
+    if not query_id or not log_path:
+        return {"ok": False, "error": "query_id and log_path required"}, 400
+    with _query_debug_lock:
+        _query_debug[query_id] = log_path
+    return {"ok": True}
 
 
 @app.route("/search_by_opening_hours", methods=["POST"])

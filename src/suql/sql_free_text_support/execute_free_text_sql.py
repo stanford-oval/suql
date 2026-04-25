@@ -1,4 +1,5 @@
 import concurrent.futures
+import contextvars
 import json
 import logging
 import random
@@ -10,10 +11,12 @@ from collections import defaultdict
 from copy import deepcopy
 from functools import lru_cache
 from typing import List, Union
+from uuid import uuid4
 
 import pglast
 import requests
 from pglast import parse_sql
+from suql.prompt_continuation import make_query_tracker, set_query_tracker, _query_tracker
 from pglast.ast import *
 from pglast.enums.parsenodes import A_Expr_Kind
 from pglast.enums.primnodes import BoolExprType, CoercionForm
@@ -31,6 +34,13 @@ from suql.utils import num_tokens_from_string
 # System parameters, do not modify
 _SET_FREE_TEXT_FCNS = ["answer"]
 _verified_res = {}
+
+# Short classification/verification tasks (verify, field classification) use
+# gpt-5.2 with reasoning_effort="none" so the tight response budget isn't
+# consumed by hidden reasoning tokens. The gpt-5/gpt-5-nano family doesn't
+# support "none" — even "minimal" can allocate reasoning at max_tokens=30-100
+# and return empty content, silently rejecting every row.
+_VERIFICATION_MODEL_NAME = "gpt-5.2"
 
 
 def _generate_random_string(length=12):
@@ -481,7 +491,7 @@ def _verify(
             "query": query,
             "answer": answer,
         },
-        engine=llm_model_name,
+        engine=_VERIFICATION_MODEL_NAME,
         temperature=0,
         stop_tokens=["\n"],
         max_tokens=30,
@@ -611,7 +621,10 @@ def _parallel_filtering(fcn, source: list, limit, enforce_ordering=False):
     ordered_results = {i: None for i in range(len(source))}
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = {executor.submit(fcn, item): item for item in source}
+        futures = {
+            executor.submit(contextvars.copy_context().run, fcn, item): item
+            for item in source
+        }
 
         for future in concurrent.futures.as_completed(futures):
             item = futures[future]
@@ -1152,10 +1165,10 @@ class _StructuralClassification(Visitor):
                             "field_value_choices": field_value_choices,
                             "field_name": column_name,
                         },
-                        engine=self.llm_model_name,
+                        engine=_VERIFICATION_MODEL_NAME,
                         temperature=0,
                         stop_tokens=["\n"],
-                        max_tokens=100,
+                        max_tokens=4096,
                         postprocess=False,
                         api_base=self.api_base,
                         api_version=self.api_version,
@@ -2009,13 +2022,14 @@ def suql_execute(
     table_w_ids,
     database,
     fts_fields=[],
-    llm_model_name="gpt-3.5-turbo-0125",
+    llm_model_name="gpt-5.2",
     max_verify=20,
     loggings="",
     log_filename=None,
     disable_try_catch=False,
     disable_try_catch_all_sql=False,
     embedding_server_address="http://127.0.0.1:8501",
+    free_text_server_address="http://127.0.0.1:8500",
     select_username="select_user",
     select_userpswd="select_user",
     create_username="creator_role",
@@ -2023,10 +2037,12 @@ def suql_execute(
     source_file_mapping={},
     host="127.0.0.1",
     port="5432",
+    statement_timeout=30000,
     # used for azure openai
     api_base=None,
     api_version=None,
     api_key=None,
+    debug_log=None,
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -2045,7 +2061,7 @@ def suql_execute(
         It uses `websearch_to_tsquery` and the `@@` operator to match against these fields.
 
     `llm_model_name` (str, optional): The LLM to be used by the SUQL compiler.
-        Defaults to `gpt-3.5-turbo-0125`.
+        Defaults to `gpt-5.2`.
 
     `max_verify` (str): For each LIMIT x clause, `max_verify * x` results will be retrieved together from
         the embedding model for LLM to verify. Defaults to 20.
@@ -2072,6 +2088,10 @@ def suql_execute(
     `suql = answer(yelp_general_info, 'what is your cancellation policy?')`. In this case, you can specify
     `source_file_mapping = {"yelp_general_info": "PATH TO FILE"}` to inform the SUQL compiler where to find
     `yelp_general_info`. Defaults to `{}`.
+
+    `debug_log` (bool | str, optional): If truthy, log every `answer`/`summary` call's input/output
+        for this query to a file on the free-text server. `True` writes to `_suql_answer_debug.log`
+        in the server's CWD; passing a string uses that path. Defaults to `None` (off).
 
     # Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
@@ -2107,30 +2127,76 @@ def suql_execute(
     else:
         logging.basicConfig(level=logging.CRITICAL + 1)
 
-    if _parse_standalone_answer(suql) is not None:
-        return _execute_standalone_answer(suql, source_file_mapping), [], {}
+    query_id = str(uuid4())
+    tracker = make_query_tracker()
+    token = set_query_tracker(tracker)
 
-    results, column_names, cache = _suql_execute_single(
-        suql,
-        table_w_ids,
-        database,
-        fts_fields,
-        llm_model_name,
-        max_verify,
-        embedding_server_address,
-        loggings,
-        disable_try_catch,
-        disable_try_catch_all_sql,
-        select_username,
-        select_userpswd,
-        create_username,
-        create_userpswd,
-        host=host,
-        port=port,
-        api_base=api_base,
-        api_version=api_version,
-        api_key=api_key,
-    )
+    # Per-call I/O logging. `debug_log=True` writes to the default path;
+    # passing a string uses that path; None/False disables.
+    debug_path = None
+    if debug_log:
+        debug_path = (
+            "_suql_answer_debug.log" if debug_log is True else str(debug_log)
+        )
+        tracker["debug_log"] = debug_path
+        if free_text_server_address:
+            try:
+                requests.post(
+                    f"{free_text_server_address}/debug",
+                    json={"query_id": query_id, "log_path": debug_path},
+                    timeout=5,
+                )
+            except Exception:
+                pass
+
+    try:
+        if _parse_standalone_answer(suql) is not None:
+            result = _execute_standalone_answer(suql, source_file_mapping)
+            return result, [], {"_stats": {"cost": tracker["cost"], "calls": tracker["calls"]}}
+
+        results, column_names, cache = _suql_execute_single(
+            suql,
+            table_w_ids,
+            database,
+            fts_fields,
+            llm_model_name,
+            max_verify,
+            embedding_server_address,
+            loggings,
+            disable_try_catch,
+            disable_try_catch_all_sql,
+            select_username,
+            select_userpswd,
+            create_username,
+            create_userpswd,
+            host=host,
+            port=port,
+            api_base=api_base,
+            api_version=api_version,
+            api_key=api_key,
+            query_id=query_id,
+            statement_timeout=statement_timeout,
+        )
+    finally:
+        _query_tracker.reset(token)
+
+    # Collect SELECT-projection answer() costs from the free text server
+    flask_stats = {"cost": 0.0, "calls": 0}
+    if free_text_server_address:
+        try:
+            resp = requests.get(
+                f"{free_text_server_address}/stats/{query_id}", timeout=5
+            )
+            if resp.ok:
+                flask_stats = resp.json()
+        except Exception as e:
+            pass
+
+    cache["_stats"] = {
+        "cost": tracker["cost"] + flask_stats.get("cost", 0.0),
+        "calls": tracker["calls"] + flask_stats.get("calls", 0),
+    }
+
     if results == []:
         return results, column_names, cache
     all_no_results = True
@@ -2169,6 +2235,8 @@ def _suql_execute_single(
     api_base=None,
     api_version=None,
     api_key=None,
+    query_id=None,
+    statement_timeout=30000,
 ):
     results = []
     column_names = []
@@ -2197,7 +2265,7 @@ def _suql_execute_single(
         second_sql = RawStream()(root)
         cache = visitor.serialize_cache()
 
-        results, column_names, cache = execute_sql(
+        results, column_names, _ = execute_sql(
             second_sql,
             database,
             user=select_username,
@@ -2206,6 +2274,8 @@ def _suql_execute_single(
             unprotected=disable_try_catch_sql,
             host=host,
             port=port,
+            query_id=query_id,
+            statement_timeout=statement_timeout,
         )
     except Exception as err:
         if disable_try_catch:
