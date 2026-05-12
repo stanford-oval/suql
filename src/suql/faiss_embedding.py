@@ -5,55 +5,17 @@ from collections import OrderedDict
 import os
 import hashlib
 import pickle
+from typing import Optional
 from flask import Flask, request
 from tqdm import tqdm
 from platformdirs import user_cache_dir
 
+from suql.embedder import Embedder, default_embedder
 from suql.postgresql_connection import execute_sql
 from suql.utils import chunk_text
 
-# change this line for custom embedding model
-# embedding model output dimension
-EMBEDDING_DIMENSION = 1024
-
 # number of rows to consider for multi-column operations
 MULTIPLE_COLUMN_SEL = 1000
-
-
-def embed_query(query):
-    """
-    Embed a query for dot product matching
-    """
-    # change this line for custom embedding model
-    # currently using https://huggingface.co/BAAI/bge-large-en-v1.5
-    # change this line for custom embedding model
-    from FlagEmbedding import FlagModel
-    
-    model = FlagModel(
-        "BAAI/bge-large-en-v1.5",
-        query_instruction_for_retrieval="Represent this sentence for searching relevant passages:",
-        use_fp16=True,
-    )  # Setting use_fp16 to True speeds up computation with a slight performance degradation
-    q_embedding = model.encode_queries([query])
-    return q_embedding
-
-
-def embed_documents(documents):
-    """
-    Embed a list of docuemnts to store in vector store
-    """
-    # change this line for custom embedding model
-    # currently using https://huggingface.co/BAAI/bge-large-en-v1.5
-    # change this line for custom embedding model
-    from FlagEmbedding import FlagModel
-    
-    model = FlagModel(
-        "BAAI/bge-large-en-v1.5",
-        query_instruction_for_retrieval="Represent this sentence for searching relevant passages:",
-        use_fp16=True,
-    )  # Setting use_fp16 to True speeds up computation with a slight performance degradation
-    embeddings = model.encode(documents)
-    return embeddings
 
 
 def compute_sha256(text):
@@ -97,25 +59,29 @@ class OrderedSet:
         return len(self.items)
 
 
-def compute_top_similarity_documents(documents, query, chunking_param=0, top=3):
+def compute_top_similarity_documents(
+    documents, query, chunking_param=0, top=3, embedder: Optional[Embedder] = None
+):
     import faiss
-    
+
     """
     Directly call the model to compute the top documents based on
     dot product with query
     """
+    if embedder is None:
+        embedder = default_embedder()
     chunked_documents_tuple = [
         (i, doc)
         for (i, document) in enumerate(documents)
         for doc in chunk_text(document, k=chunking_param, use_spacy=True)
     ]
-    chunked_documents_embeddings = embed_documents(
+    chunked_documents_embeddings = embedder.embed_documents(
         list(map(lambda x: x[1], chunked_documents_tuple))
     )
-    embeddings = faiss.IndexFlatIP(EMBEDDING_DIMENSION)
+    embeddings = faiss.IndexFlatIP(embedder.dimension)
     embeddings.add(chunked_documents_embeddings)
 
-    _, I = embeddings.search(embed_query(query), len(chunked_documents_embeddings))
+    _, I = embeddings.search(embedder.embed_query(query), len(chunked_documents_embeddings))
     # attempt to re-construct the top queries, keeping going untill we actually get all top
     iter_chunk = top * 2
     doc_ids = OrderedSet()
@@ -148,10 +114,12 @@ class EmbeddingStore:
         password="select_user",
         chunking_param=0,
         cache_embedding=True,
-        force_recompute=False
+        force_recompute=False,
+        embedder: Optional[Embedder] = None,
     ) -> None:
         import faiss
         self.faiss = faiss
+        self.embedder = embedder if embedder is not None else default_embedder()
         # stores three lists:
         # 1. PSQL primary key for each row
         # 2. list of strings in this field
@@ -255,32 +223,78 @@ class EmbeddingStore:
         # Convert lists to tuples for hashing
         psql_row_ids_tuple = tuple(self.psql_row_ids)
         all_free_text_tuple = tuple(self.all_free_text)
-        
-        # Create a combined tuple of all objects
-        combined_data = (psql_row_ids_tuple, all_free_text_tuple, self.chunking_param)
-        
+
+        # Include the embedder identity so swapping models invalidates the
+        # cache rather than loading a wrong-shaped or wrong-distribution index.
+        combined_data = (
+            psql_row_ids_tuple,
+            all_free_text_tuple,
+            self.chunking_param,
+            self.embedder.name,
+            self.embedder.dimension,
+        )
+
         # Compute and return the hash of the combined tuple
         return consistent_tuple_hash(combined_data)
 
+    # Refuse to silently dump a FAISS index larger than this into the default
+    # platformdirs cache (~/.cache/suql on Linux). Users can opt in to a
+    # larger cache by setting SUQL_CACHE_DIR to a path on a roomier partition,
+    # or skip the disk cache entirely with cache_embedding=False.
+    _DEFAULT_CACHE_SIZE_LIMIT_GB = 5.0
+
+    def _embed_in_memory(self):
+        self.embeddings = self.faiss.IndexFlatIP(self.embedder.dimension)
+        self.embeddings.add(self.embedder.embed_documents(self.chunked_text))
+
     def initialize_embedding(self):
+        n_vectors = len(self.chunked_text)
+        projected_gb = (n_vectors * self.embedder.dimension * 4) / (1024 ** 3)
+        print(
+            f"projected FAISS index size: {projected_gb:.2f} GB  "
+            f"({n_vectors:,} vectors x {self.embedder.dimension} dims x 4 B float32)"
+        )
+
+        if not self.cache_embedding:
+            print("cache_embedding=False; computing embeddings without writing to disk")
+            self._embed_in_memory()
+            return
+
+        explicit_cache_dir = os.environ.get("SUQL_CACHE_DIR")
+        cache_dir = explicit_cache_dir or user_cache_dir("suql")
+
+        if (
+            projected_gb > self._DEFAULT_CACHE_SIZE_LIMIT_GB
+            and not explicit_cache_dir
+        ):
+            raise RuntimeError(
+                f"Refusing to write a {projected_gb:.1f} GB FAISS cache to the "
+                f"default user cache dir ({cache_dir}); this exceeds the "
+                f"{self._DEFAULT_CACHE_SIZE_LIMIT_GB:.0f} GB safety threshold. "
+                f"Either set SUQL_CACHE_DIR to a path on a roomier partition, "
+                f"or pass cache_embedding=False to skip the disk cache."
+            )
+
         hash = self.compute_hash()
-        _user_cache_dir = user_cache_dir('suql')
-        faiss_cache_location = os.path.join(_user_cache_dir, f'{hash}.faiss_index')
+        faiss_cache_location = os.path.join(cache_dir, f'{hash}.faiss_index')
         if (os.path.exists(faiss_cache_location) and not self.force_recompute):
             try:
-                print(f"initializing from existing faiss embedding index at {faiss_cache_location}")
+                cached_gb = os.path.getsize(faiss_cache_location) / (1024 ** 3)
+                print(
+                    f"initializing from existing faiss embedding index at "
+                    f"{faiss_cache_location} ({cached_gb:.2f} GB)"
+                )
                 self.embeddings = self.faiss.read_index(faiss_cache_location)
                 return
             except Exception:
                 print(f"reading {faiss_cache_location} failed. Re-computing embeddings")
-        
-        self.embeddings = self.faiss.IndexFlatIP(EMBEDDING_DIMENSION)
-        indexs = embed_documents(self.chunked_text)
-        self.embeddings.add(indexs)
-        
-        print(f"writing computed faiss embedding to {faiss_cache_location}")
-        os.makedirs(_user_cache_dir, exist_ok=True)
+
+        self._embed_in_memory()
+
+        os.makedirs(cache_dir, exist_ok=True)
         self.faiss.write_index(self.embeddings, faiss_cache_location)
+        written_gb = os.path.getsize(faiss_cache_location) / (1024 ** 3)
+        print(f"wrote {written_gb:.2f} GB faiss embedding to {faiss_cache_location}")
 
     def dot_product(self, id_list, query, top, individual_id_list=[]):
         # given a list of id and a particular query, return the top ids and documents according to similarity score ranking
@@ -304,7 +318,7 @@ class EmbeddingStore:
             for item in sublist
         ]))
 
-        query_embedding = embed_query(query)
+        query_embedding = self.embedder.embed_query(query)
 
         sel = self.faiss.IDSelectorBatch(embedding_indices)
         if top < 0:
@@ -374,7 +388,7 @@ class EmbeddingStore:
 
         # chunking param = 0 makes sure that we don't chunk the query
         # this is actually a 2-D array, matching what faiss expects
-        query_embedding = embed_query(query)
+        query_embedding = self.embedder.embed_query(query)
 
         sel = self.faiss.IDSelectorBatch(embedding_indices)
         D, I = self.embeddings.search(
@@ -417,9 +431,12 @@ class EmbeddingStore:
 
 
 class MultipleEmbeddingStore:
-    def __init__(self) -> None:
+    def __init__(self, embedder: Optional[Embedder] = None) -> None:
         # table name -> free text field name -> EmbeddingStore
         self.mapping = {}
+        # Default embedder used by ``add`` when no per-call embedder is given.
+        # Constructed lazily so importing this module does not load a model.
+        self._default_embedder = embedder
 
     def add(
         self,
@@ -431,7 +448,8 @@ class MultipleEmbeddingStore:
         password="select_user",
         chunking_param=0,
         cache_embedding=True,
-        force_recompute=False
+        force_recompute=False,
+        embedder: Optional[Embedder] = None,
     ):
         """
         Add a free text field to the SUQL embedding store to make it
@@ -479,6 +497,7 @@ class MultipleEmbeddingStore:
             return
         if table_name not in self.mapping:
             self.mapping[table_name] = {}
+        resolved_embedder = embedder if embedder is not None else self._default_embedder
         self.mapping[table_name][free_text_field_name] = EmbeddingStore(
             table_name,
             primary_key_field_name,
@@ -488,7 +507,8 @@ class MultipleEmbeddingStore:
             password=password,
             chunking_param=chunking_param,
             cache_embedding=cache_embedding,
-            force_recompute=force_recompute
+            force_recompute=force_recompute,
+            embedder=resolved_embedder,
         )
 
     def retrieve(self, table_name, free_text_field_name):
