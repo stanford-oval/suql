@@ -3,6 +3,24 @@
 All notable changes to SUQL are documented in this file. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.10a3] - 2026-05-13
+
+### Added
+- **`disable_retriever` parameter on `suql_execute(...)`.** Lightweight/demo
+  mode: when `True`, the SUQL compiler skips the embedding-based retriever
+  entirely and verifies every row that survives the structural prefilter with
+  the LLM. No embedding server / FAISS index is required. Threaded through the
+  compiler stack (`_SelectVisitor` → `_analyze_SelectStmt` → `_execute_and` →
+  `_execute_free_text_queries` → `_retrieve_and_verify`). At the top of
+  `suql_execute` a `NOTE:` is printed to stdout when the flag is on, explaining
+  the cost characteristics (O(rows) LLM calls per `answer(...)` predicate).
+  Useful for small tables and demos where running an embedding server is
+  undesirable; pair with a `LIMIT` clause to bound cost.
+
+### Changed
+- Trimmed the `if __name__ == "__main__":` block in
+  `execute_free_text_sql.py` (test-harness leftovers).
+
 ## [1.1.10a2] - 2026-04-25
 
 ### Changed

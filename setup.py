@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 # Package metadata
 name = "suql"
-version = "1.1.10a2"
+version = "1.1.10a3"
 description = "Structured and Unstructured Query Language (SUQL) Python API"
 author = "Shicheng Liu"
 author_email = "shicheng@cs.stanford.edu"
