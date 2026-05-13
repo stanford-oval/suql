@@ -217,6 +217,7 @@ class _SelectVisitor(Visitor):
         api_key=None,
         host="127.0.0.1",
         port="5432",
+        disable_retriever=False,
     ) -> None:
         super().__init__()
         self.tmp_tables = []
@@ -247,6 +248,9 @@ class _SelectVisitor(Visitor):
         self.database = database
         self.host = host
         self.port = port
+
+        # lightweight/brute-force mode: skip the embedding-based retriever
+        self.disable_retriever = disable_retriever
 
     def __call__(self, node):
         super().__call__(node)
@@ -288,6 +292,7 @@ class _SelectVisitor(Visitor):
                 self.api_base,
                 self.api_version,
                 self.api_key,
+                disable_retriever=self.disable_retriever,
             )
 
             # based on results and column_info, insert a temporary table
@@ -676,6 +681,7 @@ def _retrieve_and_verify(
     api_key=None,
     parallel=True,
     fetch_all=False,
+    disable_retriever=False,
 ):
     # field_query_list is a list of tuples, each entry of the tuple are:
     # 0st: field: field to do retrieval on
@@ -725,7 +731,22 @@ def _retrieve_and_verify(
     global _verified_res
     _verified_res = {}
 
-    if fetch_all:
+    if disable_retriever:
+        # Lightweight/brute-force mode: skip the embedding server and run
+        # verification on every row that survived the structural prefilter.
+        # `field_query_list` carries (table, column) tuples; column_info carries
+        # bare column names for single-table queries and "table^column" for joins.
+        column_names = [x[0] for x in column_info]
+        parsed_result = []
+        for existing_res in existing_results:
+            intermediate_result = []
+            for field_entry in field_query_list:
+                table_part, col_part = field_entry[0]
+                target = col_part if single_table else f"{table_part}^{col_part}"
+                field_index = column_names.index(target)
+                intermediate_result.append(existing_res[field_index])
+            parsed_result.append([existing_res[id_index], intermediate_result])
+    elif fetch_all:
         # first get all free text fields:
         all_free_text_columns = []
         # NOTE: uncomment the following to enable going to multiple columns for filtering
@@ -1436,6 +1457,7 @@ def _execute_free_text_queries(
     api_base,
     api_version,
     api_key,
+    disable_retriever=False,
 ):
     # the predicate should only contain an atomic unstructural query
     # or an AND of multiple unstructural query (NOT of an unstructural query is considered to be atmoic)
@@ -1550,6 +1572,7 @@ def _execute_free_text_queries(
                 api_base,
                 api_version,
                 api_key,
+                disable_retriever=disable_retriever,
             ),
             column_info,
         )
@@ -1573,6 +1596,7 @@ def _execute_free_text_queries(
                 api_base,
                 api_version,
                 api_key,
+                disable_retriever=disable_retriever,
             ),
             column_info,
         )
@@ -1603,6 +1627,7 @@ def _execute_and(
     api_key=None,
     host="127.0.0.1",
     port="5432",
+    disable_retriever=False,
 ):
     # there should not exist any OR expression inside sql_dnf_predicates
 
@@ -1663,6 +1688,7 @@ def _execute_and(
             api_base,
             api_version,
             api_key,
+            disable_retriever=disable_retriever,
         )
 
     elif isinstance(sql_dnf_predicates, A_Expr) or (
@@ -1712,6 +1738,7 @@ def _execute_and(
                 api_base,
                 api_version,
                 api_key,
+                disable_retriever=disable_retriever,
             )
 
 
@@ -1776,6 +1803,7 @@ def _analyze_SelectStmt(
     api_base=None,
     api_version=None,
     api_key=None,
+    disable_retriever=False,
 ):
     # first, replace all table aliases
     _replace_table_aliases(node)
@@ -1810,6 +1838,7 @@ def _analyze_SelectStmt(
                 api_base,
                 api_version,
                 api_key,
+                disable_retriever=disable_retriever,
             )
             res.extend(choice_res)
 
@@ -1839,6 +1868,7 @@ def _analyze_SelectStmt(
             api_base,
             api_version,
             api_key,
+            disable_retriever=disable_retriever,
         )
 
     elif isinstance(sql_dnf_predicates, A_Expr) or (
@@ -1861,6 +1891,7 @@ def _analyze_SelectStmt(
             api_base,
             api_version,
             api_key,
+            disable_retriever=disable_retriever,
         )
     else:
         raise ValueError(
@@ -2043,6 +2074,7 @@ def suql_execute(
     api_version=None,
     api_key=None,
     debug_log=None,
+    disable_retriever=False,
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -2093,6 +2125,12 @@ def suql_execute(
         for this query to a file on the free-text server. `True` writes to `_suql_answer_debug.log`
         in the server's CWD; passing a string uses that path. Defaults to `None` (off).
 
+    `disable_retriever` (bool, optional): Lightweight/brute-force demo mode. When True, the compiler
+        skips the embedding-based retriever entirely and verifies every row that survives the structural
+        prefilter with the LLM. Useful for small tables and demos where running an embedding server is
+        undesirable. O(rows) LLM calls per `answer(...)` predicate — pair with a `LIMIT` clause for
+        small datasets. Defaults to False.
+
     # Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
 
@@ -2126,6 +2164,14 @@ def suql_execute(
 
     else:
         logging.basicConfig(level=logging.CRITICAL + 1)
+
+    if disable_retriever:
+        print(
+            "NOTE: SUQL is running in lightweight mode (disable_retriever=True). "
+            "The embedding-based retriever is bypassed; every row surviving the structural "
+            "prefilter will be sent to the LLM for verification. Expect O(rows) LLM calls "
+            "per answer(...) predicate — use a small table or a LIMIT clause."
+        )
 
     query_id = str(uuid4())
     tracker = make_query_tracker()
@@ -2176,6 +2222,7 @@ def suql_execute(
             api_key=api_key,
             query_id=query_id,
             statement_timeout=statement_timeout,
+            disable_retriever=disable_retriever,
         )
     finally:
         _query_tracker.reset(token)
@@ -2237,6 +2284,7 @@ def _suql_execute_single(
     api_key=None,
     query_id=None,
     statement_timeout=30000,
+    disable_retriever=False,
 ):
     results = []
     column_names = []
@@ -2259,6 +2307,7 @@ def _suql_execute_single(
             api_key=api_key,
             host=host,
             port=port,
+            disable_retriever=disable_retriever,
         )
         root = parse_sql(suql)
         visitor(root)
