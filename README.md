@@ -16,6 +16,13 @@
 <p align="center">
     Conversational Search over Structured and Unstructured Data with LLMs
 </p>
+<p align="center">
+    Try it out at:
+    <a href="https://suql.genie.stanford.edu/" target="_blank">
+        https://suql.genie.stanford.edu/
+    </a>
+    <br>
+</p>
 
 
 # What is SUQL
