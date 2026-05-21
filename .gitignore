@@ -146,5 +146,12 @@ experiments/*
 error_log.txt
 
 # test cases for the SUQL compiler
-sql_free_text_support/test_cases*
+src/suql/sql_free_text_support/test_cases*
+tests/companies/*
+tests/private/
 **/_suql_compiler_debug_*
+
+# Local Gradio demo — OVAL/Stanford-specific defaults, not for the public repo
+demo/
+
+src/suql/loaders/documents.py
