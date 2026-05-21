@@ -855,7 +855,14 @@ def _get_a_expr_field_value(node: A_Expr, no_check=False):
         return None, None
 
     if isinstance(column, ColumnRef) and isinstance(value, A_Const):
-        column_name = column.fields[0].sval
+        # Guard against `*` / `t.*` reaching here — only the first field is
+        # consulted, and an A_Star has no `.sval`.
+        first = column.fields[0] if column.fields else None
+        if not isinstance(first, String):
+            if no_check:
+                return None, None
+            raise ValueError()
+        column_name = first.sval
         value_res = value.val
         return column_name, value_res
     elif no_check:
@@ -1252,12 +1259,83 @@ class _Replace_Original_Target_Visitor(Visitor):
     def __call__(self, node):
         super().__call__(node)
 
+    @staticmethod
+    def _star_table(node):
+        # Returns 't' if `node` is a `t.*` ColumnRef whose qualifier is a String,
+        # else None. Bare `*` (single A_Star field) returns None — caller leaves
+        # it untouched; the temp table already has the right columns.
+        if not isinstance(node, ColumnRef):
+            return None
+        if (len(node.fields) == 2
+                and isinstance(node.fields[0], String)
+                and isinstance(node.fields[1], A_Star)):
+            return node.fields[0].sval
+        return None
+
+    @staticmethod
+    def _mangled_colref(table, col):
+        return ColumnRef(fields=(String(sval=f"{table}^{col}"),))
+
+    def expand_target_list(self, target_list):
+        if not target_list:
+            return target_list
+        expanded = []
+        for rt in target_list:
+            t = self._star_table(rt.val) if isinstance(rt, ResTarget) else None
+            if t is not None and t in self.table_column_mapping:
+                for col_name, _ in self.table_column_mapping[t]:
+                    expanded.append(ResTarget(
+                        name=col_name,
+                        val=self._mangled_colref(t, col_name),
+                    ))
+            else:
+                expanded.append(rt)
+        return tuple(expanded)
+
+    def expand_group_clause(self, group_clause):
+        if not group_clause:
+            return group_clause
+        expanded = []
+        for entry in group_clause:
+            t = self._star_table(entry)
+            if t is not None and t in self.table_column_mapping:
+                for col_name, _ in self.table_column_mapping[t]:
+                    expanded.append(self._mangled_colref(t, col_name))
+            else:
+                expanded.append(entry)
+        return tuple(expanded)
+
+    def expand_sort_clause(self, sort_clause):
+        if not sort_clause:
+            return sort_clause
+        expanded = []
+        for entry in sort_clause:
+            t = self._star_table(entry.node) if isinstance(entry, SortBy) else None
+            if t is not None and t in self.table_column_mapping:
+                for col_name, _ in self.table_column_mapping[t]:
+                    expanded.append(SortBy(
+                        node=self._mangled_colref(t, col_name),
+                        sortby_dir=entry.sortby_dir,
+                        sortby_nulls=entry.sortby_nulls,
+                        useOp=entry.useOp,
+                    ))
+            else:
+                expanded.append(entry)
+        return tuple(expanded)
+
     def visit_ColumnRef(self, ancestors: Ancestor, node: ColumnRef):
-        if len(list(map(lambda x: x.sval, node.fields))) > 1:
-            assert len(list(map(lambda x: x.sval, node.fields))) == 2
-            node.fields = (String(sval="^".join(map(lambda x: x.sval, node.fields))),)
+        # Any A_Star that survived pre-expansion — bare `*`, `t.*` nested
+        # under FuncCall args (e.g. COUNT(t.*)), or `t.*` with an unknown
+        # alias — is left untouched. Avoids `.sval` on A_Star and lets
+        # Postgres surface a real error if the SQL is wrong.
+        if any(isinstance(f, A_Star) for f in node.fields):
+            return
+
+        if len(node.fields) > 1:
+            assert len(node.fields) == 2
+            node.fields = (String(sval="^".join(x.sval for x in node.fields)),)
         elif "^" in node.fields[0].sval:
-            # this means that it has already been replaced
+            # already replaced
             pass
         else:
             res = None
@@ -1356,6 +1434,19 @@ def _execute_structural_sql(
         replace_original_target_visitor = _Replace_Original_Target_Visitor(
             table_column_mapping=table_column_mapping
         )
+        # Pre-expand `t.*` in target/group/sort clauses before column rewriting,
+        # since the column-rewriting pass cannot turn one ResTarget into many.
+        original_node.targetList = replace_original_target_visitor.expand_target_list(
+            original_node.targetList
+        )
+        if original_node.groupClause is not None:
+            original_node.groupClause = replace_original_target_visitor.expand_group_clause(
+                original_node.groupClause
+            )
+        if original_node.sortClause is not None:
+            original_node.sortClause = replace_original_target_visitor.expand_sort_clause(
+                original_node.sortClause
+            )
         replace_original_target_visitor(original_node.targetList)
         if original_node.groupClause is not None:
             replace_original_target_visitor(original_node.groupClause)
