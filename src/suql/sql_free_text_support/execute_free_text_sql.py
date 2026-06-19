@@ -218,6 +218,7 @@ class _SelectVisitor(Visitor):
         host="127.0.0.1",
         port="5432",
         disable_retriever=False,
+        enable_classifier=False,
     ) -> None:
         super().__init__()
         self.tmp_tables = []
@@ -251,6 +252,12 @@ class _SelectVisitor(Visitor):
 
         # lightweight/brute-force mode: skip the embedding-based retriever
         self.disable_retriever = disable_retriever
+
+        # Opt-in: run _classify_db_fields to fuzzy-match user literals (e.g.
+        # 'italian') to canonical column values (e.g. 'Italian'). Off by
+        # default because the current visitor walks into CTE bodies and
+        # subqueries and emits spurious probe SQLs there (see issue #52).
+        self.enable_classifier = enable_classifier
 
     def __call__(self, node):
         super().__call__(node)
@@ -293,6 +300,7 @@ class _SelectVisitor(Visitor):
                 self.api_version,
                 self.api_key,
                 disable_retriever=self.disable_retriever,
+                enable_classifier=self.enable_classifier,
             )
 
             # based on results and column_info, insert a temporary table
@@ -344,7 +352,7 @@ class _SelectVisitor(Visitor):
                 RangeVar(relname=tmp_table_name, inh=True, relpersistence="p"),
             )
             node.whereClause = None
-        else:
+        elif self.enable_classifier:
             _classify_db_fields(
                 node,
                 self.database,
@@ -1384,6 +1392,7 @@ def _execute_structural_sql(
     api_key=None,
     host="127.0.0.1",
     port="5432",
+    enable_classifier=False,
 ):
     _ = RawStream()(original_node)  # RawStream takes care of some issue, to investigate
     node = deepcopy(original_node)
@@ -1510,19 +1519,20 @@ def _execute_structural_sql(
     # only queries that involve only structural parts can be executed
     assert _if_all_structural(node)
 
-    # deal with sturctural field classification
-    _classify_db_fields(
-        node,
-        database,
-        cache,
-        fts_fields,
-        select_username,
-        select_userpswd,
-        api_base,
-        api_version,
-        host,
-        port,
-    )
+    # deal with sturctural field classification (opt-in; see issue #52)
+    if enable_classifier:
+        _classify_db_fields(
+            node,
+            database,
+            cache,
+            fts_fields,
+            select_username,
+            select_userpswd,
+            api_base,
+            api_version,
+            host,
+            port,
+        )
 
     sql = RawStream()(node)
     return execute_sql_with_column_info(
@@ -1719,6 +1729,7 @@ def _execute_and(
     host="127.0.0.1",
     port="5432",
     disable_retriever=False,
+    enable_classifier=False,
 ):
     # there should not exist any OR expression inside sql_dnf_predicates
 
@@ -1754,6 +1765,7 @@ def _execute_and(
             api_key,
             host=host,
             port=port,
+            enable_classifier=enable_classifier,
         )
 
         free_text_predicates = tuple(
@@ -1799,6 +1811,7 @@ def _execute_and(
                 api_base,
                 api_version,
                 api_key,
+                enable_classifier=enable_classifier,
             )
         else:
             all_results, column_info = _execute_structural_sql(
@@ -1815,6 +1828,7 @@ def _execute_and(
                 api_key,
                 host=host,
                 port=port,
+                enable_classifier=enable_classifier,
             )
             return _execute_free_text_queries(
                 node,
@@ -1895,6 +1909,7 @@ def _analyze_SelectStmt(
     api_version=None,
     api_key=None,
     disable_retriever=False,
+    enable_classifier=False,
 ):
     # first, replace all table aliases
     _replace_table_aliases(node)
@@ -1930,6 +1945,7 @@ def _analyze_SelectStmt(
                 api_version,
                 api_key,
                 disable_retriever=disable_retriever,
+                enable_classifier=enable_classifier,
             )
             res.extend(choice_res)
 
@@ -1960,6 +1976,7 @@ def _analyze_SelectStmt(
             api_version,
             api_key,
             disable_retriever=disable_retriever,
+            enable_classifier=enable_classifier,
         )
 
     elif isinstance(sql_dnf_predicates, A_Expr) or (
@@ -1983,6 +2000,7 @@ def _analyze_SelectStmt(
             api_version,
             api_key,
             disable_retriever=disable_retriever,
+            enable_classifier=enable_classifier,
         )
     else:
         raise ValueError(
@@ -2166,6 +2184,7 @@ def suql_execute(
     api_key=None,
     debug_log=None,
     disable_retriever=False,
+    enable_classifier=False,
 ):
     """
     Main entry point to the SUQL Python-based compiler.
@@ -2221,6 +2240,13 @@ def suql_execute(
         prefilter with the LLM. Useful for small tables and demos where running an embedding server is
         undesirable. O(rows) LLM calls per `answer(...)` predicate — pair with a `LIMIT` clause for
         small datasets. Defaults to False.
+
+    `enable_classifier` (bool, optional): When True, run the value-canonicalization pass that
+        fuzzy-maps user literals (e.g. `cuisine = 'italian'`) to canonical column values
+        (e.g. `cuisine = 'Italian'`) by probing the DB and asking an LLM to pick from the
+        column's distinct values. Useful for natural-language queries against enum-like columns.
+        Defaults to False because the current implementation walks into CTE bodies / subqueries
+        and emits spurious probe SQLs there (see issue #52). Set to True to opt in.
 
     # Returns:
     `results` (List[[*]]): A list of returned database results. Each inner list stores a row of returned result.
@@ -2314,6 +2340,7 @@ def suql_execute(
             query_id=query_id,
             statement_timeout=statement_timeout,
             disable_retriever=disable_retriever,
+            enable_classifier=enable_classifier,
         )
     finally:
         _query_tracker.reset(token)
@@ -2376,6 +2403,7 @@ def _suql_execute_single(
     query_id=None,
     statement_timeout=30000,
     disable_retriever=False,
+    enable_classifier=False,
 ):
     results = []
     column_names = []
@@ -2399,6 +2427,7 @@ def _suql_execute_single(
             host=host,
             port=port,
             disable_retriever=disable_retriever,
+            enable_classifier=enable_classifier,
         )
         root = parse_sql(suql)
         visitor(root)
