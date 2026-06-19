@@ -10,7 +10,7 @@ import traceback
 from collections import defaultdict
 from copy import deepcopy
 from functools import lru_cache
-from typing import List, Union
+from typing import Dict, List, Union
 from uuid import uuid4
 
 import pglast
@@ -259,12 +259,38 @@ class _SelectVisitor(Visitor):
         # subqueries and emits spurious probe SQLs there (see issue #52).
         self.enable_classifier = enable_classifier
 
+        # CTE column lineage: maps a CTE name (and its temp table name once
+        # materialized) to {projected_col_name: (underlying_real_table, real_col)}.
+        # Used to rewrite (cte_name, col) → (real_table, real_col) in
+        # breakdown_unstructural_query so the embedding server can find the
+        # correct FAISS index (which is keyed by real-table name).
+        self.cte_column_lineage: Dict[str, Dict[str, tuple]] = {}
+
+        # Cache of real-table column lists for lineage building, keyed by
+        # relname. Populated lazily via _get_table_columns().
+        self._table_columns_cache: Dict[str, list] = {}
+
     def __call__(self, node):
         super().__call__(node)
 
     def visit_SelectStmt(self, ancestors, node: SelectStmt):
         type_cast_answer_visitor = _TypeCastAnswer()
         type_cast_answer_visitor(node)
+
+        # Handle WITH clause before the outer query so that any answer() inside
+        # the outer's whereClause can resolve CTE references. Mirrors the
+        # SubLink "process inner first" pattern below.
+        if node.withClause is not None:
+            if node.withClause.recursive:
+                if any(_if_contains_free_text_fcn(c.ctequery) for c in node.withClause.ctes):
+                    raise NotImplementedError(
+                        "SUQL does not support WITH RECURSIVE containing answer()/summary(). "
+                        "Non-recursive CTEs are supported, and WITH RECURSIVE without LLM "
+                        "calls is left for Postgres to evaluate natively."
+                    )
+                # Recursive CTE with no answer() — let Postgres handle it.
+            else:
+                self._process_ctes(node)
 
         if not node.whereClause:
             return
@@ -282,7 +308,6 @@ class _SelectVisitor(Visitor):
 
         if freeTextFcnVisitor.res:
             tmp_table_name = "temp_table_{}".format(_generate_random_string())
-            self.tmp_tables.append(tmp_table_name)
 
             # main entry point for SUQL compiler optimization
             results, column_info = _analyze_SelectStmt(
@@ -300,6 +325,7 @@ class _SelectVisitor(Visitor):
                 self.api_version,
                 self.api_key,
                 disable_retriever=self.disable_retriever,
+                cte_column_lineage=self.cte_column_lineage,
                 enable_classifier=self.enable_classifier,
             )
 
@@ -319,6 +345,12 @@ class _SelectVisitor(Visitor):
                 host=self.host,
                 port=self.port,
             )
+            # Register for cleanup only after CREATE TABLE has succeeded. If
+            # _analyze_SelectStmt raises mid-flight (e.g., the CTE lineage
+            # tracker refuses a computed-expression answer() target), the
+            # name would otherwise be in self.tmp_tables and drop_tmp_tables
+            # would try to DROP a table that never existed.
+            self.tmp_tables.append(tmp_table_name)
 
             if results:
                 # some special processing is needed for python dict types - they need to be converted to json
@@ -367,6 +399,407 @@ class _SelectVisitor(Visitor):
                 self.host,
                 self.port,
             )
+
+    def _process_ctes(self, node: SelectStmt):
+        """Process non-recursive CTEs in dependency order so the outer query
+        (and downstream CTEs) can resolve references that go through the
+        existing answer()/temp-table machinery.
+
+        Mirrors the SubLink pattern in visit_SelectStmt (process inner first,
+        then outer). Differences from SubLink: CTEs have explicit names and
+        explicit cross-CTE dependencies, so we need a dependency graph + topo
+        sort + RangeVar.relname rewriting on top of the same recursion.
+
+        Materialization set: a CTE is materialized into a temp table iff it
+        contains answer()/summary() OR it is depended on (transitively) by
+        another CTE we'll materialize. CTEs that are neither stay in the WITH
+        clause for Postgres to handle natively; we still register their ID
+        column so outer answer() queries against them can dedup.
+        """
+        ctes = list(node.withClause.ctes)
+        cte_names = {c.ctename for c in ctes}
+        cte_by_name = {c.ctename: c for c in ctes}
+
+        deps = {c.ctename: self._find_cte_refs(c.ctequery, cte_names) for c in ctes}
+        order = self._topo_order_ctes(ctes, deps)
+
+        # Seed: CTEs whose body contains answer()/summary(). Expand to closure
+        # under deps so every dependency of a materialized CTE is also
+        # materialized (otherwise the SUQL pipeline can't resolve them when
+        # it runs the CTE body standalone).
+        needs_mat = {c.ctename for c in ctes if _if_contains_free_text_fcn(c.ctequery)}
+        changed = True
+        while changed:
+            changed = False
+            for name in list(needs_mat):
+                for dep in deps[name]:
+                    if dep not in needs_mat:
+                        needs_mat.add(dep)
+                        changed = True
+
+        # CTE name -> temp table name (only for materialized CTEs).
+        cte_to_tmp: Dict[str, str] = {}
+
+        for name in order:
+            cte = cte_by_name[name]
+            # Rewrite intra-WITH references in this body to point at the temp
+            # tables of already-materialized CTEs. Without this, a body like
+            # `SELECT * FROM base` won't resolve when SUQL runs it standalone
+            # (its surrounding WITH lives on the OUTER SelectStmt).
+            self._rewrite_cte_refs(cte.ctequery, cte_to_tmp)
+
+            id_col = self._infer_cte_id_column(cte.ctequery)
+            # Build column lineage from the (now rewritten) body. Composes
+            # through self.cte_column_lineage for sources that are
+            # already-processed CTEs.
+            lineage = self._build_cte_column_lineage(cte.ctequery)
+            # Register under the CTE name immediately so chained CTEs can
+            # compose their lineage through this one in the same loop.
+            self.cte_column_lineage[name] = lineage
+
+            if name in needs_mat:
+                if _if_contains_free_text_fcn(cte.ctequery):
+                    # Body has answer(); the natural visit_SelectStmt path
+                    # creates a temp table and rewrites the body in place.
+                    self.visit_SelectStmt(None, cte.ctequery)
+                else:
+                    # Body has no answer() but a downstream CTE does and
+                    # references this one. Materialize directly via plain
+                    # Postgres so the downstream's SUQL pipeline can resolve
+                    # `FROM <this_cte>` once we rewrite it.
+                    self._materialize_cte_body_directly(cte.ctequery)
+
+                from_cls = cte.ctequery.fromClause
+                if (from_cls and len(from_cls) == 1
+                        and isinstance(from_cls[0], RangeVar)
+                        and from_cls[0].relname.startswith("temp_table_")):
+                    tmp_name = from_cls[0].relname
+                    cte_to_tmp[name] = tmp_name
+                    # Also register lineage under the temp table name so
+                    # cross-CTE refs (which target the temp name after our
+                    # rewrite) compose correctly.
+                    self.cte_column_lineage[tmp_name] = lineage
+                    if id_col is not None:
+                        self.table_w_ids[tmp_name] = id_col
+
+            # Register the CTE name itself (materialized or not) so the outer
+            # query's _retrieve_and_verify can dedup when it sees
+            # `FROM <cte_name>`.
+            if id_col is not None:
+                self.table_w_ids[name] = id_col
+
+    def _materialize_cte_body_directly(self, body: SelectStmt):
+        """For a CTE with no answer()/summary() that needs to be materialized
+        because something downstream depends on it: `CREATE TABLE temp_xxx AS
+        <body>` and rewrite `body` in place to `SELECT * FROM temp_xxx`."""
+        tmp = "temp_table_{}".format(_generate_random_string())
+        self.tmp_tables.append(tmp)
+        body_sql = RawStream()(body)
+        create_stmt = (
+            f"CREATE TABLE {tmp} AS {body_sql}; "
+            f"GRANT SELECT ON {tmp} TO {self.select_username};"
+        )
+        execute_sql(
+            create_stmt,
+            self.database,
+            user=self.create_username,
+            password=self.create_userpswd,
+            commit_in_lieu_fetch=True,
+            no_print=True,
+            host=self.host,
+            port=self.port,
+        )
+        body.fromClause = (RangeVar(relname=tmp, inh=True, relpersistence="p"),)
+        body.targetList = (ResTarget(val=ColumnRef(fields=(A_Star(),))),)
+        body.whereClause = None
+        body.withClause = None
+        body.limitCount = None
+        body.limitOffset = None
+        body.groupClause = None
+        body.havingClause = None
+        body.sortClause = None
+
+    @staticmethod
+    def _find_cte_refs(body, cte_names):
+        """Return the subset of `cte_names` that `body` references via a
+        bare-name RangeVar (i.e., something Postgres would resolve to a CTE
+        rather than a real table)."""
+        found = set()
+
+        class _Finder(Visitor):
+            def visit_RangeVar(self, ancestors, node):
+                if (node.schemaname is None and node.catalogname is None
+                        and node.relname in cte_names):
+                    found.add(node.relname)
+
+        _Finder()(body)
+        return found
+
+    @staticmethod
+    def _topo_order_ctes(ctes, deps):
+        """Kahn's algorithm. Preserves the user's declaration order for ties.
+        Raises ValueError on cycles (invalid SQL anyway)."""
+        in_degree = {c.ctename: 0 for c in ctes}
+        rev = {c.ctename: [] for c in ctes}
+        for name, depset in deps.items():
+            for d in depset:
+                if d != name:           # self-references handled by recursive
+                    in_degree[name] += 1
+                    rev[d].append(name)
+        ready = [c.ctename for c in ctes if in_degree[c.ctename] == 0]
+        order = []
+        i = 0
+        while i < len(ready):
+            n = ready[i]
+            i += 1
+            order.append(n)
+            for m in rev[n]:
+                in_degree[m] -= 1
+                if in_degree[m] == 0:
+                    ready.append(m)
+        if len(order) != len(ctes):
+            raise ValueError("CTE dependency cycle detected")
+        return order
+
+    @staticmethod
+    def _rewrite_cte_refs(body, mapping):
+        """Replace `RangeVar.relname` with `mapping[relname]` wherever the
+        relname is a key in `mapping`. In-place AST mutation."""
+        if not mapping:
+            return
+
+        class _Rewriter(Visitor):
+            def visit_RangeVar(self, ancestors, node):
+                if (node.schemaname is None and node.catalogname is None
+                        and node.relname in mapping):
+                    node.relname = mapping[node.relname]
+
+        _Rewriter()(body)
+
+    def _infer_cte_id_column(self, body):
+        """Best-effort: figure out which row-ID column this CTE's temp table
+        will carry, so we can register it in table_w_ids.
+
+        Strategy: look at the body's fromClause to find candidate underlying
+        tables. For each table whose ID column we know via self.table_w_ids,
+        check whether that ID is reachable via the body's projection (`*`,
+        `t.*`, bare id, or `t.id`). Return the first match. Returns None if
+        nothing can be safely inferred — in which case the CTE name simply
+        won't be registered, and a downstream `answer()` on it will surface a
+        clear KeyError rather than wrong dedup.
+
+        Mangling: when the body's FROM is a join (JoinExpr) or a multi-table
+        tuple AND the body contains an answer()/summary() call, the temp
+        table created by _execute_structural_sql's join branch carries
+        `^`-mangled column names (e.g. `events^event_id_cnty`) — the same
+        scheme used by _retrieve_and_verify's JoinExpr branch. The inferred
+        ID must match that, otherwise downstream lookups fail.
+        """
+        if not body.fromClause:
+            return None
+        candidates = []
+        has_join_expr = False
+        for f in body.fromClause:
+            if isinstance(f, RangeVar):
+                candidates.append(f)
+            elif isinstance(f, JoinExpr):
+                candidates.extend(_extract_recursive_joins(f))
+                has_join_expr = True
+        is_multi_table = len(body.fromClause) > 1
+        will_mangle = (has_join_expr or is_multi_table) and _if_contains_free_text_fcn(body)
+        target_list = body.targetList or ()
+        for rv in candidates:
+            tname = rv.alias.aliasname if rv.alias is not None else rv.relname
+            if rv.relname not in self.table_w_ids:
+                continue
+            id_col = self.table_w_ids[rv.relname]
+            if self._projection_includes(target_list, tname, id_col):
+                if will_mangle:
+                    return f"{rv.relname}^{id_col}"
+                return id_col
+        return None
+
+    @staticmethod
+    def _projection_includes(target_list, table_qualifier, col):
+        """Does this targetList project `col` (either bare or as `t.col`),
+        or include a star (`*` or `t.*`) that would cover it?"""
+        for rt in target_list:
+            if not isinstance(rt, ResTarget):
+                continue
+            v = rt.val
+            if isinstance(v, ColumnRef):
+                fields = v.fields
+                if len(fields) == 1:
+                    f = fields[0]
+                    if isinstance(f, A_Star):
+                        return True
+                    if isinstance(f, String) and f.sval == col:
+                        return True
+                elif len(fields) == 2 and isinstance(fields[0], String):
+                    qual = fields[0].sval
+                    second = fields[1]
+                    if qual != table_qualifier:
+                        continue
+                    if isinstance(second, A_Star):
+                        return True
+                    if isinstance(second, String) and second.sval == col:
+                        return True
+        return False
+
+    def _get_table_columns(self, relname):
+        """Return the column list for a real Postgres table (cached).
+        For tables we've already processed as CTEs, return the keys of
+        their lineage map. Returns None if neither path is available."""
+        if relname in self._table_columns_cache:
+            return self._table_columns_cache[relname]
+        if relname in self.cte_column_lineage:
+            cols = list(self.cte_column_lineage[relname].keys())
+            self._table_columns_cache[relname] = cols
+            return cols
+        try:
+            _, column_info = execute_sql_with_column_info(
+                f"SELECT * FROM {relname} LIMIT 0",
+                self.database,
+                user=self.select_username,
+                password=self.select_userpswd,
+                host=self.host,
+                port=self.port,
+            )
+            cols = [c[0] for c in column_info]
+        except Exception:
+            cols = None
+        self._table_columns_cache[relname] = cols
+        return cols
+
+    def _build_cte_column_lineage(self, body):
+        """Build a column-lineage map for a CTE body: for each projected
+        column, determine the underlying (real_table, real_col) it traces
+        back to. Returns {projected_col_name: (real_table, real_col)}.
+
+        Skips computed expressions and any column whose source can't be
+        resolved — gaps are filled with None. The lineage is consulted by
+        breakdown_unstructural_query to rewrite the retriever's field
+        tuple from (cte_name, col) → (real_table, real_col); without an
+        entry, the retriever-on path raises NotImplementedError.
+
+        Lineage composition: if the source is itself a CTE we already
+        processed, we inherit through self.cte_column_lineage to find
+        the ultimate real table.
+
+        Bare-column refs in multi-table FROM mirror Postgres: resolved by
+        searching each underlying table's column list. Ambiguous or
+        missing references are recorded as None.
+        """
+        if not body.fromClause:
+            return {}
+
+        # Collect (alias_or_relname, relname) for each direct source table
+        # in the FROM clause. JoinExpr is flattened.
+        sources = []
+        for f in body.fromClause:
+            if isinstance(f, RangeVar):
+                sources.append(f)
+            elif isinstance(f, JoinExpr):
+                sources.extend(
+                    j for j in _extract_recursive_joins(f) if isinstance(j, RangeVar)
+                )
+
+        # Build alias → relname map for this body.
+        alias_to_relname = {}
+        for rv in sources:
+            alias = rv.alias.aliasname if rv.alias is not None else rv.relname
+            alias_to_relname[alias] = rv.relname
+
+        def resolve(relname, col):
+            """Resolve a (source_relname, source_col) reference to the
+            ultimate (real_table, real_col). Composes through CTE lineage."""
+            if relname in self.cte_column_lineage:
+                return self.cte_column_lineage[relname].get(col)
+            # Real table — pass through.
+            return (relname, col)
+
+        lineage = {}
+        target_list = body.targetList or ()
+
+        for rt in target_list:
+            if not isinstance(rt, ResTarget):
+                continue
+            v = rt.val
+            # Computed expressions (FuncCall, A_Expr, TypeCast, etc.) have
+            # no traceable lineage. If the user named the result via AS,
+            # we still mark the entry with None so downstream callers can
+            # distinguish "computed" from "untrackable bare col".
+            if not isinstance(v, ColumnRef):
+                if rt.name:
+                    lineage[rt.name] = None
+                continue
+
+            fields = v.fields
+            # `*`: expand for all source tables.
+            if len(fields) == 1 and isinstance(fields[0], A_Star):
+                for rv in sources:
+                    cols = self._get_table_columns(rv.relname)
+                    if cols is None:
+                        continue
+                    for c in cols:
+                        resolved = resolve(rv.relname, c)
+                        if c not in lineage and resolved is not None:
+                            lineage[c] = resolved
+                continue
+
+            # `t.*`: expand for table t only.
+            if (len(fields) == 2 and isinstance(fields[0], String)
+                    and isinstance(fields[1], A_Star)):
+                alias = fields[0].sval
+                relname = alias_to_relname.get(alias)
+                if relname is None:
+                    continue
+                cols = self._get_table_columns(relname)
+                if cols is None:
+                    continue
+                for c in cols:
+                    resolved = resolve(relname, c)
+                    if resolved is not None:
+                        lineage[c] = resolved
+                continue
+
+            # `t.col`: resolve via alias map.
+            if (len(fields) == 2 and isinstance(fields[0], String)
+                    and isinstance(fields[1], String)):
+                alias = fields[0].sval
+                col = fields[1].sval
+                relname = alias_to_relname.get(alias)
+                if relname is None:
+                    continue
+                resolved = resolve(relname, col)
+                key = rt.name if rt.name else col
+                if resolved is not None:
+                    lineage[key] = resolved
+                elif rt.name:
+                    lineage[rt.name] = None
+                continue
+
+            # Bare `col`: search each source table's columns. Mirror
+            # Postgres's rules — exactly one match wins; zero or multiple
+            # leaves the entry as None (None means "we can't trace this").
+            if len(fields) == 1 and isinstance(fields[0], String):
+                col = fields[0].sval
+                matches = []
+                for rv in sources:
+                    cols = self._get_table_columns(rv.relname)
+                    if cols is None:
+                        continue
+                    if col in cols:
+                        matches.append(rv.relname)
+                key = rt.name if rt.name else col
+                if len(matches) == 1:
+                    resolved = resolve(matches[0], col)
+                    if resolved is not None:
+                        lineage[key] = resolved
+                # 0 or multiple → no entry; Postgres would have errored
+                # anyway, or downstream KeyError will surface.
+
+        return lineage
 
     def serialize_cache(self):
         def print_value(x):
@@ -1559,6 +1992,7 @@ def _execute_free_text_queries(
     api_version,
     api_key,
     disable_retriever=False,
+    cte_column_lineage=None,
 ):
     # the predicate should only contain an atomic unstructural query
     # or an AND of multiple unstructural query (NOT of an unstructural query is considered to be atmoic)
@@ -1640,6 +2074,30 @@ def _execute_free_text_queries(
                     else:
                         if column_name.split("^")[1] == field_lst[0].fields[0].sval:
                             field = tuple(column_name.split("^"))
+
+        # If the resolved field references a CTE that we materialized,
+        # rewrite to point at the underlying real table so the embedding
+        # server can find the right FAISS index (which is keyed by
+        # real-table name, not CTE name). Built per-CTE during _process_ctes.
+        if cte_column_lineage and len(field) == 2:
+            cte_name, col_name = field
+            lineage_entry = cte_column_lineage.get(cte_name)
+            if lineage_entry is not None:
+                resolved = lineage_entry.get(col_name)
+                if resolved is not None:
+                    field = resolved
+                elif not disable_retriever:
+                    # Known CTE but this column has no lineage — likely a
+                    # computed expression (e.g. LOWER(col) AS x). Without
+                    # FAISS embeddings for it, the retriever can't help.
+                    raise NotImplementedError(
+                        f"answer() targets column {col_name!r} of CTE "
+                        f"{cte_name!r}, but this column has no traceable "
+                        f"lineage to a real table (likely a computed "
+                        f"expression). Rewrite the CTE to project the "
+                        f"underlying column directly, or pass "
+                        f"disable_retriever=True to bypass the retriever."
+                    )
 
         operator = predicate.name[0].sval
         if isinstance(value_clause, tuple):
@@ -1729,6 +2187,7 @@ def _execute_and(
     host="127.0.0.1",
     port="5432",
     disable_retriever=False,
+    cte_column_lineage=None,
     enable_classifier=False,
 ):
     # there should not exist any OR expression inside sql_dnf_predicates
@@ -1792,6 +2251,7 @@ def _execute_and(
             api_version,
             api_key,
             disable_retriever=disable_retriever,
+            cte_column_lineage=cte_column_lineage,
         )
 
     elif isinstance(sql_dnf_predicates, A_Expr) or (
@@ -1844,6 +2304,7 @@ def _execute_and(
                 api_version,
                 api_key,
                 disable_retriever=disable_retriever,
+                cte_column_lineage=cte_column_lineage,
             )
 
 
@@ -1909,6 +2370,7 @@ def _analyze_SelectStmt(
     api_version=None,
     api_key=None,
     disable_retriever=False,
+    cte_column_lineage=None,
     enable_classifier=False,
 ):
     # first, replace all table aliases
@@ -1945,6 +2407,7 @@ def _analyze_SelectStmt(
                 api_version,
                 api_key,
                 disable_retriever=disable_retriever,
+                cte_column_lineage=cte_column_lineage,
                 enable_classifier=enable_classifier,
             )
             res.extend(choice_res)
@@ -1976,6 +2439,7 @@ def _analyze_SelectStmt(
             api_version,
             api_key,
             disable_retriever=disable_retriever,
+            cte_column_lineage=cte_column_lineage,
             enable_classifier=enable_classifier,
         )
 
@@ -2000,6 +2464,7 @@ def _analyze_SelectStmt(
             api_version,
             api_key,
             disable_retriever=disable_retriever,
+            cte_column_lineage=cte_column_lineage,
             enable_classifier=enable_classifier,
         )
     else:
