@@ -71,6 +71,45 @@ def _if_contains_free_text_fcn(node):
     return visitor.res
 
 
+class _CollectColumnRefsVisitor(Visitor):
+    """Collect every ColumnRef node reachable from a sub-tree.
+
+    Used to relax the historical "answer()'s text argument must be a bare
+    ColumnRef" assumption — see issue #50. Wrappers like COALESCE(col, ''),
+    lower(col), substring(col, ...) all keep a single underlying column;
+    `A_Expr` concatenation (col1 || col2) yields multiple. The caller
+    decides what to do with the count.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.refs = []
+
+    def __call__(self, node):
+        super().__call__(node)
+
+    def visit_ColumnRef(self, ancestors, node: ColumnRef):
+        # Skip ColumnRefs that contain an A_Star — `*` and `t.*` wildcards
+        # are not indexable columns to retrieve / verify against.
+        if any(isinstance(f, A_Star) for f in node.fields):
+            return
+        self.refs.append(node)
+
+
+def _collect_column_refs(nodes):
+    """Walk an iterable of AST nodes and return every nested ColumnRef.
+
+    Skips A_Const nodes (the literal question argument of answer()) so the
+    caller doesn't need to pre-filter.
+    """
+    visitor = _CollectColumnRefsVisitor()
+    for n in nodes:
+        if isinstance(n, A_Const):
+            continue
+        visitor(n)
+    return visitor.refs
+
+
 def _extract_all_free_text_fcns(suql):
     node = parse_sql(suql)
     visitor = _ExtractAllFreeTextFncs()
@@ -1618,10 +1657,27 @@ def _execute_free_text_queries(
         assert len(query_lst) == 1
         query = query_lst[0].val.sval
 
-        field_lst = list(
-            filter(lambda x: isinstance(x, ColumnRef), free_text_clause.args)
-        )
-        assert len(field_lst) == 1
+        # Issue #50: the text argument to answer() may be wrapped in
+        # COALESCE(...), lower(...), substring(...), an A_Expr (||
+        # concatenation), etc. A flat filter over free_text_clause.args
+        # only catches a bare ColumnRef and crashes on anything nested.
+        # Walk top-level args recursively to find the underlying ColumnRef(s).
+        field_lst = _collect_column_refs(free_text_clause.args)
+        if len(field_lst) == 0:
+            raise ValueError(
+                "answer() requires at least one column reference in its text "
+                "argument; got: {}".format(RawStream()(free_text_clause))
+            )
+        if len(field_lst) > 1:
+            # Multiple columns (e.g. col1 || col2) need server-side expression
+            # evaluation per row before LLM verification — not yet implemented.
+            # See issue #50: workaround is a CTE that projects the expression
+            # as a single column, then calls answer() on that column.
+            raise ValueError(
+                "answer() over an expression spanning multiple columns is not "
+                "supported; project the expression as a single column in a CTE "
+                "first (see issue #50). Got: {}".format(RawStream()(free_text_clause))
+            )
 
         field = tuple(map(lambda x: x.sval, field_lst[0].fields))
         if len(field) > 1:
