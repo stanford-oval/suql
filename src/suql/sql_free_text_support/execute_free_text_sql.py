@@ -2033,8 +2033,8 @@ def _verify_projection_predicates(
     become a false negative in the user's aggregate. So there is no retrieval
     step here - every surviving row is verified.
 
-    That makes this rows x predicates LLM calls, all mutually independent, which
-    is the easy case for concurrency: they go into one flat pool rather than
+    Distinct verification inputs go into one flat pool, sharing their verdicts
+    across rows with matching text, rather than
     being nested per row (`_verify_single_res` short-circuits on the first false
     predicate, which is right for a filter and wrong here, since every
     predicate's value is needed regardless).
@@ -2053,19 +2053,31 @@ def _verify_projection_predicates(
         )
         plan.append((alias, column_index, field, query, operator, value))
 
-    tasks = [(row, entry) for row in results for entry in plan]
+    tasks = []
+    task_indices = []
+    task_to_index = {}
+    for row in results:
+        for _, column_index, field, query, operator, value in plan:
+            document = row[column_index]
+            if document is not None and not isinstance(document, str):
+                document = str(document)
+            task = (document, field, query, operator, value)
+            if task not in task_to_index:
+                task_to_index[task] = len(tasks)
+                tasks.append(task)
+            task_indices.append(task_to_index[task])
+
+    # Deduplicate before dispatch, since concurrent memo lookups can miss the
+    # same document while its first verification is still in flight.
     # Declare the size of the plan so the budget can refuse an unaffordable
     # one after a sample rather than after spending the whole ceiling.
     _register_planned_verifications(len(tasks))
 
     def verify_one(task):
-        row, (_, column_index, field, query, operator, value) = task
-        document = row[column_index]
+        document, field, query, operator, value = task
         # NULL text can never satisfy the predicate
         if document is None:
             return False
-        if not isinstance(document, str):
-            document = str(document)
         return _verify(
             document,
             field,
@@ -2079,7 +2091,8 @@ def _verify_projection_predicates(
         )
 
     start_time = time.time()
-    verdicts = _parallel_map(verify_one, tasks, max_workers=max_workers)
+    unique_verdicts = _parallel_map(verify_one, tasks, max_workers=max_workers)
+    verdicts = [unique_verdicts[index] for index in task_indices]
     logging.info(
         "verified %d projection predicate value(s) over %d row(s) in %.2fs",
         len(tasks),
