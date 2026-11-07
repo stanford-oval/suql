@@ -8,6 +8,7 @@ import pickle
 from flask import Flask, request
 from tqdm import tqdm
 from platformdirs import user_cache_dir
+import numpy as np
 
 from suql.postgresql_connection import execute_sql
 from suql.utils import chunk_text
@@ -18,6 +19,16 @@ EMBEDDING_DIMENSION = 1024
 
 # number of rows to consider for multi-column operations
 MULTIPLE_COLUMN_SEL = 1000
+
+
+def _make_id_selector(faiss_module, indices):
+    indices = np.ascontiguousarray(indices, dtype=np.int64)
+    try:
+        return faiss_module.IDSelectorBatch(indices)
+    except TypeError:
+        return faiss_module.IDSelectorBatch(
+            indices.size, faiss_module.swig_ptr(indices)
+        )
 
 
 def embed_query(query):
@@ -306,7 +317,7 @@ class EmbeddingStore:
 
         query_embedding = embed_query(query)
 
-        sel = self.faiss.IDSelectorBatch(embedding_indices)
+        sel = _make_id_selector(self.faiss, embedding_indices)
         if top < 0:
             D, I = self.embeddings.search(
                 query_embedding,
@@ -376,7 +387,7 @@ class EmbeddingStore:
         # this is actually a 2-D array, matching what faiss expects
         query_embedding = embed_query(query)
 
-        sel = self.faiss.IDSelectorBatch(embedding_indices)
+        sel = _make_id_selector(self.faiss, embedding_indices)
         D, I = self.embeddings.search(
             query_embedding,
             MULTIPLE_COLUMN_SEL,
