@@ -3,6 +3,16 @@
 All notable changes to SUQL are documented in this file. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- **`host` and `port` now reach the structural prefilter of a query with
+  `answer()` in its WHERE clause.** `_analyze_SelectStmt` took no `host` or
+  `port`, so that prefilter always went to 127.0.0.1:5432 while the temp table
+  and the rewritten query went to the configured server. With the database
+  anywhere else, such a query returned an empty result instead of raising,
+  unless `disable_try_catch=True` was set.
+
 ## [1.1.10a4] - 2026-08-11
 
 ### Changed (behavioural — read before upgrading)
