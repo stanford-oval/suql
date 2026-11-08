@@ -32,6 +32,13 @@ install_dev_requires = [
     "FlagEmbedding~=1.2.5",
 ]
 
+install_embedding_requires = [
+    # ~=1.2.5 included a version with FlagEmbedding/BGE_M3/trainer.py
+    # referencing `Optional` without importing it — upstream-fixed in 1.3+.
+    "FlagEmbedding>=1.3",
+    "faiss-cpu>=1.7.4",
+]
+
 # Additional package information
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
@@ -54,7 +61,10 @@ setup(
     packages=packages,
     package_dir={"": "src"},
     install_requires=install_requires,
-    extra_requires={"dev": install_dev_requires},
+    extras_require={
+        "dev": install_dev_requires,
+        "embedding": install_embedding_requires,
+    },
     url=url,
     classifiers=classifiers,
     package_data={"": ["*.prompt"]},

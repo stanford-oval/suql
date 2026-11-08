@@ -155,3 +155,9 @@ tests/private/
 demo/
 
 src/suql/loaders/documents.py
+
+# Sample data lives in a separate private fixtures repo (see tests/SETUP.md).
+# These belt-and-suspenders entries make it impossible to accidentally commit
+# the plaintext CSV into this repo even if someone drops one in for local dev.
+tests/fixtures/*.csv
+_fixtures/
